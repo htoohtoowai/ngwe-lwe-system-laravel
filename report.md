@@ -324,9 +324,29 @@ Completed in this slice:
 - Added `FloatActivationDenominationVerificationTest` (3 cases) for
   exact match, short-count rejection, and over-count rejection.
 
+## Slice Update: Vue/Inertia Frontend Pages
+
+Completed in this slice:
+
+- Replaced the placeholder migration landing screen with a role-aware
+  Inertia operations console at `/`.
+- Added browser API session handling for login, token restore, logout,
+  and authenticated PIN update.
+- Added owner workflows for setup data, balance adjustment, exchange
+  rates, vault log visibility, and broadcast ping.
+- Added cashier workflows for pending cash-in approval/cancellation,
+  float issue, and return confirmation.
+- Added employee workflows for cash-in, cash-out, transfer, exchange,
+  float activation with verified denominations, and return initiation.
+- Added live summary panels, recent transaction and cash-float tables,
+  vault inventory, and latest exchange-rate display.
+- Wired `resources/js/lib/echo.ts` into the console for role/user
+  private channel subscriptions and realtime event capture.
+- Added typed frontend API helpers and domain response contracts.
+- Reworked the CSS into a dense responsive operations layout.
+
 ## Remaining Work
 
 1. Configure MySQL databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
 2. Replace skipped SQLite schema/auth/setup checks with MySQL migration verification.
-3. Build the Vue/Inertia frontend pages and wire Echo subscriptions.
-4. Add MySQL-backed verification for the DB feature suites.
+3. Add MySQL-backed verification for the DB feature suites.

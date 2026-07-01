@@ -84,6 +84,10 @@ Completed correct Ngwe Lwe Laravel foundation slices:
 - Float activation denomination re-verification is wired:
   - Employee-counted `verified_denominations` are compared with the issued float denominations after PIN verification and before the status transition.
   - Short-count and over-count attempts return HTTP 422 and leave the float in `PENDING_RECEIPT`.
+- The Vue/Inertia frontend is now an operations console:
+  - Browser API session handling for login, token restore, logout, and PIN update.
+  - Owner, cashier, and employee role views for the completed setup, transaction, float, vault, exchange-rate, and realtime workflows.
+  - Echo/Reverb role and user-channel subscriptions feed realtime events into the console.
 
 Note: previous Flight/Telemetry work in this folder was a wrong starter and is not the product direction.
 
@@ -145,5 +149,4 @@ Local Laragon note: `.env` and `.env.example` use `CACHE_STORE=file` so the app 
 
 1. Configure MySQL databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
 2. Add MySQL-based migration verification so schema/auth/setup feature tests no longer depend on skipped SQLite.
-3. Build the Vue/Inertia frontend pages and wire Echo subscriptions.
-4. Add MySQL-backed verification for the DB feature suites.
+3. Add MySQL-backed verification for the DB feature suites.

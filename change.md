@@ -1215,10 +1215,69 @@ The 3 new `FloatActivationDenominationVerificationTest` cases are
 DB-backed and remain skipped until `pdo_sqlite` (or a MySQL test
 database) is enabled.
 
-## Next Slice: Vue/Inertia Frontend Pages
+## Slice D: Vue/Inertia Frontend Pages
 
-- Build role-aware owner/cashier/employee pages for the completed API
-  workflows.
-- Add employee float receipt-counting UI that submits
-  `verified_denominations`.
-- Wire Echo subscriptions through `resources/js/lib/echo.ts`.
+Goal: replace the migration-status shell with a role-aware operating
+console for the completed Ngwe Lwe API workflows.
+
+Completed:
+
+- Replaced the `Welcome.vue` migration placeholder with an Inertia
+  operations console at `/`.
+- Added API session handling:
+  - username/password login via `POST /api/auth/login`
+  - token restore via `GET /api/auth/me`
+  - logout and authenticated PIN update
+  - local token persistence for the browser session
+- Added role-aware views for:
+  - Owner: company, service type, account, balance-adjust,
+    exchange-rate, vault-log, and broadcast-ping workflows.
+  - Cashier: pending cash-in confirmation/cancellation, float issue,
+    and float return confirmation.
+  - Employee: cash-in, cash-out, transfer, exchange, float activation
+    with `verified_denominations`, and float return initiation.
+- Added live data loading for companies, service types, accounts,
+  recent transactions, cash floats, vault inventory, vault log
+  (owner), and latest exchange rate.
+- Wired the existing Echo helper into the UI for role/user private
+  channel subscriptions and a realtime event feed.
+- Added `resources/js/lib/api.ts` for typed JSON fetch handling and
+  `resources/js/types/domain.ts` for frontend API contract types.
+- Reworked `resources/css/app.css` into a dense, responsive
+  operations-console layout with stable tables, forms, segmented
+  controls, metrics, and status states.
+
+Out of scope:
+
+- Seeded demo credentials / user management screens.
+- MySQL test database wiring.
+
+Verification passed in this slice:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+npm.cmd run types:check
+npm.cmd run lint:check
+npm.cmd run format:check
+npm.cmd run build
+```
+
+NPM scripts were run with `C:\laragon\bin\nodejs\node-v22.14.0-win-x64`
+prepended to `PATH` because `node` is not globally available in this
+PowerShell environment.
+
+Current PHPUnit result:
+
+```text
+110 tests, 17 passed, 93 skipped, 45 assertions
+```
+
+The skipped tests are still DB-backed suites waiting for `pdo_sqlite`
+or a MySQL test database.
+
+## Next Slice: MySQL Test Database Verification
+
+- Configure `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test` for local
+  Laravel/MySQL verification.
+- Move the DB-backed feature suites off skipped SQLite-only execution.
+- Run the migration and API suites against MySQL.
