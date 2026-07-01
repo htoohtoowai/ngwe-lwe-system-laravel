@@ -3,16 +3,21 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\VaultLogRequest;
+use App\Http\Resources\VaultTransactionResource;
 use App\Repositories\CashDenominationRepository;
 use App\Repositories\CashFloatRepository;
+use App\Repositories\VaultTransactionRepository;
 use App\Support\Money;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class VaultController extends Controller
 {
     public function __construct(
         private readonly CashDenominationRepository $vault,
         private readonly CashFloatRepository $floats,
+        private readonly VaultTransactionRepository $vaultTransactions,
     ) {}
 
     public function balance(): JsonResponse
@@ -78,6 +83,19 @@ class VaultController extends Controller
                 'grand_physical_total' => $vaultTotal + $employeeTotal,
             ],
         ]);
+    }
+
+    public function log(VaultLogRequest $request): AnonymousResourceCollection
+    {
+        return VaultTransactionResource::collection(
+            $this->vaultTransactions->paginateLog(
+                txnType: $request->string('txn_type')->trim()->value() ?: null,
+                floatId: $request->integer('float_id') ?: null,
+                dateFrom: $request->string('date_from')->trim()->value() ?: null,
+                dateTo: $request->string('date_to')->trim()->value() ?: null,
+                perPage: $request->integer('per_page') ?: 50,
+            )
+        );
     }
 
     /**

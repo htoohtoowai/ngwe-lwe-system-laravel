@@ -10,6 +10,7 @@ use App\Repositories\AccountRepository;
 use App\Repositories\CashFloatRepository;
 use App\Repositories\ExchangeRateRepository;
 use App\Repositories\TransactionRepository;
+use App\Repositories\VaultTransactionRepository;
 use App\Support\Money;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -35,6 +36,7 @@ class TransactionService
         private readonly ExchangeRateRepository $exchangeRates,
         private readonly CashFloatRepository $floats,
         private readonly EmployeeFloatValidator $floatValidator,
+        private readonly VaultTransactionRepository $vaultTransactions,
         private readonly RealtimeBroadcastService $broadcasts,
     ) {}
 
@@ -135,6 +137,15 @@ class TransactionService
                 $this->floats->deductDenominations($activeFloat->id, $normalizedChangeDenominations);
                 $this->floats->deductBalance($creator->id, $changeDue);
 
+                $this->vaultTransactions->recordBulk(
+                    txnType: 'cash_out',
+                    denominations: $normalizedChangeDenominations,
+                    performedBy: $creator->id,
+                    floatId: $activeFloat->id,
+                    transactionId: $txn->id,
+                    note: "Cash In overpayment change txn #{$txn->id}",
+                );
+
                 $this->log($creator->id, 'cash_in_overpayment_change_given', $txn->id, [
                     'type' => 'cash_in',
                     'account_id' => $account->id,
@@ -232,6 +243,15 @@ class TransactionService
                 }
                 $this->floats->deductDenominations($activeFloat->id, $normalizedDenominations);
                 $this->floats->deductBalance($creator->id, $amount);
+
+                $this->vaultTransactions->recordBulk(
+                    txnType: 'cash_out',
+                    denominations: $normalizedDenominations,
+                    performedBy: $creator->id,
+                    floatId: $activeFloat->id,
+                    transactionId: $txn->id,
+                    note: "Cash Out txn #{$txn->id}",
+                );
             }
 
             $this->creditFeeAccount($data['fee_account_id'] ?? null, $fees['customer_fee']);
@@ -332,6 +352,15 @@ class TransactionService
                 }
                 $this->floats->deductDenominations($activeFloat->id, $normalizedDenominations);
                 $this->floats->deductBalance($creator->id, $amount);
+
+                $this->vaultTransactions->recordBulk(
+                    txnType: 'cash_out',
+                    denominations: $normalizedDenominations,
+                    performedBy: $creator->id,
+                    floatId: $activeFloat->id,
+                    transactionId: $txn->id,
+                    note: "Transfer txn #{$txn->id}",
+                );
             }
 
             $this->creditFeeAccount($data['fee_account_id'] ?? null, $fees['customer_fee']);
@@ -442,6 +471,15 @@ class TransactionService
                 }
                 $this->floats->deductDenominations($activeFloat->id, $normalizedDenominations);
                 $this->floats->deductBalance($creator->id, $amount);
+
+                $this->vaultTransactions->recordBulk(
+                    txnType: 'cash_out',
+                    denominations: $normalizedDenominations,
+                    performedBy: $creator->id,
+                    floatId: $activeFloat->id,
+                    transactionId: $txn->id,
+                    note: "Exchange txn #{$txn->id}",
+                );
             }
 
             $this->creditFeeAccount($data['fee_account_id'] ?? null, $fees['customer_fee']);

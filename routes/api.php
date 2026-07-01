@@ -96,6 +96,8 @@ Route::middleware(['ngwe.auth', 'role:owner'])->group(function (): void {
     Route::delete('/accounts/{account}', [AccountController::class, 'destroy']);
     Route::post('/accounts/{account}/balance-adjust', [AccountController::class, 'adjustBalance']);
 
+    Route::get('/vault/log', [VaultController::class, 'log']);
+
     Route::post('/exchange-rates', [ExchangeRateController::class, 'store']);
     Route::patch('/exchange-rates/{exchangeRate}', [ExchangeRateController::class, 'update']);
     Route::delete('/exchange-rates/{exchangeRate}', [ExchangeRateController::class, 'destroy']);

@@ -7,6 +7,7 @@ use App\Models\CashFloatAssignment;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
 use App\Repositories\CashFloatRepository;
+use App\Repositories\VaultTransactionRepository;
 use App\Support\Money;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -23,14 +24,15 @@ use InvalidArgumentException;
  *   - issue         → cash_denomination_logs (`vault_out`)
  *   - confirmReturn → cash_denomination_logs (`float_returned`)
  *
- * PIN verification, per-transaction cash-out denomination guarding, and
- * vault_transactions log are deferred to a later slice.
+ * `vault_transactions` rows are written as an immutable audit trail, one row
+ * per denomination quantity moved through the float lifecycle.
  */
 class CashFloatService
 {
     public function __construct(
         private readonly CashFloatRepository $floats,
         private readonly CashDenominationRepository $vault,
+        private readonly VaultTransactionRepository $vaultTransactions,
         private readonly PinVerifier $pinVerifier,
         private readonly RealtimeBroadcastService $broadcasts,
     ) {}
@@ -53,6 +55,14 @@ class CashFloatService
                 createdBy: $cashier->id,
                 floatId: $float->id,
                 note: $note ?? "Float #{$float->id} issued to employee #{$employeeId}",
+            );
+
+            $this->vaultTransactions->recordBulk(
+                txnType: 'float_issue',
+                denominations: $denominations,
+                performedBy: $cashier->id,
+                floatId: $float->id,
+                note: $note,
             );
 
             $this->log($cashier->id, 'float_issued', $float->id, [
@@ -84,6 +94,15 @@ class CashFloatService
 
         $activated = DB::transaction(function () use ($employee, $float): CashFloatAssignment {
             $activated = $this->floats->activate($float);
+            $denominations = $this->denominationsFromFloat($activated);
+
+            $this->vaultTransactions->recordBulk(
+                txnType: 'float_receipt',
+                denominations: $denominations,
+                performedBy: $employee->id,
+                floatId: $activated->id,
+                note: "Float #{$activated->id} receipt completed",
+            );
 
             $this->log($employee->id, 'float_activated', $activated->id, [
                 'total_amount' => Money::normalize($activated->total_amount),
@@ -113,6 +132,14 @@ class CashFloatService
 
         $updated = DB::transaction(function () use ($employee, $float, $returnDenominations): CashFloatAssignment {
             $updated = $this->floats->initiateReturn($float, $returnDenominations);
+
+            $this->vaultTransactions->recordBulk(
+                txnType: 'return_initiate',
+                denominations: $returnDenominations,
+                performedBy: $employee->id,
+                floatId: $updated->id,
+                note: "Return initiated for float #{$updated->id}",
+            );
 
             $this->log($employee->id, 'float_return_initiated', $updated->id, [
                 'return_denominations' => $returnDenominations,
@@ -151,6 +178,15 @@ class CashFloatService
                 );
             }
 
+            $this->vaultTransactions->recordBulk(
+                txnType: 'return_confirm',
+                denominations: $returnDenominations,
+                performedBy: $cashier->id,
+                floatId: $closed->id,
+                verifiedBy: $cashier->id,
+                note: "Float #{$closed->id} return completed",
+            );
+
             $this->log($cashier->id, 'float_return_confirmed', $closed->id, [
                 'closing_total' => Money::normalize($closed->closing_total ?? 0),
                 'total_amount' => Money::normalize($closed->total_amount),
@@ -163,6 +199,19 @@ class CashFloatService
         $this->broadcasts->floatStatusChanged($closed);
 
         return $closed;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function denominationsFromFloat(CashFloatAssignment $float): array
+    {
+        $denominations = [];
+        foreach ($float->denominations as $line) {
+            $denominations[(int) $line->denomination] = (int) $line->quantity;
+        }
+
+        return $denominations;
     }
 
     /**

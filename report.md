@@ -287,10 +287,27 @@ Completed in this slice:
 - Added `ReverbBroadcastTest` with `Event::fake()` coverage for the
   broadcast dispatch points.
 
+## Slice Update: Vault Transactions Audit
+
+Completed in this slice:
+
+- Added `VaultTransaction` model, `VaultTransactionRepository`,
+  `VaultTransactionResource`, and `VaultLogRequest`.
+- Wired one `vault_transactions` row per denomination quantity for:
+  float issue, float receipt, return initiation, return confirmation,
+  employee cash-out, employee transfer, employee exchange, and cash-in
+  overpayment change.
+- `return_confirm` rows now set `verified_by` to the cashier; all
+  other audit writes leave it null.
+- Added owner-only `GET /api/vault/log`, paginated and filterable by
+  `txn_type`, `float_id`, `date_from`, and `date_to`.
+- Added `VaultTransactionAuditTest` for lifecycle audit rows,
+  employee cash draw audit rows, and owner-only log access.
+
 ## Remaining Work
 
 1. Configure MySQL databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
 2. Replace skipped SQLite schema/auth/setup checks with MySQL migration verification.
-3. Add `vault_transactions` audit rows for denomination movements.
-4. Port employee denomination re-verification at float activation.
-5. Build the Vue/Inertia frontend pages and wire Echo subscriptions.
+3. Port employee denomination re-verification at float activation.
+4. Build the Vue/Inertia frontend pages and wire Echo subscriptions.
+5. Add MySQL-backed verification for the DB feature suites.

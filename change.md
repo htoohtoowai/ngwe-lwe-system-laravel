@@ -1090,12 +1090,75 @@ Current PHPUnit result:
 The 5 new `ReverbBroadcastTest` cases are DB-backed and remain skipped
 until `pdo_sqlite` (or a MySQL test database) is enabled.
 
-## Next Slice: Vault Transactions Audit
+## Slice B: Vault Transactions Audit
 
-- Add `vault_transactions` audit rows for float issue / receipt /
-  return initiation / return confirmation, employee cash-out /
-  transfer / exchange denomination draws, and cash-in overpayment
-  change.
-- Add `VaultTransactionRepository` and owner-only `GET /api/vault/log`.
-- Keep denomination re-verification, frontend pages, and MySQL test DB
-  wiring for their own later slices.
+Goal: add the immutable `vault_transactions` audit rows that mirror
+Python `VaultTransactionRepository`, keeping denomination
+re-verification, frontend pages, and MySQL test DB wiring out of this
+slice.
+
+Completed:
+
+- Added `App\Models\VaultTransaction` for the existing
+  `vault_transactions` table.
+- Added `App\Repositories\VaultTransactionRepository` with:
+  - `recordBulk()` for one row per positive denomination quantity.
+  - Validation for supported transaction types:
+    `float_issue`, `float_receipt`, `cash_out`,
+    `return_initiate`, `return_confirm`, `adjustment`.
+  - `paginateLog()` with filters for `txn_type`, `float_id`,
+    `date_from`, and `date_to`.
+- Added `VaultTransactionResource` and `VaultLogRequest`.
+- Added owner-only `GET /api/vault/log`, paginated and filterable.
+- Wired `CashFloatService` audit rows:
+  - `issue` writes `float_issue`.
+  - `activate` writes `float_receipt`.
+  - `initiateReturn` writes `return_initiate`.
+  - `confirmReturn` writes `return_confirm` with
+    `verified_by = cashier`.
+- Wired `TransactionService` employee-float denomination draws:
+  - `createCashOut` writes `cash_out`.
+  - `createTransfer` writes `cash_out`.
+  - `createExchange` writes `cash_out`.
+  - Cash-in overpayment change writes `cash_out`.
+- Added `VaultTransactionAuditTest` covering one row per denomination
+  for float lifecycle operations, employee cash draw operations, and
+  owner-only filtered log access.
+
+Out of scope:
+
+- Denomination re-verification at float activation.
+- Frontend Vue/Inertia pages.
+- MySQL test database wiring.
+
+Verification passed in this slice:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test app\Models\VaultTransaction.php app\Repositories\VaultTransactionRepository.php app\Http\Resources\VaultTransactionResource.php app\Http\Requests\VaultLogRequest.php app\Http\Controllers\Api\VaultController.php app\Services\CashFloatService.php app\Services\TransactionService.php routes\api.php tests\Feature\VaultTransactionAuditTest.php
+npm.cmd run types:check
+npm.cmd run lint:check
+npm.cmd run build
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan route:list --path=api
+```
+
+NPM scripts were run with `C:\laragon\bin\nodejs\node-v22.14.0-win-x64`
+prepended to `PATH` because `node` is not globally available in this
+PowerShell environment.
+
+Current PHPUnit result:
+
+```text
+107 tests, 17 passed, 90 skipped, 45 assertions
+```
+
+The 3 new `VaultTransactionAuditTest` cases are DB-backed and remain
+skipped until `pdo_sqlite` (or a MySQL test database) is enabled.
+
+## Next Slice: Denomination Re-verification At Float Activate
+
+- Extend `ActivateCashFloatRequest` with required
+  `verified_denominations`.
+- Compare issued vs counted denominations before activating a float.
+- Reject short-count and over-count attempts with the Python-style
+  human-readable mismatch message.

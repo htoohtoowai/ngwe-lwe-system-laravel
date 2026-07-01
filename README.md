@@ -76,6 +76,10 @@ Completed correct Ngwe Lwe Laravel foundation slices:
   - `balance_update`, `new_transaction`, `cash_in_pending`, `float_status_changed`, and `ping` events.
   - Owner-only `POST /api/broadcast/test` dispatches `ping`.
   - `resources/js/lib/echo.ts` provides the reusable Echo/Reverb helper for token-authenticated private channels.
+- Vault transaction audit rows are wired:
+  - `App\Models\VaultTransaction` and `App\Repositories\VaultTransactionRepository`.
+  - One row per denomination quantity for float issue/receipt/return and employee cash draw operations.
+  - Owner-only `GET /api/vault/log` is paginated and filterable.
 
 Note: previous Flight/Telemetry work in this folder was a wrong starter and is not the product direction.
 
@@ -137,6 +141,6 @@ Local Laragon note: `.env` and `.env.example` use `CACHE_STORE=file` so the app 
 
 1. Configure MySQL databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
 2. Add MySQL-based migration verification so schema/auth/setup feature tests no longer depend on skipped SQLite.
-3. Add `vault_transactions` audit rows for denomination movements.
-4. Port employee denomination re-verification at float activation.
-5. Build the Vue/Inertia frontend pages and wire Echo subscriptions.
+3. Port employee denomination re-verification at float activation.
+4. Build the Vue/Inertia frontend pages and wire Echo subscriptions.
+5. Add MySQL-backed verification for the DB feature suites.
