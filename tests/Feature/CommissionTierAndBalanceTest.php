@@ -23,9 +23,7 @@ class CommissionTierAndBalanceTest extends TestCase
 
     protected function setUp(): void
     {
-        if (! extension_loaded('pdo_sqlite')) {
-            $this->markTestSkipped('pdo_sqlite is not enabled for in-memory calculation tests.');
-        }
+        $this->skipIfDatabaseUnavailable('calculation tests');
 
         parent::setUp();
 

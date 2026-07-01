@@ -110,8 +110,8 @@ composer validate --no-check-publish
 
 ## Known Notes
 
-- `pdo_sqlite` is not enabled in current Laragon PHP, so in-memory SQLite schema tests are skipped.
-- MySQL test database verification is still needed.
+- `pdo_sqlite` is not enabled in current Laragon PHP, but the DB-backed
+  Laravel feature suite now runs against MySQL instead.
 - Composer in Laragon is old/noisy under PHP 8.4 and emits deprecation notices, but validation passes.
 - Existing vendor dependency advisories were reported by Composer and are not introduced by this slice.
 
@@ -1275,9 +1275,61 @@ Current PHPUnit result:
 The skipped tests are still DB-backed suites waiting for `pdo_sqlite`
 or a MySQL test database.
 
-## Next Slice: MySQL Test Database Verification
+## Slice E: MySQL Test Database Verification
 
-- Configure `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test` for local
-  Laravel/MySQL verification.
-- Move the DB-backed feature suites off skipped SQLite-only execution.
-- Run the migration and API suites against MySQL.
+Goal: move the DB-backed feature suite off skipped SQLite-only
+execution and prove the Laravel port against the local MySQL test
+database.
+
+Completed:
+
+- Created local MySQL databases:
+  - `ngwe_lwe_laravel`
+  - `ngwe_lwe_laravel_test`
+- Updated `phpunit.xml` so PHPUnit defaults to MySQL
+  `ngwe_lwe_laravel_test` instead of in-memory SQLite.
+- Added `Tests\TestCase::skipIfDatabaseUnavailable()` so DB-backed
+  suites skip cleanly only when their configured database driver or
+  test database is unavailable.
+- Replaced per-test `pdo_sqlite` guards with the shared database
+  availability guard across the feature suites.
+- Verified migrations and every DB-backed API workflow against MySQL.
+- Fixed MySQL-revealed behavior/test gaps:
+  - `TransactionResource` now returns `change_given` and preserves
+    `change_denominations` as a denomination map.
+  - The full float-return audit test now issues through
+    `CashFloatService` so `float_issued` is logged.
+  - The broadcast lifecycle test now verifies and returns the issued
+    denomination count.
+  - The cash-in overpayment test now expects the correct remaining
+    float balance after giving change.
+
+Verification passed in this slice:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test <changed PHP files>
+npm.cmd run types:check
+npm.cmd run lint:check
+npm.cmd run format:check
+npm.cmd run build
+```
+
+NPM scripts were run with `C:\laragon\bin\nodejs\node-v22.14.0-win-x64`
+prepended to `PATH` because `node` is not globally available in this
+PowerShell environment.
+
+Current PHPUnit result:
+
+```text
+110 tests, 110 passed, 455 assertions
+```
+
+## Next Slice: Demo Data And Manual Workflow QA
+
+- Add seed/demo owner, cashier, and employee users or a user
+  management flow for local walkthroughs.
+- Manually exercise the browser operations console against the MySQL
+  development database.
+- Harden production/deployment settings after the local workflows are
+  comfortable.

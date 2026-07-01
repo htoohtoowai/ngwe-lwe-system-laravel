@@ -16,9 +16,7 @@ class FloatActivationDenominationVerificationTest extends TestCase
 
     protected function setUp(): void
     {
-        if (! extension_loaded('pdo_sqlite')) {
-            $this->markTestSkipped('pdo_sqlite is not enabled for in-memory cash float tests.');
-        }
+        $this->skipIfDatabaseUnavailable('cash float tests');
 
         parent::setUp();
 

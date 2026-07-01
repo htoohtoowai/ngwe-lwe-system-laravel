@@ -22,9 +22,7 @@ class EmployeeTransferExchangeFloatTest extends TestCase
 
     protected function setUp(): void
     {
-        if (! extension_loaded('pdo_sqlite')) {
-            $this->markTestSkipped('pdo_sqlite is not enabled for in-memory float transfer/exchange tests.');
-        }
+        $this->skipIfDatabaseUnavailable('float transfer/exchange tests');
 
         parent::setUp();
 

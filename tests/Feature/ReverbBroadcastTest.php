@@ -26,9 +26,7 @@ class ReverbBroadcastTest extends TestCase
 
     protected function setUp(): void
     {
-        if (! extension_loaded('pdo_sqlite')) {
-            $this->markTestSkipped('pdo_sqlite is not enabled for in-memory broadcast tests.');
-        }
+        $this->skipIfDatabaseUnavailable('broadcast tests');
 
         parent::setUp();
 
@@ -159,19 +157,19 @@ class ReverbBroadcastTest extends TestCase
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/cash-floats/'.$floatId.'/activate', [
                 'pin' => '1234',
-                'verified_denominations' => [10_000 => 1],
+                'verified_denominations' => [10_000 => 2],
             ])
             ->assertOk();
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/cash-floats/'.$floatId.'/initiate-return', [
-                'return_denominations' => [10_000 => 1],
+                'return_denominations' => [10_000 => 2],
             ])
             ->assertOk();
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
             ->postJson('/api/cash-floats/'.$floatId.'/confirm-return', [
-                'closing_total' => 10_000,
+                'closing_total' => 20_000,
                 'pin' => '9999',
             ])
             ->assertOk();

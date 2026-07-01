@@ -18,9 +18,7 @@ class PinVerificationTest extends TestCase
 
     protected function setUp(): void
     {
-        if (! extension_loaded('pdo_sqlite')) {
-            $this->markTestSkipped('pdo_sqlite is not enabled for in-memory PIN tests.');
-        }
+        $this->skipIfDatabaseUnavailable('PIN tests');
 
         parent::setUp();
 

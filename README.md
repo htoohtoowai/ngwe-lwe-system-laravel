@@ -88,6 +88,10 @@ Completed correct Ngwe Lwe Laravel foundation slices:
   - Browser API session handling for login, token restore, logout, and PIN update.
   - Owner, cashier, and employee role views for the completed setup, transaction, float, vault, exchange-rate, and realtime workflows.
   - Echo/Reverb role and user-channel subscriptions feed realtime events into the console.
+- MySQL verification is wired:
+  - Local databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
+  - PHPUnit defaults to the MySQL test database.
+  - DB-backed schema/auth/API/feature suites now run against MySQL instead of being skipped for missing `pdo_sqlite`.
 
 Note: previous Flight/Telemetry work in this folder was a wrong starter and is not the product direction.
 
@@ -141,12 +145,14 @@ npm run lint:check
 npm run build
 ```
 
-Current note: Laragon PHP has `pdo_mysql` enabled but not `pdo_sqlite`, so in-memory SQLite schema tests are skipped until the test database is configured for MySQL or SQLite extension is enabled.
+Current note: Laragon PHP has `pdo_mysql` enabled but not `pdo_sqlite`; PHPUnit is configured to use MySQL for DB-backed tests.
+
+Current PHPUnit result: `110 tests, 110 passed, 455 assertions` against MySQL `ngwe_lwe_laravel_test`.
 
 Local Laragon note: `.env` and `.env.example` use `CACHE_STORE=file` so the app can run without a Docker Redis hostname.
 
 ## Next Steps
 
-1. Configure MySQL databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
-2. Add MySQL-based migration verification so schema/auth/setup feature tests no longer depend on skipped SQLite.
-3. Add MySQL-backed verification for the DB feature suites.
+1. Add seed/demo owner, cashier, and employee users or a user management flow.
+2. Manually exercise the Vue/Inertia operations console against the MySQL development database.
+3. Harden production/deployment settings once the local workflows are comfortable.

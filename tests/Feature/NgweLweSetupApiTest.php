@@ -17,9 +17,7 @@ class NgweLweSetupApiTest extends TestCase
 
     protected function setUp(): void
     {
-        if (! extension_loaded('pdo_sqlite')) {
-            $this->markTestSkipped('pdo_sqlite is not enabled for in-memory setup API tests.');
-        }
+        $this->skipIfDatabaseUnavailable('setup API tests');
 
         parent::setUp();
 

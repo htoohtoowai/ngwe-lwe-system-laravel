@@ -345,8 +345,30 @@ Completed in this slice:
 - Added typed frontend API helpers and domain response contracts.
 - Reworked the CSS into a dense responsive operations layout.
 
+## Slice Update: MySQL Test Database Verification
+
+Completed in this slice:
+
+- Created local MySQL databases `ngwe_lwe_laravel` and
+  `ngwe_lwe_laravel_test`.
+- Updated `phpunit.xml` so PHPUnit uses MySQL
+  `ngwe_lwe_laravel_test` by default.
+- Added a shared `skipIfDatabaseUnavailable()` guard in
+  `Tests\TestCase` and replaced the old SQLite-only skip checks across
+  DB-backed feature suites.
+- Ran the full migration/API/feature suite against MySQL:
+  `110 tests, 110 passed, 455 assertions`.
+- Fixed MySQL-exposed test/API gaps:
+  - `TransactionResource` now exposes `change_given` and stable
+    `change_denominations` maps.
+  - Float lifecycle audit coverage now issues via `CashFloatService`.
+  - Broadcast lifecycle activation/return counts now match the issued
+    denominations.
+  - Cash-in overpayment coverage now expects the correct remaining
+    float balance after change is given.
+
 ## Remaining Work
 
-1. Configure MySQL databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
-2. Replace skipped SQLite schema/auth/setup checks with MySQL migration verification.
-3. Add MySQL-backed verification for the DB feature suites.
+1. Add seed/demo owner, cashier, and employee users or a user management flow.
+2. Manually exercise the Vue/Inertia operations console against the MySQL development database.
+3. Harden production/deployment settings once the local workflows are comfortable.

@@ -7,6 +7,7 @@ use App\Models\CashFloatAssignment;
 use App\Models\CashFloatDenomination;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
+use App\Services\CashFloatService;
 use App\Services\NgweLweTokenService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -18,9 +19,7 @@ class CashFloatLifecycleTest extends TestCase
 
     protected function setUp(): void
     {
-        if (! extension_loaded('pdo_sqlite')) {
-            $this->markTestSkipped('pdo_sqlite is not enabled for in-memory cash float tests.');
-        }
+        $this->skipIfDatabaseUnavailable('cash float tests');
 
         parent::setUp();
 
@@ -159,7 +158,8 @@ class CashFloatLifecycleTest extends TestCase
         $employee = $this->activeEmployee();
         $this->setPin($employee, '1234');
         $employeeToken = app(NgweLweTokenService::class)->create($employee);
-        $float = $this->issueFloat($cashier, $employee, [10_000 => 5]);
+        $this->seedVaultBalance([10_000 => 5], $cashier);
+        $float = app(CashFloatService::class)->issue($cashier, $employee->id, [10_000 => 5]);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/cash-floats/'.$float->id.'/activate', [

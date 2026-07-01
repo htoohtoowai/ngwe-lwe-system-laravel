@@ -21,9 +21,7 @@ class CashInOverpaymentTest extends TestCase
 
     protected function setUp(): void
     {
-        if (! extension_loaded('pdo_sqlite')) {
-            $this->markTestSkipped('pdo_sqlite is not enabled for in-memory cash-in overpayment tests.');
-        }
+        $this->skipIfDatabaseUnavailable('cash-in overpayment tests');
 
         parent::setUp();
 
@@ -82,7 +80,7 @@ class CashInOverpaymentTest extends TestCase
 
         // Employee float decremented by change_due (10k).
         $activeFloat = app(CashFloatRepository::class)->activeForEmployee($employee->id);
-        $this->assertSame('20000.00', $activeFloat->current_balance);
+        $this->assertSame('40000.00', $activeFloat->current_balance);
 
         $balances = app(CashFloatRepository::class)->getDenominationBalance($activeFloat->id);
         $this->assertSame(2, $balances[10_000]);

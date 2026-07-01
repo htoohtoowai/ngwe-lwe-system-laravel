@@ -19,9 +19,7 @@ class VaultLedgerTest extends TestCase
 
     protected function setUp(): void
     {
-        if (! extension_loaded('pdo_sqlite')) {
-            $this->markTestSkipped('pdo_sqlite is not enabled for in-memory vault tests.');
-        }
+        $this->skipIfDatabaseUnavailable('vault tests');
 
         parent::setUp();
 

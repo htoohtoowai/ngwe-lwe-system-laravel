@@ -23,6 +23,10 @@ class TransactionResource extends JsonResource
             'customer_fee' => $this->customer_fee,
             'additional_fee_amount' => $this->additional_fee_amount,
             'balance_change' => $this->balance_change,
+            'change_given' => $this->change_given,
+            'change_denominations' => is_array($this->change_denominations)
+                ? (object) $this->change_denominations
+                : $this->change_denominations,
             'currency' => $this->currency,
             'exchange_rate' => $this->exchange_rate,
             'fee_account_id' => $this->fee_account_id,

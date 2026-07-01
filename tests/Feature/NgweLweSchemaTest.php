@@ -10,12 +10,9 @@ class NgweLweSchemaTest extends TestCase
 {
     protected function setUp(): void
     {
+        $this->skipIfDatabaseUnavailable('migration tests');
+
         parent::setUp();
-
-        if (! extension_loaded('pdo_sqlite')) {
-            $this->markTestSkipped('pdo_sqlite is not enabled for in-memory migration tests.');
-        }
-
         $this->artisan('migrate:fresh')->run();
     }
 
