@@ -1,0 +1,149 @@
+x-app-env: &app-env
+  APP_KEY: "${APP_KEY:-}"
+  APP_ENV: "${APP_ENV:-production}"
+  APP_DEBUG: "${APP_DEBUG:-false}"
+  APP_URL: "${APP_URL:-http://localhost:8000}"
+  BROADCAST_CONNECTION: "${BROADCAST_CONNECTION:-reverb}"
+  CACHE_STORE: "${CACHE_STORE:-redis}"
+  QUEUE_CONNECTION: "${QUEUE_CONNECTION:-sync}"
+  SESSION_DRIVER: "${SESSION_DRIVER:-file}"
+  LOG_CHANNEL: "${LOG_CHANNEL:-stderr}"
+  REDIS_CLIENT: "${REDIS_CLIENT:-predis}"
+  REDIS_HOST: "${REDIS_HOST:-redis}"
+  REDIS_PORT: "${REDIS_PORT:-6379}"
+  REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+  REVERB_APP_ID: "${REVERB_APP_ID:-}"
+  REVERB_APP_KEY: "${REVERB_APP_KEY:-}"
+  REVERB_APP_SECRET: "${REVERB_APP_SECRET:-}"
+  REVERB_SERVER_HOST: "${REVERB_SERVER_HOST:-0.0.0.0}"
+  REVERB_SERVER_PORT: "${REVERB_SERVER_PORT:-8080}"
+  REVERB_HOST: "${REVERB_HOST:-reverb}"
+  REVERB_PORT: "${REVERB_PORT:-8080}"
+  REVERB_SCHEME: "${REVERB_SCHEME:-http}"
+  REVERB_ALLOWED_ORIGINS: "${REVERB_ALLOWED_ORIGINS:-*}"
+  TELEMETRY_HOST: "${TELEMETRY_HOST:-fts.onenex.dev}"
+  TELEMETRY_API_SCHEME: "${TELEMETRY_API_SCHEME:-https}"
+  TELEMETRY_API_PORT: "${TELEMETRY_API_PORT:-4000}"
+  TELEMETRY_INTERVAL_MS: "${TELEMETRY_INTERVAL_MS:-2000}"
+  TELEMETRY_MEMORY_LIMIT_MB: "${TELEMETRY_MEMORY_LIMIT_MB:-20}"
+
+networks:
+  backend:
+    driver: bridge
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - "redis-server"
+      - "--save"
+      - ""
+      - "--appendonly"
+      - "no"
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "redis-cli", "PING"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+        reservations:
+          memory: 64M
+
+  app:
+    build: .
+    image: fts-app:${APP_VERSION:-latest}
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${APP_HOST_PORT:-8000}:${APP_SERVER_PORT:-8000}"
+    environment:
+      <<: *app-env
+      APP_SERVER_HOST: "${APP_SERVER_HOST:-0.0.0.0}"
+      APP_SERVER_PORT: "${APP_SERVER_PORT:-8000}"
+      VITE_APP_NAME: "${VITE_APP_NAME:-Flight Telemetry}"
+      OCTANE_SERVER: "${OCTANE_SERVER:-swoole}"
+      OCTANE_WORKERS: "${OCTANE_WORKERS:-2}"
+      VITE_REVERB_APP_KEY: "${VITE_REVERB_APP_KEY:-}"
+      VITE_REVERB_HOST: "${VITE_REVERB_HOST:-localhost}"
+      VITE_REVERB_PORT: "${VITE_REVERB_PORT:-8080}"
+      VITE_REVERB_SCHEME: "${VITE_REVERB_SCHEME:-http}"
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:${APP_SERVER_PORT:-8000}/up"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          memory: 256M
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  reverb:
+    image: fts-app:${APP_VERSION:-latest}
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: sh -lc "/app/docker/ensure-env.sh && php artisan reverb:start --host=${REVERB_SERVER_HOST:-0.0.0.0} --port=${REVERB_SERVER_PORT:-8080}"
+    ports:
+      - "${REVERB_HOST_PORT:-8080}:${REVERB_SERVER_PORT:-8080}"
+    environment:
+      <<: *app-env
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "php -r 'exit(@fsockopen(\"127.0.0.1\", (int) (getenv(\"REVERB_SERVER_PORT\") ?: 8080)) ? 0 : 1);'"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 512M
+        reservations:
+          memory: 128M
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  telemetry:
+    image: fts-app:${APP_VERSION:-latest}
+    restart: unless-stopped
+    env_file:
+      - .env
+    command: sh -lc "/app/docker/ensure-env.sh && php artisan telemetry:start"
+    environment:
+      <<: *app-env
+    networks: [backend]
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'telemetry:start' >/dev/null"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 256M
+        reservations:
+          memory: 64M
+    depends_on:
+      redis:
+        condition: service_healthy
+      reverb:
+        condition: service_started
