@@ -71,7 +71,10 @@ class PinVerificationTest extends TestCase
         $float = $this->pendingFloat($cashier, $employee, [10_000 => 1]);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/cash-floats/'.$float->id.'/activate', ['pin' => '9999'])
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '9999',
+                'verified_denominations' => [10_000 => 1],
+            ])
             ->assertStatus(422)
             ->assertJsonPath('message', 'Incorrect PIN.');
 
@@ -87,7 +90,10 @@ class PinVerificationTest extends TestCase
         $float = $this->pendingFloat($cashier, $employee, [10_000 => 1]);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/cash-floats/'.$float->id.'/activate', ['pin' => '1234'])
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '1234',
+                'verified_denominations' => [10_000 => 1],
+            ])
             ->assertStatus(422)
             ->assertJsonPath('message', 'No PIN set. Please set your PIN first.');
     }
@@ -104,7 +110,9 @@ class PinVerificationTest extends TestCase
 
         // No pin in the body — request-level validation kicks in.
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/cash-floats/'.$float->id.'/activate')
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'verified_denominations' => [10_000 => 1],
+            ])
             ->assertStatus(422)
             ->assertJsonValidationErrors('pin');
     }
@@ -128,7 +136,7 @@ class PinVerificationTest extends TestCase
 
         $service = app(CashFloatService::class);
         $float = $service->issue($cashier, $employee->id, [10_000 => 3]);
-        $service->activate($employee, $float->fresh(), '1234');
+        $service->activate($employee, $float->fresh(), '1234', [10_000 => 3]);
         $service->initiateReturn($employee, $float->fresh(), [10_000 => 3]);
 
         // Wrong PIN

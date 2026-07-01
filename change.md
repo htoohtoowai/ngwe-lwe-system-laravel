@@ -1155,10 +1155,70 @@ Current PHPUnit result:
 The 3 new `VaultTransactionAuditTest` cases are DB-backed and remain
 skipped until `pdo_sqlite` (or a MySQL test database) is enabled.
 
-## Next Slice: Denomination Re-verification At Float Activate
+## Slice C: Denomination Re-verification At Float Activate
 
-- Extend `ActivateCashFloatRequest` with required
+Goal: port Python `confirm_receipt` denomination re-count behavior so
+an employee can only activate a float after the counted notes match the
+cashier-issued notes.
+
+Completed:
+
+- Extended `ActivateCashFloatRequest` with required
+  `verified_denominations` and the same supported-note validation
+  style used by issue / return denomination requests.
+- Updated `CashFloatController::activate` to pass the verified map
+  into the service.
+- Updated `CashFloatService::activate` so the order is:
+  - ownership guard
+  - employee PIN verification
+  - issued-vs-counted denomination comparison
+  - `PENDING_RECEIPT -> ACTIVE` transition and `float_receipt`
+    audit rows
+- Compared every supported MMK denomination, treating missing notes as
+  zero, and rejected any mismatch with:
+  `Denomination {denom} MMK — Issued: X, You counted: Y`.
+- Updated existing activate call sites in feature tests to send/pass
+  exact verified denomination maps.
+- Added `FloatActivationDenominationVerificationTest` covering:
+  - exact count activates the float
+  - short-count rejects with 422 and leaves the float
+    `PENDING_RECEIPT`
+  - over-count rejects with 422 and leaves the float
+    `PENDING_RECEIPT`
+
+Out of scope:
+
+- Vue/Inertia pages for the employee receipt-counting UI.
+- MySQL test database wiring.
+
+Verification passed in this slice:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test app\Http\Requests\ActivateCashFloatRequest.php app\Services\CashFloatService.php app\Http\Controllers\Api\CashFloatController.php tests\Feature\CashFloatLifecycleTest.php tests\Feature\PinVerificationTest.php tests\Feature\EmployeeCashOutFloatTest.php tests\Feature\EmployeeTransferExchangeFloatTest.php tests\Feature\CashInOverpaymentTest.php tests\Feature\VaultLedgerTest.php tests\Feature\VaultTransactionAuditTest.php tests\Feature\ReverbBroadcastTest.php tests\Feature\FloatActivationDenominationVerificationTest.php
+npm.cmd run types:check
+npm.cmd run lint:check
+npm.cmd run build
+```
+
+NPM scripts were run with `C:\laragon\bin\nodejs\node-v22.14.0-win-x64`
+prepended to `PATH` because `node` is not globally available in this
+PowerShell environment.
+
+Current PHPUnit result:
+
+```text
+110 tests, 17 passed, 93 skipped, 45 assertions
+```
+
+The 3 new `FloatActivationDenominationVerificationTest` cases are
+DB-backed and remain skipped until `pdo_sqlite` (or a MySQL test
+database) is enabled.
+
+## Next Slice: Vue/Inertia Frontend Pages
+
+- Build role-aware owner/cashier/employee pages for the completed API
+  workflows.
+- Add employee float receipt-counting UI that submits
   `verified_denominations`.
-- Compare issued vs counted denominations before activating a float.
-- Reject short-count and over-count attempts with the Python-style
-  human-readable mismatch message.
+- Wire Echo subscriptions through `resources/js/lib/echo.ts`.

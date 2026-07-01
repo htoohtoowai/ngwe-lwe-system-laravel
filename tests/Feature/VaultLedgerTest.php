@@ -113,7 +113,7 @@ class VaultLedgerTest extends TestCase
 
         $service = app(CashFloatService::class);
         $float = $service->issue($cashier, $employee->id, [10_000 => 5]);
-        $service->activate($employee, $float->fresh(), '1234');
+        $service->activate($employee, $float->fresh(), '1234', [10_000 => 5]);
 
         $active = $float->fresh();
         $service->initiateReturn($employee, $active, [10_000 => 5]);
@@ -196,7 +196,7 @@ class VaultLedgerTest extends TestCase
 
         $service = app(CashFloatService::class);
         $float = $service->issue($cashier, $employee->id, [10_000 => 3]);
-        $service->activate($employee, $float->fresh(), '1234');
+        $service->activate($employee, $float->fresh(), '1234', [10_000 => 3]);
         $service->initiateReturn($employee, $float->fresh(), [10_000 => 3]);
         $service->confirmReturn($cashier, $float->fresh(), 30_000, '9999');
 

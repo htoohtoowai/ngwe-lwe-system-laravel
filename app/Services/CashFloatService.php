@@ -83,14 +83,21 @@ class CashFloatService
     /**
      * Employee accepts a PENDING_RECEIPT float and marks it ACTIVE.
      * Requires the employee's PIN.
+     *
+     * @param  array<int|string, int|string>  $verifiedDenominations
      */
-    public function activate(User $employee, CashFloatAssignment $float, ?string $pin = null): CashFloatAssignment
-    {
+    public function activate(
+        User $employee,
+        CashFloatAssignment $float,
+        ?string $pin,
+        array $verifiedDenominations,
+    ): CashFloatAssignment {
         if ($float->employee_id !== $employee->id) {
             throw new InvalidArgumentException("Float #{$float->id} does not belong to this employee.");
         }
 
         $this->pinVerifier->verify($employee, $pin);
+        $this->assertVerifiedDenominationsMatch($float, $verifiedDenominations);
 
         $activated = DB::transaction(function () use ($employee, $float): CashFloatAssignment {
             $activated = $this->floats->activate($float);
@@ -115,6 +122,28 @@ class CashFloatService
         $this->broadcasts->floatStatusChanged($activated);
 
         return $activated;
+    }
+
+    /**
+     * @param  array<int|string, int|string>  $verifiedDenominations
+     */
+    private function assertVerifiedDenominationsMatch(CashFloatAssignment $float, array $verifiedDenominations): void
+    {
+        $issued = $this->denominationsFromFloat($float->loadMissing('denominations'));
+        $verified = $this->normalizeReturnDenominations($verifiedDenominations);
+
+        Money::denominationTotal($verified);
+
+        foreach (Money::supportedDenominations() as $denomination) {
+            $issuedQuantity = $issued[$denomination] ?? 0;
+            $verifiedQuantity = $verified[$denomination] ?? 0;
+
+            if ($issuedQuantity !== $verifiedQuantity) {
+                throw new InvalidArgumentException(
+                    "Denomination {$denomination} MMK — Issued: {$issuedQuantity}, You counted: {$verifiedQuantity}"
+                );
+            }
+        }
     }
 
     /**

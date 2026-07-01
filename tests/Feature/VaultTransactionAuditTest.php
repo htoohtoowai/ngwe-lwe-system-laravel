@@ -55,7 +55,7 @@ class VaultTransactionAuditTest extends TestCase
             performedBy: $cashier->id,
         );
 
-        $service->activate($employee, $float->fresh(), '1234');
+        $service->activate($employee, $float->fresh(), '1234', [10_000 => 2, 5_000 => 3]);
 
         $this->assertVaultRows(
             txnType: 'float_receipt',
@@ -218,7 +218,7 @@ class VaultTransactionAuditTest extends TestCase
 
         $service = app(CashFloatService::class);
         $float = $service->issue($cashier, $employee->id, $denominations);
-        $service->activate($employee, $float->fresh(), '1234');
+        $service->activate($employee, $float->fresh(), '1234', $denominations);
 
         return [$employee, app(NgweLweTokenService::class)->create($employee), $float->id];
     }

@@ -172,7 +172,7 @@ class EmployeeCashOutFloatTest extends TestCase
 
         $service = app(CashFloatService::class);
         $float = $service->issue($cashier, $employee->id, $denominations);
-        $service->activate($employee, $float->fresh(), '1234');
+        $service->activate($employee, $float->fresh(), '1234', $denominations);
 
         return [$employee, $employeeToken];
     }

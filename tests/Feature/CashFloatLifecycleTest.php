@@ -98,7 +98,10 @@ class CashFloatLifecycleTest extends TestCase
         $float = $this->issueFloat($cashier, $employee, [10_000 => 3]);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
-            ->postJson('/api/cash-floats/'.$float->id.'/activate', ['pin' => '1234'])
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '1234',
+                'verified_denominations' => [10_000 => 3],
+            ])
             ->assertOk()
             ->assertJsonPath('data.status', 'ACTIVE')
             ->assertJsonPath('data.current_balance', '30000.00');
@@ -117,7 +120,10 @@ class CashFloatLifecycleTest extends TestCase
         $float = $this->issueFloat($cashier, $employee1, [10_000 => 1]);
 
         $this->withHeader('Authorization', 'Bearer '.$token2)
-            ->postJson('/api/cash-floats/'.$float->id.'/activate', ['pin' => '5678'])
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '5678',
+                'verified_denominations' => [10_000 => 1],
+            ])
             ->assertStatus(403);
 
         $this->assertSame('PENDING_RECEIPT', $float->fresh()->status);
@@ -132,11 +138,17 @@ class CashFloatLifecycleTest extends TestCase
         $float = $this->issueFloat($cashier, $employee, [10_000 => 1]);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
-            ->postJson('/api/cash-floats/'.$float->id.'/activate', ['pin' => '1234'])
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '1234',
+                'verified_denominations' => [10_000 => 1],
+            ])
             ->assertOk();
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
-            ->postJson('/api/cash-floats/'.$float->id.'/activate', ['pin' => '1234'])
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '1234',
+                'verified_denominations' => [10_000 => 1],
+            ])
             ->assertStatus(409);
     }
 
@@ -150,7 +162,10 @@ class CashFloatLifecycleTest extends TestCase
         $float = $this->issueFloat($cashier, $employee, [10_000 => 5]);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
-            ->postJson('/api/cash-floats/'.$float->id.'/activate', ['pin' => '1234'])
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '1234',
+                'verified_denominations' => [10_000 => 5],
+            ])
             ->assertOk();
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)

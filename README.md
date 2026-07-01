@@ -69,6 +69,7 @@ Completed correct Ngwe Lwe Laravel foundation slices:
 - PIN verification (bcrypt) is now enforced at float activation and cashier confirm-return:
   - `POST /api/auth/pin` — set or change the authenticated user's PIN (4–8 digits).
   - `POST /api/cash-floats/{float}/activate` and `.../confirm-return` now require a valid `pin` field.
+  - Activation also requires `verified_denominations`; issued and counted quantities must match per MMK note before the float can move to `ACTIVE`.
 
 - Reverb broadcast foundation is wired:
   - Private role channels: `owner`, `cashier`, `employee`.
@@ -80,6 +81,9 @@ Completed correct Ngwe Lwe Laravel foundation slices:
   - `App\Models\VaultTransaction` and `App\Repositories\VaultTransactionRepository`.
   - One row per denomination quantity for float issue/receipt/return and employee cash draw operations.
   - Owner-only `GET /api/vault/log` is paginated and filterable.
+- Float activation denomination re-verification is wired:
+  - Employee-counted `verified_denominations` are compared with the issued float denominations after PIN verification and before the status transition.
+  - Short-count and over-count attempts return HTTP 422 and leave the float in `PENDING_RECEIPT`.
 
 Note: previous Flight/Telemetry work in this folder was a wrong starter and is not the product direction.
 
@@ -141,6 +145,5 @@ Local Laragon note: `.env` and `.env.example` use `CACHE_STORE=file` so the app 
 
 1. Configure MySQL databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
 2. Add MySQL-based migration verification so schema/auth/setup feature tests no longer depend on skipped SQLite.
-3. Port employee denomination re-verification at float activation.
-4. Build the Vue/Inertia frontend pages and wire Echo subscriptions.
-5. Add MySQL-backed verification for the DB feature suites.
+3. Build the Vue/Inertia frontend pages and wire Echo subscriptions.
+4. Add MySQL-backed verification for the DB feature suites.

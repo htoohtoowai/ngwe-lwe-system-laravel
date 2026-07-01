@@ -304,10 +304,29 @@ Completed in this slice:
 - Added `VaultTransactionAuditTest` for lifecycle audit rows,
   employee cash draw audit rows, and owner-only log access.
 
+## Slice Update: Denomination Re-verification At Float Activate
+
+Completed in this slice:
+
+- `POST /api/cash-floats/{float}/activate` now requires
+  `verified_denominations` alongside the employee PIN.
+- `ActivateCashFloatRequest` validates the verified denomination map
+  and rejects unsupported MMK note keys.
+- `CashFloatService::activate` now verifies PIN first, then compares
+  issued-vs-counted quantities for every supported denomination before
+  changing the float from `PENDING_RECEIPT` to `ACTIVE`.
+- Short-count and over-count attempts return HTTP 422 with the
+  Python-style mismatch message:
+  `Denomination {denom} MMK — Issued: X, You counted: Y`.
+- Rejections leave the float in `PENDING_RECEIPT`; successful matches
+  still write the existing `float_receipt` vault transaction audit
+  rows.
+- Added `FloatActivationDenominationVerificationTest` (3 cases) for
+  exact match, short-count rejection, and over-count rejection.
+
 ## Remaining Work
 
 1. Configure MySQL databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
 2. Replace skipped SQLite schema/auth/setup checks with MySQL migration verification.
-3. Port employee denomination re-verification at float activation.
-4. Build the Vue/Inertia frontend pages and wire Echo subscriptions.
-5. Add MySQL-backed verification for the DB feature suites.
+3. Build the Vue/Inertia frontend pages and wire Echo subscriptions.
+4. Add MySQL-backed verification for the DB feature suites.

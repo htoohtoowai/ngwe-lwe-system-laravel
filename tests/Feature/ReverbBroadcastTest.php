@@ -157,7 +157,10 @@ class ReverbBroadcastTest extends TestCase
             ->json('data.id');
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
-            ->postJson('/api/cash-floats/'.$floatId.'/activate', ['pin' => '1234'])
+            ->postJson('/api/cash-floats/'.$floatId.'/activate', [
+                'pin' => '1234',
+                'verified_denominations' => [10_000 => 1],
+            ])
             ->assertOk();
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)

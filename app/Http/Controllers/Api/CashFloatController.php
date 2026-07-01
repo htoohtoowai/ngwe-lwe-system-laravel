@@ -78,6 +78,7 @@ class CashFloatController extends Controller
                 $request->user(),
                 $float,
                 $request->validated()['pin'],
+                $request->validated()['verified_denominations'],
             );
         } catch (InvalidArgumentException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
