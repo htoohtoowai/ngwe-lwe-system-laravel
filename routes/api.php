@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashFloatController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ExchangeRateController;
+use App\Http\Controllers\Api\RealtimeBroadcastController;
 use App\Http\Controllers\Api\ServiceTypeController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\VaultController;
@@ -98,4 +99,6 @@ Route::middleware(['ngwe.auth', 'role:owner'])->group(function (): void {
     Route::post('/exchange-rates', [ExchangeRateController::class, 'store']);
     Route::patch('/exchange-rates/{exchangeRate}', [ExchangeRateController::class, 'update']);
     Route::delete('/exchange-rates/{exchangeRate}', [ExchangeRateController::class, 'destroy']);
+
+    Route::post('/broadcast/test', [RealtimeBroadcastController::class, 'test']);
 });

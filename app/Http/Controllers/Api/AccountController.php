@@ -9,6 +9,7 @@ use App\Http\Resources\AccountResource;
 use App\Models\Account;
 use App\Models\ActivityLog;
 use App\Repositories\AccountRepository;
+use App\Services\RealtimeBroadcastService;
 use App\Support\Money;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,7 +18,10 @@ use Illuminate\Support\Facades\DB;
 
 class AccountController extends Controller
 {
-    public function __construct(private readonly AccountRepository $accounts) {}
+    public function __construct(
+        private readonly AccountRepository $accounts,
+        private readonly RealtimeBroadcastService $broadcasts,
+    ) {}
 
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -90,6 +94,8 @@ class AccountController extends Controller
 
             return $applied;
         });
+
+        $this->broadcasts->balanceUpdated();
 
         return response()->json([
             'message' => 'Balance adjusted',

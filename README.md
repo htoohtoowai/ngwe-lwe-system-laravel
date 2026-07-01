@@ -70,6 +70,13 @@ Completed correct Ngwe Lwe Laravel foundation slices:
   - `POST /api/auth/pin` — set or change the authenticated user's PIN (4–8 digits).
   - `POST /api/cash-floats/{float}/activate` and `.../confirm-return` now require a valid `pin` field.
 
+- Reverb broadcast foundation is wired:
+  - Private role channels: `owner`, `cashier`, `employee`.
+  - Existing targeted private user channel: `user.{userId}`.
+  - `balance_update`, `new_transaction`, `cash_in_pending`, `float_status_changed`, and `ping` events.
+  - Owner-only `POST /api/broadcast/test` dispatches `ping`.
+  - `resources/js/lib/echo.ts` provides the reusable Echo/Reverb helper for token-authenticated private channels.
+
 Note: previous Flight/Telemetry work in this folder was a wrong starter and is not the product direction.
 
 ## Target Stack
@@ -130,6 +137,6 @@ Local Laragon note: `.env` and `.env.example` use `CACHE_STORE=file` so the app 
 
 1. Configure MySQL databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
 2. Add MySQL-based migration verification so schema/auth/setup feature tests no longer depend on skipped SQLite.
-3. Add Reverb WebSocket broadcasts for balance and new-transaction events.
-4. Add `vault_transactions` audit rows for denomination movements.
-5. Port employee denomination re-verification at float activation.
+3. Add `vault_transactions` audit rows for denomination movements.
+4. Port employee denomination re-verification at float activation.
+5. Build the Vue/Inertia frontend pages and wire Echo subscriptions.

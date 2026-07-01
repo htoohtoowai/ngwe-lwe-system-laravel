@@ -35,6 +35,7 @@ class TransactionService
         private readonly ExchangeRateRepository $exchangeRates,
         private readonly CashFloatRepository $floats,
         private readonly EmployeeFloatValidator $floatValidator,
+        private readonly RealtimeBroadcastService $broadcasts,
     ) {}
 
     /**
@@ -97,7 +98,7 @@ class TransactionService
         $commission = $this->calculator->commission($account, $amount, TransactionFeeCalculator::COMMISSION_SEND);
         $fromCompanyId = $account->serviceType?->company_id;
 
-        return DB::transaction(function () use ($data, $creator, $account, $amount, $fees, $commission, $fromCompanyId, $changeDue, $normalizedChangeDenominations): Transaction {
+        $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $fees, $commission, $fromCompanyId, $changeDue, $normalizedChangeDenominations): Transaction {
             try {
                 $this->accounts->debitBalance($account->id, $amount);
             } catch (InsufficientBalanceException $exception) {
@@ -155,6 +156,10 @@ class TransactionService
 
             return $txn;
         });
+
+        $this->broadcasts->transactionCreated($transaction);
+
+        return $transaction;
     }
 
     /**
@@ -195,7 +200,7 @@ class TransactionService
             );
         }
 
-        return DB::transaction(function () use ($data, $creator, $account, $amount, $fees, $commission, $fromCompanyId, $normalizedDenominations): Transaction {
+        $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $fees, $commission, $fromCompanyId, $normalizedDenominations): Transaction {
             $applied = $this->accounts->incrementBalance($account->id, $amount);
             if ($applied === null) {
                 throw new RuntimeException("Unable to credit Cash Out balance for active account #{$account->id}.");
@@ -241,6 +246,10 @@ class TransactionService
 
             return $txn;
         });
+
+        $this->broadcasts->transactionCreated($transaction);
+
+        return $transaction;
     }
 
     /**
@@ -289,7 +298,7 @@ class TransactionService
             );
         }
 
-        return DB::transaction(function () use ($data, $creator, $fromAccount, $toAccount, $amount, $fees, $commission, $fromCompanyId, $toCompanyId, $normalizedDenominations): Transaction {
+        $transaction = DB::transaction(function () use ($data, $creator, $fromAccount, $toAccount, $amount, $fees, $commission, $fromCompanyId, $toCompanyId, $normalizedDenominations): Transaction {
             $this->accounts->debitBalance($fromAccount->id, $amount);
 
             $credited = $this->accounts->incrementBalance($toAccount->id, $amount);
@@ -339,6 +348,10 @@ class TransactionService
 
             return $txn;
         });
+
+        $this->broadcasts->transactionCreated($transaction);
+
+        return $transaction;
     }
 
     /**
@@ -398,7 +411,7 @@ class TransactionService
             );
         }
 
-        return DB::transaction(function () use ($data, $creator, $account, $amount, $currency, $exchangeRate, $fees, $commission, $fromCompanyId, $normalizedDenominations): Transaction {
+        $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $currency, $exchangeRate, $fees, $commission, $fromCompanyId, $normalizedDenominations): Transaction {
             $applied = $this->accounts->incrementBalance($account->id, $amount);
             if ($applied === null) {
                 throw new RuntimeException("Unable to credit exchange balance for active account #{$account->id}.");
@@ -445,6 +458,10 @@ class TransactionService
 
             return $txn;
         });
+
+        $this->broadcasts->transactionCreated($transaction);
+
+        return $transaction;
     }
 
     public function confirmPendingCashIn(Transaction $transaction, User $cashier): Transaction
@@ -453,7 +470,7 @@ class TransactionService
             throw new InvalidArgumentException('Only Cash In transactions can be confirmed here.');
         }
 
-        return DB::transaction(function () use ($transaction, $cashier): Transaction {
+        $updated = DB::transaction(function () use ($transaction, $cashier): Transaction {
             $updated = $this->transactions->confirmPendingCashIn($transaction, $cashier->id);
             if ($updated === null) {
                 throw new RuntimeException("Transaction #{$transaction->id} is not pending cashier confirmation.");
@@ -469,6 +486,10 @@ class TransactionService
 
             return $updated;
         });
+
+        $this->broadcasts->balanceUpdated();
+
+        return $updated;
     }
 
     public function cancelPendingCashIn(Transaction $transaction, User $cashier, ?string $note = null): Transaction
@@ -477,7 +498,7 @@ class TransactionService
             throw new InvalidArgumentException('Only Cash In transactions can be cancelled here.');
         }
 
-        return DB::transaction(function () use ($transaction, $cashier, $note): Transaction {
+        $updated = DB::transaction(function () use ($transaction, $cashier, $note): Transaction {
             $reversal = Money::normalize($transaction->amount ?? 0);
             $refunded = $this->accounts->incrementBalance($transaction->account_id, $reversal);
             if ($refunded === null) {
@@ -499,6 +520,10 @@ class TransactionService
 
             return $updated;
         });
+
+        $this->broadcasts->balanceUpdated();
+
+        return $updated;
     }
 
     private function guardPositive(string $normalized): void

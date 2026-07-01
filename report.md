@@ -263,11 +263,34 @@ Completed in this slice:
   no PIN set, activate missing PIN field, confirm-return wrong PIN
   then correct PIN.
 
+## Slice Update: Reverb WebSocket Broadcasts
+
+Completed in this slice:
+
+- Configured `/broadcasting/auth` for the existing HMAC bearer API
+  middleware and added private role channels for `owner`, `cashier`,
+  and `employee`.
+- Added broadcast events for `balance_update`, `new_transaction`,
+  `cash_in_pending`, `float_status_changed`, and owner-only `ping`.
+- Added `RealtimeBroadcastService` so realtime payloads use existing
+  API Resources and dispatch after database transactions finish.
+- Wired balance updates after cash-in create / confirm / cancel,
+  cash-out, transfer, exchange, and balance-adjust.
+- Wired transaction and pending-cash-in broadcasts after transaction
+  creation.
+- Wired float status broadcasts after issue, activate,
+  initiate-return, and confirm-return; targeted employee delivery uses
+  the existing `user.{id}` channel.
+- Added owner-only `POST /api/broadcast/test`.
+- Added `resources/js/lib/echo.ts` as the reusable Echo/Reverb helper
+  for Slice D UI work.
+- Added `ReverbBroadcastTest` with `Event::fake()` coverage for the
+  broadcast dispatch points.
+
 ## Remaining Work
 
 1. Configure MySQL databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
 2. Replace skipped SQLite schema/auth/setup checks with MySQL migration verification.
-3. Add WebSocket / Reverb broadcasts for balance and new-transaction
-   events.
-4. Add `vault_transactions` audit rows for denomination movements.
-5. Port employee denomination re-verification at float activation.
+3. Add `vault_transactions` audit rows for denomination movements.
+4. Port employee denomination re-verification at float activation.
+5. Build the Vue/Inertia frontend pages and wire Echo subscriptions.

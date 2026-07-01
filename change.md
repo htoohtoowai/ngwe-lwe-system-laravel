@@ -1016,3 +1016,86 @@ under `ext/` but both are commented out in `php.ini` around lines 938
 and 949. Uncommenting those lines is a one-line environment change
 that unblocks 27 currently-skipped DB tests, but was intentionally
 left outside this slice.
+
+## Slice A: Reverb WebSocket Broadcasts
+
+Goal: port the Python `ConnectionManager.broadcast_to_roles` behavior
+to Laravel Reverb / Echo without bundling the planned vault transaction
+audit or denomination re-verification work.
+
+Completed:
+
+- Added Reverb private channel auth for the HMAC bearer API flow:
+  `/broadcasting/auth` now uses `api` plus `ngwe.auth`.
+- Added role-scoped private channels: `owner`, `cashier`, and
+  `employee`.
+- Kept the existing `user.{userId}` private channel for targeted
+  employee messages, now also requiring an active user.
+- Added broadcast events:
+  - `BalanceUpdated` as `balance_update` to owner / cashier /
+    employee channels.
+  - `NewTransaction` as `new_transaction` to owner / cashier /
+    employee channels.
+  - `CashInPending` as `cash_in_pending` to the cashier channel.
+  - `FloatStatusChanged` as `float_status_changed` to owner,
+    cashier, and the affected employee's `user.{id}` channel.
+  - `BroadcastPing` as `ping` to the owner channel.
+- Added `App\Services\RealtimeBroadcastService` to build REST-shaped
+  payloads with existing API resources and dispatch realtime events
+  after database transactions have committed.
+- Wired `balance_update` after cash-in create, cash-in confirm,
+  cash-in cancel, cash-out, transfer, exchange, and owner
+  balance-adjust.
+- Wired `new_transaction` after cash-in, cash-out, transfer, and
+  exchange creation.
+- Wired `cash_in_pending` when a created cash-in is in
+  `PENDING_CASHIER_CONFIRM`.
+- Wired `float_status_changed` after float issue, activate,
+  initiate-return, and confirm-return.
+- Added owner-only `POST /api/broadcast/test`, returning 200 and
+  dispatching a `ping` event.
+- Added `resources/js/lib/echo.ts` with a reusable Echo/Reverb helper
+  for bearer-token private channel auth and role / user subscriptions.
+- Added `ReverbBroadcastTest` with `Event::fake()` assertions for
+  transaction broadcasts, balance updates, float lifecycle status
+  broadcasts, and the ping endpoint.
+
+Out of scope:
+
+- `vault_transactions` audit rows.
+- Denomination re-verification at float activation.
+- Vue/Inertia pages that consume the Echo helper.
+- MySQL test database wiring.
+
+Verification passed in this slice:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test app\Events\Concerns\UsesNgweLweBroadcastChannels.php app\Events\BalanceUpdated.php app\Events\NewTransaction.php app\Events\CashInPending.php app\Events\FloatStatusChanged.php app\Events\BroadcastPing.php app\Services\RealtimeBroadcastService.php app\Services\TransactionService.php app\Services\CashFloatService.php app\Http\Controllers\Api\RealtimeBroadcastController.php app\Http\Controllers\Api\AccountController.php bootstrap\app.php routes\channels.php routes\api.php tests\Feature\ReverbBroadcastTest.php
+npm.cmd run types:check
+npm.cmd run lint:check
+npm.cmd run build
+```
+
+NPM scripts were run with `C:\laragon\bin\nodejs\node-v22.14.0-win-x64`
+prepended to `PATH` because `node` is not globally available in this
+PowerShell environment.
+
+Current PHPUnit result:
+
+```text
+104 tests, 17 passed, 87 skipped, 45 assertions
+```
+
+The 5 new `ReverbBroadcastTest` cases are DB-backed and remain skipped
+until `pdo_sqlite` (or a MySQL test database) is enabled.
+
+## Next Slice: Vault Transactions Audit
+
+- Add `vault_transactions` audit rows for float issue / receipt /
+  return initiation / return confirmation, employee cash-out /
+  transfer / exchange denomination draws, and cash-in overpayment
+  change.
+- Add `VaultTransactionRepository` and owner-only `GET /api/vault/log`.
+- Keep denomination re-verification, frontend pages, and MySQL test DB
+  wiring for their own later slices.

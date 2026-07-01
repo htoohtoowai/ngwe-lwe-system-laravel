@@ -32,6 +32,7 @@ class CashFloatService
         private readonly CashFloatRepository $floats,
         private readonly CashDenominationRepository $vault,
         private readonly PinVerifier $pinVerifier,
+        private readonly RealtimeBroadcastService $broadcasts,
     ) {}
 
     /**
@@ -43,7 +44,7 @@ class CashFloatService
     {
         $this->guardNonEmptyDenominations($denominations);
 
-        return DB::transaction(function () use ($cashier, $employeeId, $denominations, $note): CashFloatAssignment {
+        $float = DB::transaction(function () use ($cashier, $employeeId, $denominations, $note): CashFloatAssignment {
             $float = $this->floats->issue($employeeId, $cashier->id, $denominations, $note);
 
             $this->vault->recordBulk(
@@ -63,6 +64,10 @@ class CashFloatService
 
             return $float;
         });
+
+        $this->broadcasts->floatStatusChanged($float);
+
+        return $float;
     }
 
     /**
@@ -77,7 +82,7 @@ class CashFloatService
 
         $this->pinVerifier->verify($employee, $pin);
 
-        return DB::transaction(function () use ($employee, $float): CashFloatAssignment {
+        $activated = DB::transaction(function () use ($employee, $float): CashFloatAssignment {
             $activated = $this->floats->activate($float);
 
             $this->log($employee->id, 'float_activated', $activated->id, [
@@ -87,6 +92,10 @@ class CashFloatService
 
             return $activated;
         });
+
+        $this->broadcasts->floatStatusChanged($activated);
+
+        return $activated;
     }
 
     /**
@@ -102,7 +111,7 @@ class CashFloatService
 
         Money::denominationTotal($returnDenominations);
 
-        return DB::transaction(function () use ($employee, $float, $returnDenominations): CashFloatAssignment {
+        $updated = DB::transaction(function () use ($employee, $float, $returnDenominations): CashFloatAssignment {
             $updated = $this->floats->initiateReturn($float, $returnDenominations);
 
             $this->log($employee->id, 'float_return_initiated', $updated->id, [
@@ -112,6 +121,10 @@ class CashFloatService
 
             return $updated;
         });
+
+        $this->broadcasts->floatStatusChanged($updated);
+
+        return $updated;
     }
 
     /**
@@ -121,7 +134,7 @@ class CashFloatService
     {
         $this->pinVerifier->verify($cashier, $pin);
 
-        return DB::transaction(function () use ($cashier, $float, $closingTotal): CashFloatAssignment {
+        $closed = DB::transaction(function () use ($cashier, $float, $closingTotal): CashFloatAssignment {
             $returnDenominations = $this->normalizeReturnDenominations(
                 $float->return_denominations_json ?? []
             );
@@ -146,6 +159,10 @@ class CashFloatService
 
             return $closed;
         });
+
+        $this->broadcasts->floatStatusChanged($closed);
+
+        return $closed;
     }
 
     /**
