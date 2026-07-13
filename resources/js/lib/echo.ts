@@ -9,6 +9,7 @@ export type RealtimeEventName =
     | 'cash_in_pending'
     | 'cash_in_confirmed'
     | 'cash_in_cancelled'
+    | 'float_update'
     | 'float_status_changed'
     | 'ping';
 

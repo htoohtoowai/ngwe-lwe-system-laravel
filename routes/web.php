@@ -1,11 +1,15 @@
 <?php
 
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\LoginController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/login', LoginController::class)->name('login');
 Route::inertia('/', 'Welcome')->name('home');
+Route::get('/reports/daily/pdf', fn () => response('Daily report PDF is not implemented yet.', 501))
+    ->name('reports.daily.pdf');
+Route::middleware('ngwe.auth')->get('/dashboard', DashboardController::class)->name('dashboard');
 
 Route::middleware(['ngwe.auth', 'role:employee'])
     ->prefix('employee')

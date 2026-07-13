@@ -1,0 +1,54 @@
+/* resources/css/banking.css — Myanmar internet-banking visual language.
+   Import after Tailwind in app.css:
+     @import "tailwindcss";
+     @import "./banking.css";
+   Modeled on the reference: white surfaces, one red brand color, gray filled
+   pill inputs with no border until focus, green for balances.
+*/
+
+@theme {
+  /* Brand red — the only saturated color on the page */
+  --color-brand: #e01b26;
+  --color-brand-deep: #b31219;
+  --color-brand-soft: #fdeaea;
+
+  /* Surfaces */
+  --color-canvas: #f5f6f8;   /* page background */
+  --color-card: #ffffff;
+  --color-mist: #f1f2f4;     /* filled inputs / chips */
+  --color-line: #e7e9ec;     /* hairline borders */
+
+  /* Text */
+  --color-ink: #17181a;
+  --color-slate: #6f7580;
+
+  /* Semantics */
+  --color-balance: #16a34a;  /* positive money, per reference */
+  --color-alert: #d92d20;
+
+  --font-sans: "Inter", "Padauk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --radius-field: 0.875rem;  /* inputs: softly rounded, not full pill */
+  --radius-pill: 9999px;     /* buttons & chips: full pill */
+}
+
+/* Filled input, borderless at rest, red ring on focus — the reference pattern */
+.bank-input {
+  @apply w-full rounded-field border-2 border-transparent bg-mist px-4 py-3.5
+         text-ink placeholder:text-slate/60 outline-none transition
+         focus:border-brand focus:bg-white;
+}
+
+.bank-label {
+  @apply mb-1.5 block text-[13px] font-semibold text-ink;
+}
+
+.money {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
