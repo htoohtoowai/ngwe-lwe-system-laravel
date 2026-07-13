@@ -23,27 +23,38 @@ const balanced = computed(() => props.target === null ? true : difference.value 
 const noteCount = computed(() => props.notes.reduce((c, n) => c + qty(n), 0))
 
 function set(n: number, next: number) {
-  if (props.readonly) return
+  if (props.readonly) {
+return
+}
+
   const cap = props.stock?.[n] ?? Infinity
   const clamped = Math.max(0, Math.min(Math.floor(next || 0), cap))
   emit('update:modelValue', { ...props.modelValue, [n]: clamped })
 }
 
 function autoFill() {
-  if (props.target === null || props.readonly) return
+  if (props.target === null || props.readonly) {
+return
+}
+
   let left = props.target
   const next: Record<number, number> = {}
+
   for (const n of [...props.notes].sort((a, b) => b - a)) {
     const cap = props.stock?.[n] ?? Infinity
     const take = Math.min(Math.floor(left / n), cap)
     next[n] = take
     left -= take * n
   }
+
   emit('update:modelValue', next)
 }
 
 function clear() {
-  if (props.readonly) return
+  if (props.readonly) {
+return
+}
+
   emit('update:modelValue', {})
 }
 
@@ -75,7 +86,10 @@ const mismatch = (n: number) => props.expected !== null && qty(n) !== Number(pro
           :class="[
             qty(n) > 0 ? 'bg-ink-100/40' : '',
             mismatch(n) ? 'bg-debit/5' : '',
-          ]">
+            !readonly && (stock?.[n] ?? Infinity) > qty(n) ? 'cursor-pointer select-none active:bg-ink-100' : '',
+          ]"
+          :title="readonly ? undefined : 'Tap to add one note'"
+          @click="!readonly && set(n, qty(n) + 1)">
         <span class="money w-24 shrink-0 text-sm font-semibold tabular-nums text-ink-900">{{ n.toLocaleString() }}</span>
 
         <span v-if="stock" class="hidden w-24 shrink-0 text-[11px] text-ink-700/55 sm:block">
@@ -85,11 +99,13 @@ const mismatch = (n: number) => props.expected !== null && qty(n) !== Number(pro
           {{ (expected[n] ?? 0).toLocaleString() }} issued
         </span>
 
-        <div class="ml-auto flex items-center gap-1">
+        <div class="ml-auto flex items-center gap-1" @click.stop>
           <button type="button" :disabled="readonly || qty(n) === 0" @click="set(n, qty(n) - 1)"
                   class="grid size-8 place-items-center rounded-counter border border-paper-edge text-ink-800 transition hover:border-ink-700 disabled:opacity-30">-</button>
           <input
-            :value="qty(n)" :readonly="readonly" inputmode="numeric"
+            :value="qty(n)"
+            :readonly="readonly"
+            inputmode="numeric"
             @input="set(n, Number(($event.target as HTMLInputElement).value))"
             class="money h-8 w-14 rounded-counter border border-paper-edge text-center text-sm focus:border-ink-700 focus:outline-none focus:ring-2 focus:ring-ink-700/15"
             :class="mismatch(n) ? 'border-debit text-debit' : ''"

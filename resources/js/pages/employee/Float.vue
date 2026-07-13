@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
 import { router } from '@inertiajs/vue3'
-import EmployeeLayout from '@/layouts/EmployeeLayout.vue'
+import { computed, ref } from 'vue'
 import DenominationDrawer from '@/components/teller/DenominationDrawer.vue'
-import PinSeal from '@/components/teller/PinSeal.vue'
 import MoneyText from '@/components/teller/MoneyText.vue'
+import PinSeal from '@/components/teller/PinSeal.vue'
 import StateChip from '@/components/teller/StateChip.vue'
+import EmployeeLayout from '@/layouts/EmployeeLayout.vue'
 import { apiRequest } from '@/lib/api'
 import { readStoredToken } from '@/lib/auth-token'
 

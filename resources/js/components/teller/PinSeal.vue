@@ -14,7 +14,9 @@ const emit = defineEmits<{ confirm: [pin: string]; close: [] }>()
 const pin = ref('')
 const input = ref<HTMLInputElement | null>(null)
 
-watch(() => pin.value, v => { pin.value = v.replace(/\D/g, '').slice(0, 8) })
+watch(() => pin.value, v => {
+ pin.value = v.replace(/\D/g, '').slice(0, 8) 
+})
 </script>
 
 <template>

@@ -473,6 +473,7 @@ function findPageLabel(page: ConsolePage): string {
 
             if (item.children) {
                 const child = item.children.find((child) => child.id === page);
+
                 if (child) {
                     return child.label;
                 }

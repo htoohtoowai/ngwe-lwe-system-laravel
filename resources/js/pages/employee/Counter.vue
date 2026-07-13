@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3'
 import { computed } from 'vue'
-import EmployeeLayout from '@/layouts/EmployeeLayout.vue'
 import MoneyText from '@/components/teller/MoneyText.vue'
 import StateChip from '@/components/teller/StateChip.vue'
+import EmployeeLayout from '@/layouts/EmployeeLayout.vue'
 import { readStoredToken } from '@/lib/auth-token'
 
 type TellerFloat = { id: number; status: string; current_balance: string; issued_amount: string } | null

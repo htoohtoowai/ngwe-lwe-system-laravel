@@ -17,4 +17,8 @@ Route::middleware(['ngwe.auth', 'role:employee'])
         Route::get('/transfer', 'transfer')->name('transfer');
         Route::get('/exchange', 'exchange')->name('exchange');
         Route::get('/float', 'floatPage')->name('float');
+        Route::post('/transactions/cash-in', 'cashInStore')->name('transactions.cash-in');
+        Route::post('/transactions/cash-out', 'cashOutStore')->name('transactions.cash-out');
+        Route::post('/transactions/transfer', 'transferStore')->name('transactions.transfer');
+        Route::post('/transactions/exchange', 'exchangeStore')->name('transactions.exchange');
     });

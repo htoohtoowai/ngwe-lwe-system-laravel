@@ -9,6 +9,7 @@ const props = withDefaults(defineProps<{
 
 const formatted = computed(() => {
   const n = Number(props.value ?? 0)
+
   return new Intl.NumberFormat('en-US', {
     minimumFractionDigits: props.currency === 'THB' ? 2 : 0,
     maximumFractionDigits: props.currency === 'THB' ? 2 : 0,

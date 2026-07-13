@@ -1,14 +1,28 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
 import { router } from '@inertiajs/vue3'
-import EmployeeLayout from '@/layouts/EmployeeLayout.vue'
+import { computed, ref, watch } from 'vue'
+import AccountPicker from '@/components/teller/AccountPicker.vue'
+import AmountField from '@/components/teller/AmountField.vue'
 import DenominationDrawer from '@/components/teller/DenominationDrawer.vue'
 import MoneyText from '@/components/teller/MoneyText.vue'
-import { apiRequest } from '@/lib/api'
+import ReceiptSlip from '@/components/teller/ReceiptSlip.vue'
+import ReviewSheet from '@/components/teller/ReviewSheet.vue'
+import type {ReviewLine} from '@/components/teller/ReviewSheet.vue';
+import EmployeeLayout from '@/layouts/EmployeeLayout.vue'
 import { readStoredToken } from '@/lib/auth-token'
 
 type TellerAccount = { id: number; name: string; company: string; balance: string }
 type TellerFloat = { id: number; status: string; current_balance: string } | null
+type CompletedTxn = {
+  id: number
+  type: string
+  amount: string
+  fee_amount: string
+  status: string
+  created_at: string
+  account_label?: string
+  change_given?: string
+}
 
 const props = defineProps<{
   float: TellerFloat
@@ -17,46 +31,48 @@ const props = defineProps<{
   accounts: TellerAccount[]
   fee: string
   rate: { buy_rate: string; sell_rate: string }
+  completed?: CompletedTxn | null
 }>()
 
 const accountId = ref<number | null>(null)
 const amount = ref<number>(0)
 const currency = ref<'MMK' | 'THB'>('MMK')
 const payout = ref<Record<number, number>>({})
+const reviewing = ref(false)
 const submitting = ref(false)
 const errors = ref<Record<string, string>>({})
 
 const activeFloat = computed(() => props.float?.status === 'ACTIVE')
 const feeNum = computed(() => Number(props.fee ?? 0))
-const payoutDue = computed(() => Math.max(0, amount.value || 0))
 const payoutTotal = computed(() => props.notes.reduce((s, n) => s + n * (payout.value[n] ?? 0), 0))
-const floatAfter = computed(() => Number(props.float?.current_balance ?? 0) - payoutTotal.value)
-const shortFloat = computed(() => payoutDue.value > Number(props.float?.current_balance ?? 0))
+const floatBalance = computed(() => Number(props.float?.current_balance ?? 0))
+const shortFloat = computed(() => (amount.value || 0) > floatBalance.value)
+
 const ready = computed(() =>
   activeFloat.value &&
   accountId.value !== null &&
   amount.value > 0 &&
   !shortFloat.value &&
-  payoutTotal.value === payoutDue.value,
+  payoutTotal.value === amount.value,
 )
 
-watch([amount, accountId], ([value, selectedAccount]) => {
-  if (value > 0 && selectedAccount) {
-    router.reload({ only: ['fee'], data: { amount: value, account_id: selectedAccount }, headers: authHeaders() })
+let feeTimer: ReturnType<typeof setTimeout>
+watch([amount, accountId], ([a, acc]) => {
+  clearTimeout(feeTimer)
+
+  if (a > 0 && acc) {
+    feeTimer = setTimeout(() =>
+      router.reload({ only: ['fee'], data: { amount: a, account_id: acc }, headers: authHeaders() }), 350)
   }
 })
 
-function flattenErrors(error: unknown): Record<string, string> {
-  const apiError = error as { message?: string; errors?: Record<string, string[]> }
-
-  if (apiError.errors) {
-    return Object.fromEntries(
-      Object.entries(apiError.errors).map(([key, value]) => [key, value.join(' ')]),
-    )
-  }
-
-  return { request: apiError.message ?? 'Request failed.' }
-}
+const reviewLines = computed<ReviewLine[]>(() => [
+  { label: 'Cash counted for exchange', value: payoutTotal.value, signed: 'debit' },
+  { label: 'Fee from commission tier', value: feeNum.value },
+  { label: `Direction ${currency.value}`, value: amount.value || 0 },
+  { label: 'Account credited', value: amount.value || 0, signed: 'credit', emphasize: true },
+  { label: 'Your float after exchange', value: floatBalance.value - payoutTotal.value },
+])
 
 function authHeaders(): Record<string, string> {
   const token = readStoredToken()
@@ -64,121 +80,128 @@ function authHeaders(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-async function submit() {
+function csrfToken(): string {
+  return document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? ''
+}
+
+function submit() {
   submitting.value = true
   errors.value = {}
 
-  try {
-    await apiRequest('/api/transactions/exchange', {
-      method: 'POST',
-      token: readStoredToken(),
-      body: {
-        account_id: accountId.value,
-        amount: amount.value,
-        currency: currency.value,
-        denominations: payout.value,
-      },
-    })
-    router.reload({ only: ['float', 'recent'], headers: authHeaders() })
-  } catch (error) {
-    errors.value = flattenErrors(error)
-  } finally {
-    submitting.value = false
-  }
+  router.post('/employee/transactions/exchange', {
+    _token: csrfToken(),
+    account_id: accountId.value,
+    amount: amount.value,
+    currency: currency.value,
+    denominations: payout.value,
+  }, {
+    headers: authHeaders(),
+    onError: e => {
+ errors.value = e as Record<string, string>; reviewing.value = false 
+},
+    onFinish: () => (submitting.value = false),
+  })
 }
 </script>
 
 <template>
   <EmployeeLayout :float="float">
-    <header class="mb-5">
-      <h1 class="font-display text-2xl font-semibold tracking-tight">Exchange</h1>
-      <p class="mt-1 text-sm text-ink-700/70">
-        Record a currency exchange using the live buy and sell rates from the server.
-      </p>
-    </header>
+    <template v-if="completed">
+      <header class="mb-6 text-center">
+        <h1 class="font-display text-2xl font-semibold tracking-tight">Exchange completed</h1>
+        <p class="mt-1 text-sm text-ink-700/70">Show this reference after confirming the rate with the customer.</p>
+      </header>
+      <ReceiptSlip :txn="completed" next-href="/employee/exchange" next-label="Next Exchange" />
+    </template>
 
-    <div class="grid gap-6 lg:grid-cols-[1fr_20rem]">
-      <div class="space-y-5">
-        <section class="rounded-counter border border-paper-edge bg-white p-5">
-          <div class="grid gap-4 sm:grid-cols-2">
-            <div class="sm:col-span-2">
-              <label class="field-label" for="account">Exchange account</label>
-              <select id="account" v-model="accountId" class="field-input mt-1.5">
-                <option :value="null" disabled>Choose an account</option>
-                <option v-for="a in accounts" :key="a.id" :value="a.id">{{ a.company }} - {{ a.name }}</option>
-              </select>
-            </div>
-            <div>
-              <label class="field-label" for="amount">Cash to exchange</label>
-              <input id="amount" v-model.number="amount" type="number" min="0" step="100"
-                     class="field-input money mt-1.5 text-lg" placeholder="0" />
-            </div>
-            <div>
-              <p class="field-label">Direction</p>
-              <div class="mt-1.5 grid grid-cols-2 overflow-hidden rounded-counter border border-paper-edge">
-                <button
-                  type="button"
-                  class="px-3 py-2.5 text-sm font-semibold"
-                  :class="currency === 'MMK' ? 'bg-ink-900 text-white' : 'bg-white text-ink-800'"
-                  @click="currency = 'MMK'"
-                >
-                  MMK to THB
-                </button>
-                <button
-                  type="button"
-                  class="border-l border-paper-edge px-3 py-2.5 text-sm font-semibold"
-                  :class="currency === 'THB' ? 'bg-ink-900 text-white' : 'bg-white text-ink-800'"
-                  @click="currency = 'THB'"
-                >
-                  THB to MMK
-                </button>
+    <template v-else>
+      <header class="mb-5">
+        <h1 class="font-display text-2xl font-semibold tracking-tight">Exchange</h1>
+        <p class="mt-1 text-sm text-ink-700/70">
+          Record a currency exchange using the live buy and sell rates from the server.
+        </p>
+      </header>
+
+      <div class="grid gap-6 lg:grid-cols-[1fr_20rem]">
+        <div class="space-y-5">
+          <section class="rounded-counter border border-paper-edge bg-white p-5">
+            <div class="grid gap-5">
+              <AccountPicker v-model="accountId" :accounts="accounts" label="Exchange account" />
+              <AmountField v-model="amount" label="Cash to exchange" />
+              <div>
+                <p class="field-label">Direction</p>
+                <div class="mt-1.5 grid grid-cols-2 overflow-hidden rounded-counter border border-paper-edge">
+                  <button
+                    type="button"
+                    class="px-3 py-2.5 text-sm font-semibold"
+                    :class="currency === 'MMK' ? 'bg-ink-900 text-white' : 'bg-white text-ink-800'"
+                    @click="currency = 'MMK'"
+                  >
+                    MMK to THB
+                  </button>
+                  <button
+                    type="button"
+                    class="border-l border-paper-edge px-3 py-2.5 text-sm font-semibold"
+                    :class="currency === 'THB' ? 'bg-ink-900 text-white' : 'bg-white text-ink-800'"
+                    @click="currency = 'THB'"
+                  >
+                    THB to MMK
+                  </button>
+                </div>
+              </div>
+              <div>
+                <p class="field-label">Fee from commission tier</p>
+                <p class="field-input money mt-1.5 bg-paper text-lg text-ink-700">{{ feeNum.toLocaleString() }}</p>
               </div>
             </div>
-            <div>
-              <p class="field-label">Fee from commission tier</p>
-              <p class="field-input money mt-1.5 bg-paper text-lg text-ink-700">{{ Number(fee).toLocaleString() }}</p>
+          </section>
+
+          <p v-if="shortFloat" class="rounded-counter border border-debit/30 bg-debit/5 px-4 py-2.5 text-sm text-debit">
+            Your float holds <MoneyText :value="floatBalance" class="font-semibold" />. Reduce the amount or ask the cashier for a top-up.
+          </p>
+
+          <DenominationDrawer
+            v-model="payout"
+            :notes="notes"
+            :target="amount || 0"
+            :stock="floatStock"
+            label="Notes counted for exchange"
+          />
+        </div>
+
+        <aside class="h-fit rounded-counter border border-ink-800 bg-ink-900 p-5 text-ink-100 lg:sticky lg:top-24">
+          <h2 class="font-display text-sm font-semibold uppercase tracking-[0.14em] text-ink-300">Slip</h2>
+          <dl class="mt-4 space-y-3 text-sm">
+            <div class="flex justify-between"><dt class="text-ink-300">Sell rate</dt><dd class="money">{{ rate.sell_rate }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">Buy rate</dt><dd class="money">{{ rate.buy_rate }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">Direction</dt><dd>{{ currency }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">Counted movement</dt><dd><MoneyText :value="payoutTotal" /></dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">Fee</dt><dd><MoneyText :value="feeNum" /></dd></div>
+            <div class="flex justify-between border-t border-ink-800 pt-3">
+              <dt class="font-semibold">Account credited</dt>
+              <dd class="font-semibold"><MoneyText :value="amount || 0" signed="credit" /></dd>
             </div>
-          </div>
-        </section>
+            <div class="flex justify-between"><dt class="text-ink-300">Float after exchange</dt><dd><MoneyText :value="floatBalance - payoutTotal" /></dd></div>
+          </dl>
 
-        <p v-if="shortFloat" class="rounded-counter border border-debit/30 bg-debit/5 px-4 py-2.5 text-sm text-debit">
-          Your float holds <MoneyText :value="float?.current_balance ?? 0" class="font-semibold" />. Reduce the amount
-          or ask the cashier to top you up.
-        </p>
-
-        <DenominationDrawer
-          v-model="payout"
-          :notes="notes"
-          :target="payoutDue"
-          :stock="floatStock"
-          label="Notes counted for exchange"
-        />
+          <button type="button" :disabled="!ready" @click="reviewing = true"
+                  class="mt-5 w-full rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-35">
+            Review slip
+          </button>
+          <p v-for="(msg, key) in errors" :key="key" class="mt-2 text-sm text-debit">{{ msg }}</p>
+        </aside>
       </div>
 
-      <aside class="h-fit rounded-counter border border-ink-800 bg-ink-900 p-5 text-ink-100 lg:sticky lg:top-24">
-        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.14em] text-ink-300">Slip</h2>
-        <dl class="mt-4 space-y-3 text-sm">
-          <div class="flex justify-between"><dt class="text-ink-300">Sell rate</dt><dd class="money">{{ rate.sell_rate }}</dd></div>
-          <div class="flex justify-between"><dt class="text-ink-300">Buy rate</dt><dd class="money">{{ rate.buy_rate }}</dd></div>
-          <div class="flex justify-between"><dt class="text-ink-300">Direction</dt><dd>{{ currency }}</dd></div>
-          <div class="flex justify-between"><dt class="text-ink-300">Counted movement</dt><dd><MoneyText :value="payoutTotal" /></dd></div>
-          <div class="flex justify-between"><dt class="text-ink-300">Fee</dt><dd><MoneyText :value="feeNum" /></dd></div>
-          <div class="flex justify-between border-t border-ink-800 pt-3">
-            <dt class="font-semibold">Account credited</dt>
-            <dd class="font-semibold"><MoneyText :value="amount || 0" signed="credit" /></dd>
-          </div>
-          <div class="flex justify-between">
-            <dt class="text-ink-300">Float after exchange</dt>
-            <dd><MoneyText :value="floatAfter" :signed="floatAfter < Number(float?.current_balance ?? 0) ? 'debit' : null" /></dd>
-          </div>
-        </dl>
-
-        <button type="button" :disabled="!ready || submitting" @click="submit"
-                class="mt-5 w-full rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-35">
-          {{ submitting ? 'Recording...' : 'Complete exchange' }}
-        </button>
-        <p v-for="(msg, key) in errors" :key="key" class="mt-2 text-sm text-debit">{{ msg }}</p>
-      </aside>
-    </div>
+      <ReviewSheet
+        :open="reviewing"
+        :busy="submitting"
+        title="Exchange"
+        :lines="reviewLines"
+        confirm-label="Complete exchange"
+        consequence="On confirm, the exchange account is credited and these exact notes are deducted from your float."
+        @confirm="submit"
+        @close="reviewing = false"
+      />
+    </template>
   </EmployeeLayout>
 </template>
