@@ -1,9 +1,10 @@
 <?php
 
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\LoginController;
 use Illuminate\Support\Facades\Route;
 
-Route::inertia('/login', 'Login')->name('login');
+Route::get('/login', LoginController::class)->name('login');
 Route::inertia('/', 'Welcome')->name('home');
 
 Route::middleware(['ngwe.auth', 'role:employee'])

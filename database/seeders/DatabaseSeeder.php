@@ -12,36 +12,9 @@ use App\Repositories\CashDenominationRepository;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
-    private const DEMO_PASSWORD = 'password123';
-
-    private const DEMO_USERS = [
-        [
-            'username' => 'owner',
-            'email' => 'owner@ngwe-lwe.local',
-            'full_name' => 'Demo Owner',
-            'role' => 'owner',
-            'pin' => '1111',
-        ],
-        [
-            'username' => 'cashier',
-            'email' => 'cashier@ngwe-lwe.local',
-            'full_name' => 'Demo Cashier',
-            'role' => 'cashier',
-            'pin' => '2222',
-        ],
-        [
-            'username' => 'employee',
-            'email' => 'employee@ngwe-lwe.local',
-            'full_name' => 'Demo Employee',
-            'role' => 'employee',
-            'pin' => '3333',
-        ],
-    ];
-
     private const DEMO_VAULT_DENOMINATIONS = [
         20000 => 100,
         10000 => 100,
@@ -58,36 +31,21 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $users = $this->seedDemoUsers();
-
-        $this->seedSetupData();
-        $this->seedVaultOpeningBalance($users['owner']);
-    }
-
-    /**
-     * @return array<string, User>
-     */
-    private function seedDemoUsers(): array
-    {
-        $users = [];
-
-        foreach (self::DEMO_USERS as $seed) {
-            $users[$seed['username']] = User::query()->updateOrCreate(
-                ['username' => $seed['username']],
-                [
-                    'name' => $seed['full_name'],
-                    'email' => $seed['email'],
-                    'full_name' => $seed['full_name'],
-                    'role' => $seed['role'],
-                    'is_active' => true,
-                    'auth_version' => 0,
-                    'password' => Hash::make(self::DEMO_PASSWORD),
-                    'pin_hash' => Hash::make($seed['pin']),
-                ],
-            );
+        if ($this->shouldSeedDemoUsers()) {
+            $this->call(DemoUserSeeder::class);
         }
 
-        return $users;
+        $this->seedSetupData();
+
+        $owner = User::query()->where('username', 'owner')->first();
+        if ($owner instanceof User) {
+            $this->seedVaultOpeningBalance($owner);
+        }
+    }
+
+    private function shouldSeedDemoUsers(): bool
+    {
+        return app()->environment(['local', 'testing']);
     }
 
     private function seedSetupData(): void
