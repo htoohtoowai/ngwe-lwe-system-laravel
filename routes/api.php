@@ -6,8 +6,10 @@ use App\Http\Controllers\Api\CashFloatController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ExchangeRateController;
 use App\Http\Controllers\Api\RealtimeBroadcastController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ServiceTypeController;
 use App\Http\Controllers\Api\TransactionController;
+use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VaultController;
 use App\Models\CashFloatAssignment;
 use Illuminate\Support\Facades\Route;
@@ -83,6 +85,12 @@ Route::middleware(['ngwe.auth', 'role:owner'])->group(function (): void {
 });
 
 Route::middleware(['ngwe.auth', 'role:owner'])->group(function (): void {
+    Route::get('/users', [UserController::class, 'index']);
+    Route::post('/users', [UserController::class, 'store']);
+    Route::get('/users/{user}', [UserController::class, 'show']);
+    Route::patch('/users/{user}', [UserController::class, 'update']);
+    Route::delete('/users/{user}', [UserController::class, 'destroy']);
+
     Route::post('/companies', [CompanyController::class, 'store']);
     Route::patch('/companies/{company}', [CompanyController::class, 'update']);
     Route::delete('/companies/{company}', [CompanyController::class, 'destroy']);
@@ -97,6 +105,10 @@ Route::middleware(['ngwe.auth', 'role:owner'])->group(function (): void {
     Route::post('/accounts/{account}/balance-adjust', [AccountController::class, 'adjustBalance']);
 
     Route::get('/vault/log', [VaultController::class, 'log']);
+
+    Route::get('/reports/daily-summary', [ReportController::class, 'dailySummary']);
+    Route::post('/reports/daily-reconciliation', [ReportController::class, 'closeDailyReconciliation']);
+    Route::get('/reports/daily-reconciliations', [ReportController::class, 'dailyReconciliations']);
 
     Route::post('/exchange-rates', [ExchangeRateController::class, 'store']);
     Route::patch('/exchange-rates/{exchangeRate}', [ExchangeRateController::class, 'update']);

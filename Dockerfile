@@ -1,9 +1,9 @@
-FROM phpswoole/swoole:php8.3-alpine
+FROM php:8.4-cli-alpine
 
 RUN apk add --no-cache \
-    bash git curl unzip nodejs npm
+    bash git curl unzip linux-headers nodejs npm
 
-RUN docker-php-ext-install pcntl
+RUN docker-php-ext-install pcntl pdo_mysql sockets
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
@@ -36,7 +36,7 @@ RUN cp .env.example .env \
     && chmod +x docker/ensure-env.sh \
     && rm -f .env
 
-EXPOSE 8000
+EXPOSE 8000 8080
 
 CMD ["sh", "-lc", "\
   /app/docker/ensure-env.sh || exit 1; \
@@ -44,5 +44,5 @@ CMD ["sh", "-lc", "\
   php artisan route:clear --no-interaction || true && \
   php artisan view:clear --no-interaction || true && \
   echo \"Ready -> http://localhost:${APP_SERVER_PORT:-8000}\" && \
-  exec php artisan octane:start --server=${OCTANE_SERVER:-swoole} --host=${APP_SERVER_HOST:-0.0.0.0} --port=${APP_SERVER_PORT:-8000} --workers=${OCTANE_WORKERS:-2} \
+  exec php artisan serve --host=${APP_SERVER_HOST:-0.0.0.0} --port=${APP_SERVER_PORT:-8000} \
 "]

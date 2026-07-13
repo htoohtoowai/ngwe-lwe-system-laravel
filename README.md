@@ -85,13 +85,32 @@ Completed correct Ngwe Lwe Laravel foundation slices:
   - Employee-counted `verified_denominations` are compared with the issued float denominations after PIN verification and before the status transition.
   - Short-count and over-count attempts return HTTP 422 and leave the float in `PENDING_RECEIPT`.
 - The Vue/Inertia frontend is now an operations console:
-  - Browser API session handling for login, token restore, logout, and PIN update.
+  - Dedicated `/login` page for sign-in, with token restore, logout, and PIN update handled outside the login form.
   - Owner, cashier, and employee role views for the completed setup, transaction, float, vault, exchange-rate, and realtime workflows.
   - Echo/Reverb role and user-channel subscriptions feed realtime events into the console.
+- Owner-facing staff user management is wired:
+  - Owner-only `/api/users` endpoints create, list, update, and deactivate staff accounts.
+  - Role, password, username, and active-status changes revoke old tokens via `auth_version`.
+  - The operations console now includes a Staff Users panel for creating, editing, and deactivating owner/cashier/employee users.
+- Owner daily reporting and reconciliation are wired:
+  - Owner-only `/api/reports/daily-summary`, `/api/reports/daily-reconciliation`, and `/api/reports/daily-reconciliations`.
+  - Daily summaries include completed transaction totals, fees, profit, cash/digital snapshots, pending Cash In count, and vault/account/employee float snapshots.
+  - The operations console now includes a Daily Report panel with refresh, Close Day, and recent reconciliation logs.
 - MySQL verification is wired:
   - Local databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
   - PHPUnit defaults to the MySQL test database.
   - DB-backed schema/auth/API/feature suites now run against MySQL instead of being skipped for missing `pdo_sqlite`.
+- Demo seed data is wired for local walkthroughs:
+  - Login users: `owner`, `cashier`, and `employee`.
+  - Sample company, service types, accounts, commission tiers, exchange rate, and opening main-vault denominations.
+  - The vault opening seed is idempotent and will not double-credit an already stocked vault.
+- Local browser workflow QA has passed for the seeded roles:
+  - Cashier issued an employee float.
+  - Employee activated the float with PIN and denomination re-count.
+  - Employee created a pending Cash In transaction.
+  - Cashier confirmed the pending Cash In.
+  - Reverb events arrived in the operations console without manual refresh.
+- Docker startup hardening now validates required production env values before the app or Reverb starts.
 
 Note: previous Flight/Telemetry work in this folder was a wrong starter and is not the product direction.
 
@@ -147,12 +166,24 @@ npm run build
 
 Current note: Laragon PHP has `pdo_mysql` enabled but not `pdo_sqlite`; PHPUnit is configured to use MySQL for DB-backed tests.
 
-Current PHPUnit result: `110 tests, 110 passed, 455 assertions` against MySQL `ngwe_lwe_laravel_test`.
+Current PHPUnit result: `121 tests, 121 passed, 589 assertions` against MySQL `ngwe_lwe_laravel_test`.
 
 Local Laragon note: `.env` and `.env.example` use `CACHE_STORE=file` so the app can run without a Docker Redis hostname.
 
+Docker setup is documented in [DOCKER.md](DOCKER.md).
+
+Local QA note: Laragon's nginx may already occupy port `8080`; use Reverb port `8081` locally if needed. Docker still defaults to the documented Reverb host port unless changed in `.env`.
+
+## Demo Credentials
+
+Run `php artisan migrate --seed` locally, or `docker compose exec app php artisan db:seed --force` in Docker.
+
+| Username | Password | PIN | Role |
+| --- | --- | --- | --- |
+| `owner` | `password123` | `1111` | Owner |
+| `cashier` | `password123` | `2222` | Cashier |
+| `employee` | `password123` | `3333` | Employee |
+
 ## Next Steps
 
-1. Add seed/demo owner, cashier, and employee users or a user management flow.
-2. Manually exercise the Vue/Inertia operations console against the MySQL development database.
-3. Harden production/deployment settings once the local workflows are comfortable.
+1. Do a final Docker image build/run on the target machine before production use.

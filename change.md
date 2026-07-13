@@ -1333,3 +1333,285 @@ Current PHPUnit result:
   development database.
 - Harden production/deployment settings after the local workflows are
   comfortable.
+
+## Slice F: Demo Seed Data
+
+Goal: make the Laravel port easy to open and test locally without
+manually creating staff users and setup records first.
+
+Completed:
+
+- Replaced the placeholder Laravel seeder with Ngwe Lwe demo seed data.
+- Added deterministic users:
+  - `owner` / `password123` / PIN `1111`
+  - `cashier` / `password123` / PIN `2222`
+  - `employee` / `password123` / PIN `3333`
+- Seeded `Demo Wave Money` service setup for Cash In, Cash Out,
+  Transfer, and Exchange.
+- Seeded six demo accounts, including a fee account. Existing demo
+  account balances are preserved on repeated seeder runs so `db:seed`
+  does not silently rewrite live walkthrough balances.
+- Seeded catch-all commission tiers and the default THB/MMK exchange
+  rate.
+- Seeded the opening main-vault denominations only when the vault is
+  empty, avoiding double-credit on repeated `db:seed`.
+- Added `DatabaseSeederTest` coverage for role logins, operating data,
+  and idempotency.
+- Updated `README.md` and `DOCKER.md` with seeding instructions and
+  credentials.
+
+Verification passed:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test --filter=DatabaseSeederTest
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test database\seeders\DatabaseSeeder.php tests\Feature\DatabaseSeederTest.php
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+```
+
+Current PHPUnit result:
+
+```text
+114 tests, 114 passed, 525 assertions
+```
+
+## Next Slice: Manual Workflow QA And Deployment Hardening
+
+- Run the Vue/Inertia operations console through owner, cashier, and
+  employee browser workflows using the seeded users.
+- Verify Reverb realtime updates between separate browser sessions.
+- Harden Docker/production env settings after the local workflow is
+  comfortable.
+
+## Slice G: Manual Browser Workflow QA
+
+Goal: prove the seeded owner/cashier/employee browser workflow runs
+against the local MySQL development database and Reverb without manual
+page refreshes.
+
+Completed:
+
+- Corrected the local `.env` runtime for QA:
+  - Switched local DB from the default SQLite connection to MySQL
+    `ngwe_lwe_laravel`.
+  - Switched local Reverb to port `8081` because Laragon/nginx was
+    occupying `8080`.
+  - Removed stale local Octane and Telemetry env values.
+- Ran `migrate --seed --force` against the development DB.
+- Started local app/Vite/Reverb services:
+  - App: `http://127.0.0.1:8001`
+  - Vite: `http://127.0.0.1:5173`
+  - Reverb: `127.0.0.1:8081`
+- Verified owner login and owner `Dispatch Ping`; `ping` appeared in
+  the realtime event feed.
+- Verified cashier issue-float workflow:
+  - Cashier issued float `#1` to employee `#3`.
+  - Main vault became `4,095,000`; employee cash became `40,000`.
+  - `float_status_changed` event appeared without refresh.
+- Verified employee workflow:
+  - Employee activated float `#1` with PIN and exact denominations.
+  - Employee created pending Cash In transaction `#1` for `1,000`.
+  - `new_transaction` and `balance_update` events appeared without
+    refresh.
+- Verified cashier confirmation:
+  - Cashier saw pending Cash In `#1`.
+  - Confirm action changed the transaction to `COMPLETED`.
+  - Pending count returned to `0`.
+
+Notes:
+
+- The in-app browser shares localStorage between tabs, so it cannot
+  faithfully simulate cashier and employee being logged in at the same
+  time in separate browser profiles. The realtime event feed itself was
+  verified; true separate-user testing should use separate computers,
+  browser profiles, or incognito/profile isolation.
+
+Verification passed:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan migrate --seed --force
+Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8001/
+Browser QA through the Vue/Inertia operations console
+```
+
+## Next Slice: Deployment Hardening And Reports
+
+- Harden production/Docker environment defaults and remove remaining
+  local-only assumptions from the deployment path.
+- Add owner-facing user management if seed data is not enough for staff
+  management.
+- Add daily summary/reconciliation/report screens on top of the
+  already-created schema.
+
+## Slice H: Docker Runtime Hardening
+
+Goal: make Docker startup fail early with useful errors when production
+environment values are missing or unsafe.
+
+Completed:
+
+- Hardened `docker/ensure-env.sh`.
+- Added required Docker runtime checks for:
+  - `APP_KEY`
+  - `DB_CONNECTION`, `DB_HOST`, `DB_DATABASE`, `DB_USERNAME`
+  - `NGWE_LWE_AUTH_SECRET`
+  - `REVERB_APP_ID`, `REVERB_APP_KEY`, `REVERB_APP_SECRET`
+  - `VITE_REVERB_APP_KEY`
+- Added guardrails for:
+  - Placeholder `APP_KEY` values.
+  - `APP_DEBUG=true` while `APP_ENV=production`.
+  - `NGWE_LWE_AUTH_SECRET` shorter than 32 characters.
+  - Reverb browser key drift where `VITE_REVERB_APP_KEY` does not match
+    `REVERB_APP_KEY`.
+- Added `DockerEnvironmentTest` to assert `.env.example` and the Docker
+  startup guard stay aligned with the deployment variables.
+- Updated Docker docs to describe the startup guard and Reverb key
+  match requirement.
+
+Verification passed:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test --filter=DockerEnvironmentTest
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test tests\Unit\DockerEnvironmentTest.php
+docker compose config --quiet
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+```
+
+Current PHPUnit result:
+
+```text
+114 tests, 114 passed, 525 assertions
+```
+
+## Slice I: Owner Staff User Management
+
+Goal: let the owner manage real staff accounts from the browser instead
+of relying only on seeded demo users.
+
+Completed:
+
+- Added owner-only staff user routes:
+  - `GET /api/users`
+  - `POST /api/users`
+  - `GET /api/users/{user}`
+  - `PATCH /api/users/{user}`
+  - `DELETE /api/users/{user}`
+- Added `UserRequest` for create/update validation:
+  - roles are limited to owner, cashier, and employee
+  - username and email stay unique
+  - password is required for create and optional for update
+  - PIN remains 4-8 digits when supplied
+- Added `UserResource` so API responses expose safe user fields only and
+  never return `password` or `pin_hash`.
+- Extended `UserRepository` with owner-management operations:
+  - list active or all users
+  - create users with hashed password/PIN
+  - update profile, role, password, PIN, and active status
+  - deactivate users
+- Preserved auth safety by incrementing `auth_version` when username,
+  role, password, or active status changes.
+- Blocked owners from deactivating their own active session.
+- Added a Staff Users panel to the Vue/Inertia operations console:
+  - create owner/cashier/employee users
+  - select existing users for edit
+  - update role/profile/password/PIN/status
+  - deactivate staff users
+- Added `UserManagementTest` coverage for owner CRUD, non-owner access
+  denial, self-deactivate denial, and token revocation after
+  deactivation.
+
+Verification passed:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test --filter=UserManagementTest
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test app\Repositories\UserRepository.php app\Http\Controllers\Api\UserController.php app\Http\Requests\UserRequest.php app\Http\Resources\UserResource.php routes\api.php tests\Feature\UserManagementTest.php
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\prettier\bin\prettier.cjs --check resources/
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\eslint\bin\eslint.js .
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\vue-tsc\bin\vue-tsc.js --noEmit
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\vite\bin\vite.js build
+docker compose config --quiet
+git diff --check
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+```
+
+Current PHPUnit result:
+
+```text
+118 tests, 118 passed, 557 assertions
+```
+
+## Slice J: Daily Reports And Reconciliation
+
+Goal: let the owner review and close daily operating totals from the
+browser, using the daily summary and reconciliation tables that already
+exist in the migrated schema.
+
+Completed:
+
+- Added `DailySummary` and `DailyReconciliationLog` models.
+- Added `DailyReportService`:
+  - completed-only daily transaction totals
+  - total commission, customer fees, and profit
+  - pending Cash In count
+  - main vault cash snapshot
+  - open employee float snapshot
+  - active account digital-balance snapshot
+  - total cash, total digital, and grand total
+- Added owner-only report routes:
+  - `GET /api/reports/daily-summary`
+  - `POST /api/reports/daily-reconciliation`
+  - `GET /api/reports/daily-reconciliations`
+- Closing a day now upserts `daily_summary` and stores a full
+  `daily_reconciliation_logs` snapshot.
+- Added a Daily Report panel to the owner Vue/Inertia console with date
+  refresh, Close Day, and recent close logs.
+- Added `DailyReportTest` for summary math, reconciliation persistence,
+  log listing, and non-owner access rejection.
+
+Verification passed:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test --filter=DailyReportTest
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test app\Models\DailySummary.php app\Models\DailyReconciliationLog.php app\Http\Requests\DailyReportRequest.php app\Http\Resources\DailyReconciliationResource.php app\Services\DailyReportService.php app\Http\Controllers\Api\ReportController.php routes\api.php tests\Feature\DailyReportTest.php
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\prettier\bin\prettier.cjs --check resources/
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\eslint\bin\eslint.js .
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\vue-tsc\bin\vue-tsc.js --noEmit
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\vite\bin\vite.js build
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+```
+
+Current PHPUnit result:
+
+```text
+121 tests, 121 passed, 589 assertions
+```
+
+## Slice K: Dedicated Login Page
+
+Goal: make login a standalone page instead of an embedded sidebar form,
+matching enterprise app navigation.
+
+Completed:
+
+- Added `Route::inertia('/login', 'Login')`.
+- Added `resources/js/pages/Login.vue`.
+- Added shared token helpers in `resources/js/lib/auth-token.ts`.
+- Removed the console sidebar login form.
+- Console access now redirects unauthenticated users to `/login`; logout
+  returns to `/login`.
+- Added login-page styling to the enterprise UI CSS.
+
+Verification passed:
+
+```bash
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\prettier\bin\prettier.cjs --check resources/
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\eslint\bin\eslint.js .
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\vue-tsc\bin\vue-tsc.js --noEmit
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\vite\bin\vite.js build
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe -l routes\web.php
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test routes\web.php
+```
+
+## Next Slice: Final Docker Run
+
+- Do a final Docker image build/run on the target machine before
+  production use.

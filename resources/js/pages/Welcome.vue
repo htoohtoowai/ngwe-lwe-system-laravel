@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { Head } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { Head, usePage } from '@inertiajs/vue3';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import { ApiRequestError, apiRequest } from '../lib/api';
+import { readStoredToken, removeStoredToken } from '../lib/auth-token';
 import {
     createNgweLweEcho,
     disconnectNgweLweEcho,
@@ -16,9 +17,12 @@ import type {
     ApiItem,
     CashFloat,
     Company,
+    DailyReconciliation,
+    DailySummaryReport,
     DenominationMap,
+    DeviceContext,
     ExchangeRate,
-    LoginResponse,
+    ManagedUser,
     Role,
     ServiceType,
     SessionUser,
@@ -29,6 +33,35 @@ import type {
 
 type NoticeTone = 'ok' | 'warn' | 'error';
 type TransactionMode = 'cash-in' | 'cash-out' | 'transfer' | 'exchange';
+type ConsoleIcon =
+    | 'layout'
+    | 'receipt'
+    | 'users'
+    | 'chart'
+    | 'settings'
+    | 'wallet'
+    | 'vault'
+    | 'coins'
+    | 'cashier'
+    | 'edit'
+    | 'activity';
+type ConsolePage =
+    | 'dashboard'
+    | 'transactions'
+    | 'users'
+    | 'reports'
+    | 'setup'
+    | 'accounts'
+    | 'vault'
+    | 'cash-floats'
+    | 'cashier'
+    | 'employee'
+    | 'cash-in'
+    | 'cash-out'
+    | 'transfer'
+    | 'exchange'
+    | 'float-receipt'
+    | 'realtime';
 
 type Notice = {
     tone: NoticeTone;
@@ -42,21 +75,87 @@ type RealtimeEntry = {
     payload: RealtimePayload;
 };
 
-const tokenKey = 'ngwe_lwe_api_token';
-const roles: Array<{ id: Role; label: string }> = [
-    { id: 'owner', label: 'Owner' },
-    { id: 'cashier', label: 'Cashier' },
-    { id: 'employee', label: 'Employee' },
-];
+type ConsoleMenuChild = {
+    id: ConsolePage;
+    label: string;
+};
+
+type ConsoleMenuItem = {
+    id: ConsolePage;
+    label: string;
+    icon: ConsoleIcon;
+    badge?: string | number;
+    children?: ConsoleMenuChild[];
+};
+
+type ConsoleMenuSection = {
+    label: string;
+    items: ConsoleMenuItem[];
+};
+
 const transactionModes: Array<{ id: TransactionMode; label: string }> = [
     { id: 'cash-in', label: 'Cash In' },
     { id: 'cash-out', label: 'Cash Out' },
     { id: 'transfer', label: 'Transfer' },
     { id: 'exchange', label: 'Exchange' },
 ];
+const transactionPageIds: TransactionMode[] = transactionModes.map(
+    (mode) => mode.id,
+);
+const employeeTransactionChildren: ConsoleMenuChild[] = transactionModes;
+const employeeFloatChildren: ConsoleMenuChild[] = [
+    { id: 'float-receipt', label: 'Float Receipt' },
+];
+const menuIconPaths: Record<ConsoleIcon, string[]> = {
+    layout: [
+        'M4 4h7v7H4V4Z',
+        'M13 4h7v5h-7V4Z',
+        'M13 11h7v9h-7v-9Z',
+        'M4 13h7v7H4v-7Z',
+    ],
+    receipt: [
+        'M6 3h12v18l-2-1.2-2 1.2-2-1.2-2 1.2-2-1.2L6 21V3Z',
+        'M9 8h6',
+        'M9 12h6',
+        'M9 16h4',
+    ],
+    users: [
+        'M16 19c0-2.2-1.8-4-4-4H8c-2.2 0-4 1.8-4 4',
+        'M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
+        'M20 19c0-1.8-1.2-3.2-2.8-3.8',
+        'M16 4.4a3 3 0 0 1 0 5.2',
+    ],
+    chart: ['M4 19V5', 'M4 19h16', 'M8 16v-5', 'M12 16V8', 'M16 16v-9'],
+    settings: [
+        'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z',
+        'M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.05-1.8 3.12-.06-.02a1.8 1.8 0 0 0-1.98.2 1.8 1.8 0 0 0-.76 1.67H8.8a1.8 1.8 0 0 0-.76-1.67 1.8 1.8 0 0 0-1.98-.2L6 20.15 4.2 17.03l.04-.05A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.4-1.27v-3.46A1.8 1.8 0 0 0 4.6 9a1.8 1.8 0 0 0-.36-1.98l-.04-.05L6 3.85l.06.02a1.8 1.8 0 0 0 1.98-.2A1.8 1.8 0 0 0 8.8 2h6.4a1.8 1.8 0 0 0 .76 1.67 1.8 1.8 0 0 0 1.98.2l.06-.02 1.8 3.12-.04.05A1.8 1.8 0 0 0 19.4 9a1.8 1.8 0 0 0 1.4 1.27v3.46A1.8 1.8 0 0 0 19.4 15Z',
+    ],
+    wallet: [
+        'M4 7.5A2.5 2.5 0 0 1 6.5 5H18a2 2 0 0 1 2 2v12H6.5A2.5 2.5 0 0 1 4 16.5v-9Z',
+        'M4 8h14a2 2 0 0 1 2 2',
+        'M16 14h4',
+    ],
+    vault: [
+        'M5 7h14v12H5V7Z',
+        'M8 7V5h8v2',
+        'M12 11a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z',
+        'M12 9v2',
+        'M12 15v2',
+    ],
+    coins: [
+        'M8 7c0-2 2.2-3 5-3s5 1 5 3-2.2 3-5 3-5-1-5-3Z',
+        'M8 7v5c0 2 2.2 3 5 3s5-1 5-3V7',
+        'M5 11c-1.8.5-3 1.5-3 2.8 0 2 2.2 3 5 3 .7 0 1.4-.06 2-.2',
+        'M2 14.3v3c0 2 2.2 3 5 3 1.2 0 2.3-.18 3.1-.54',
+    ],
+    cashier: ['M4 7h16v10H4V7Z', 'M7 17v3', 'M17 17v3', 'M8 11h8', 'M9 14h2'],
+    edit: ['M5 19h4l10-10-4-4L5 15v4Z', 'M13.5 6.5l4 4'],
+    activity: ['M4 12h4l2-6 4 12 2-6h4'],
+};
 
 const token = ref(readStoredToken());
 const session = ref<SessionUser | null>(null);
+const page = usePage<{ device?: DeviceContext }>();
 const previewRole = ref<Role>('owner');
 const notice = ref<Notice | null>(null);
 const loading = ref(false);
@@ -64,22 +163,38 @@ const workspaceLoading = ref(false);
 const realtimeStatus = ref('offline');
 const realtimeEvents = ref<RealtimeEntry[]>([]);
 const eventCounter = ref(0);
+const activePage = ref<ConsolePage>('dashboard');
+const userMenuOpen = ref(false);
+const menuGroupsOpen = ref<Record<string, boolean>>({});
 
 const companies = ref<Company[]>([]);
+const users = ref<ManagedUser[]>([]);
 const serviceTypes = ref<ServiceType[]>([]);
 const accounts = ref<Account[]>([]);
 const transactions = ref<Transaction[]>([]);
 const cashFloats = ref<CashFloat[]>([]);
 const inventory = ref<VaultInventory | null>(null);
 const vaultLog = ref<VaultTransaction[]>([]);
+const dailySummary = ref<DailySummaryReport | null>(null);
+const reconciliationLogs = ref<DailyReconciliation[]>([]);
 const latestRate = ref<ExchangeRate | null>(null);
 
-const loginForm = ref({
-    username: '',
-    password: '',
-});
 const pinForm = ref({
     pin: '',
+});
+const userForm = ref({
+    id: '',
+    username: '',
+    email: '',
+    full_name: '',
+    role: 'employee' as Role,
+    password: '',
+    pin: '',
+    is_active: true,
+});
+const reportForm = ref({
+    date: todayDate(),
+    notes: '',
 });
 const companyForm = ref({
     name: '',
@@ -150,12 +265,36 @@ let unsubscribeUser: (() => void) | null = null;
 const activeRole = computed<Role>(
     () => session.value?.role ?? previewRole.value,
 );
-const activeUserName = computed(() => {
-    if (!session.value) {
-        return 'No session';
-    }
+const device = computed<DeviceContext>(
+    () =>
+        page.props.device ?? {
+            type: 'desktop',
+            view: 'web',
+            is_mobile: false,
+            is_tablet: false,
+            is_desktop: true,
+        },
+);
+const consoleShellClass = computed(() => [
+    'console-shell min-h-screen',
+    `device-${device.value.type}`,
+    `role-${activeRole.value}`,
+    {
+        'is-mobile': device.value.is_mobile,
+        'is-tablet': device.value.is_tablet,
+        'is-desktop': device.value.is_desktop,
+    },
+]);
+const activeUserName = computed(
+    () => session.value?.full_name || session.value?.username || 'Checking',
+);
+const userInitials = computed(() => {
+    const parts = activeUserName.value.trim().split(/\s+/).slice(0, 2);
+    const initials = parts
+        .map((part) => part[0]?.toUpperCase() ?? '')
+        .join('');
 
-    return session.value.full_name || session.value.username;
+    return initials || 'NL';
 });
 const pendingCashIns = computed(() =>
     transactions.value.filter(
@@ -164,6 +303,11 @@ const pendingCashIns = computed(() =>
 );
 const activeFloatCount = computed(
     () => cashFloats.value.filter((float) => float.status === 'ACTIVE').length,
+);
+const employeeFloatBalance = computed(() =>
+    cashFloats.value
+        .filter((float) => float.status === 'ACTIVE')
+        .reduce((sum, float) => sum + Number(float.current_balance ?? 0), 0),
 );
 const pendingReceiptFloats = computed(() =>
     cashFloats.value.filter((float) => float.status === 'PENDING_RECEIPT'),
@@ -185,6 +329,17 @@ const companyOptions = computed(() =>
         label: `#${company.id} ${company.name}`,
     })),
 );
+const userOptions = computed(() =>
+    users.value.map((user) => ({
+        id: user.id,
+        label: `#${user.id} ${user.full_name || user.username}`,
+    })),
+);
+const selectedUserIsCurrentSession = computed(
+    () =>
+        session.value !== null &&
+        userForm.value.id === String(session.value.id),
+);
 const serviceTypeOptions = computed(() =>
     serviceTypes.value.map((serviceType) => ({
         id: serviceType.id,
@@ -193,7 +348,7 @@ const serviceTypeOptions = computed(() =>
 );
 const currentRoleLabel = computed(() => roleLabel(activeRole.value));
 const workspaceState = computed(() =>
-    session.value ? 'Live API session' : 'Preview mode',
+    session.value ? 'Live API session' : 'Secure console',
 );
 const vaultTotal = computed(() => inventory.value?.main_vault_total ?? 0);
 const employeeCashTotal = computed(
@@ -202,11 +357,205 @@ const employeeCashTotal = computed(
 const grandPhysicalTotal = computed(
     () => inventory.value?.grand_physical_total ?? 0,
 );
+const menuSections = computed<ConsoleMenuSection[]>(() => {
+    const mainItems: ConsoleMenuItem[] = [
+        {
+            id: 'dashboard',
+            label: 'Dashboard',
+            icon: 'layout',
+        },
+        {
+            id: 'transactions',
+            label: 'Transactions',
+            icon: 'receipt',
+            badge: transactions.value.length,
+        },
+        {
+            id: 'cash-floats',
+            label: 'Cash Floats',
+            icon: 'coins',
+            badge: cashFloats.value.length,
+        },
+    ];
+    const roleItems: ConsoleMenuItem[] = [];
+    const systemItems: ConsoleMenuItem[] = [
+        {
+            id: 'realtime',
+            label: 'Realtime Events',
+            icon: 'activity',
+            badge: realtimeEvents.value.length,
+        },
+    ];
+
+    if (activeRole.value === 'owner') {
+        roleItems.push(
+            {
+                id: 'users',
+                label: 'Staff Users',
+                icon: 'users',
+                badge: users.value.length,
+            },
+            {
+                id: 'reports',
+                label: 'Daily Reports',
+                icon: 'chart',
+                badge: reconciliationLogs.value.length,
+            },
+            {
+                id: 'setup',
+                label: 'Setup',
+                icon: 'settings',
+                badge: companies.value.length,
+            },
+            {
+                id: 'accounts',
+                label: 'Accounts',
+                icon: 'wallet',
+                badge: accounts.value.length,
+            },
+            {
+                id: 'vault',
+                label: 'Vault Ops',
+                icon: 'vault',
+                badge: vaultLog.value.length,
+            },
+        );
+    }
+
+    if (activeRole.value === 'cashier') {
+        roleItems.push({
+            id: 'cashier',
+            label: 'Cashier Queue',
+            icon: 'cashier',
+            badge: pendingCashIns.value.length,
+        });
+    }
+
+    if (activeRole.value === 'employee') {
+        roleItems.push(
+            {
+                id: 'employee',
+                label: 'Transaction Entry',
+                icon: 'edit',
+                children: employeeTransactionChildren,
+            },
+            {
+                id: 'float-receipt',
+                label: 'Float',
+                icon: 'coins',
+                badge: pendingReceiptFloats.value.length,
+                children: employeeFloatChildren,
+            },
+        );
+    }
+
+    return [
+        {
+            label: 'Main',
+            items: mainItems,
+        },
+        {
+            label: 'Role',
+            items: roleItems,
+        },
+        {
+            label: 'System',
+            items: systemItems,
+        },
+    ].filter((section) => section.items.length > 0);
+});
+function findPageLabel(page: ConsolePage): string {
+    for (const section of menuSections.value) {
+        for (const item of section.items) {
+            if (item.id === page) {
+                return item.label;
+            }
+
+            if (item.children) {
+                const child = item.children.find((child) => child.id === page);
+                if (child) {
+                    return child.label;
+                }
+            }
+        }
+    }
+
+    return 'Dashboard';
+}
+
+const transactionModeLabel = computed(
+    () =>
+        transactionModes.find((mode) => mode.id === transactionMode.value)
+            ?.label ?? '',
+);
+const transactionScreenDescription = computed(() => {
+    if (transactionMode.value === 'cash-in') {
+        return 'Receive customer cash and submit a pending cash-in request.';
+    }
+
+    if (transactionMode.value === 'cash-out') {
+        return 'Record a customer cash-out transaction from the selected account.';
+    }
+
+    if (transactionMode.value === 'transfer') {
+        return 'Move funds between two accounts in a dedicated transfer screen.';
+    }
+
+    return 'Create a currency exchange transaction with the active rate.';
+});
+const currentPageLabel = computed(() => {
+    const pageLabel = findPageLabel(activePage.value);
+
+    return transactionPageIds.includes(activePage.value as TransactionMode)
+        ? `Transaction Entry / ${pageLabel}`
+        : pageLabel;
+});
+const ownerPageActive = computed(
+    () =>
+        activeRole.value === 'owner' &&
+        ['users', 'reports', 'setup', 'accounts', 'vault'].includes(
+            activePage.value,
+        ),
+);
+const cashierPageActive = computed(
+    () => activeRole.value === 'cashier' && activePage.value === 'cashier',
+);
+const employeePageActive = computed(
+    () =>
+        activeRole.value === 'employee' &&
+        transactionPageIds.includes(activePage.value as TransactionMode),
+);
+const floatReceiptPageActive = computed(
+    () => activeRole.value === 'employee' && activePage.value === 'float-receipt',
+);
+
+watch(activePage, (page) => {
+    if (transactionPageIds.includes(page as TransactionMode)) {
+        transactionMode.value = page as TransactionMode;
+    }
+});
+
+watch(activeRole, () => {
+    if (activeRole.value === 'employee' && activePage.value === 'dashboard') {
+        activePage.value = 'cash-in';
+        menuGroupsOpen.value.employee = true;
+
+        return;
+    }
+
+    if (!canOpenPage(activePage.value)) {
+        activePage.value = 'dashboard';
+    }
+});
 
 onMounted(() => {
     if (token.value) {
         void restoreSession();
+
+        return;
     }
+
+    redirectToLogin();
 });
 
 onBeforeUnmount(() => {
@@ -228,35 +577,9 @@ async function restoreSession(): Promise<void> {
         connectRealtime();
         await refreshWorkspace();
         setNotice('ok', 'Session restored.');
-    } catch (error) {
+    } catch {
         clearSession();
-        setNotice('warn', messageFromError(error));
-    } finally {
-        loading.value = false;
-    }
-}
-
-async function login(): Promise<void> {
-    loading.value = true;
-
-    try {
-        const response = await apiRequest<LoginResponse>('/api/auth/login', {
-            method: 'POST',
-            body: {
-                username: loginForm.value.username,
-                password: loginForm.value.password,
-            },
-        });
-        token.value = response.token;
-        session.value = response.user;
-        previewRole.value = response.user.role;
-        storeToken(response.token);
-        loginForm.value.password = '';
-        connectRealtime();
-        await refreshWorkspace();
-        setNotice('ok', `Signed in as ${roleLabel(response.user.role)}.`);
-    } catch (error) {
-        setNotice('error', messageFromError(error));
+        redirectToLogin();
     } finally {
         loading.value = false;
     }
@@ -272,7 +595,7 @@ async function logout(): Promise<void> {
 
     clearSession();
     clearWorkspace();
-    setNotice('ok', 'Signed out.');
+    redirectToLogin();
 }
 
 async function setPin(): Promise<void> {
@@ -285,8 +608,25 @@ async function setPin(): Promise<void> {
             },
         });
         pinForm.value.pin = '';
+        userMenuOpen.value = false;
         setNotice('ok', 'PIN updated.');
     });
+}
+
+function resetTransactionForm(): void {
+    transactionForm.value = {
+        account_id: '',
+        from_account_id: '',
+        to_account_id: '',
+        amount: '',
+        customer_name: '',
+        customer_phone: '',
+        amount_received: '',
+        currency: 'MMK',
+        denominations: '{"10000": 1}',
+        change_denominations: '{}',
+        note: '',
+    };
 }
 
 async function refreshWorkspace(): Promise<void> {
@@ -341,15 +681,44 @@ async function refreshWorkspace(): Promise<void> {
         latestRate.value = rateResponse.data;
 
         if (activeRole.value === 'owner') {
-            const logResponse = await apiRequest<
-                ApiCollection<VaultTransaction>
-            >('/api/vault/log', {
-                token: token.value,
-                query: { per_page: 12 },
-            });
+            const [
+                userResponse,
+                logResponse,
+                summaryResponse,
+                reconciliationResponse,
+            ] = await Promise.all([
+                apiRequest<ApiCollection<ManagedUser>>('/api/users', {
+                    token: token.value,
+                    query: { include_inactive: true },
+                }),
+                apiRequest<ApiCollection<VaultTransaction>>('/api/vault/log', {
+                    token: token.value,
+                    query: { per_page: 12 },
+                }),
+                apiRequest<ApiItem<DailySummaryReport>>(
+                    '/api/reports/daily-summary',
+                    {
+                        token: token.value,
+                        query: { date: reportForm.value.date },
+                    },
+                ),
+                apiRequest<ApiCollection<DailyReconciliation>>(
+                    '/api/reports/daily-reconciliations',
+                    {
+                        token: token.value,
+                        query: { per_page: 5 },
+                    },
+                ),
+            ]);
+            users.value = userResponse.data;
             vaultLog.value = logResponse.data;
+            dailySummary.value = summaryResponse.data;
+            reconciliationLogs.value = reconciliationResponse.data;
         } else {
+            users.value = [];
             vaultLog.value = [];
+            dailySummary.value = null;
+            reconciliationLogs.value = [];
         }
     } catch (error) {
         if (error instanceof ApiRequestError && error.status === 401) {
@@ -360,6 +729,86 @@ async function refreshWorkspace(): Promise<void> {
     } finally {
         workspaceLoading.value = false;
     }
+}
+
+async function createUser(): Promise<void> {
+    await runAction(async () => {
+        await apiRequest('/api/users', {
+            method: 'POST',
+            token: token.value,
+            body: userPayload(true),
+        });
+        resetUserForm();
+        await refreshWorkspace();
+        setNotice('ok', 'User created.');
+    });
+}
+
+async function updateUser(): Promise<void> {
+    await runAction(async () => {
+        const userId = requiredNumber(userForm.value.id, 'User');
+        await apiRequest(`/api/users/${userId}`, {
+            method: 'PATCH',
+            token: token.value,
+            body: userPayload(false),
+        });
+        resetUserForm();
+        await refreshWorkspace();
+        setNotice('ok', 'User updated.');
+    });
+}
+
+async function deactivateUser(): Promise<void> {
+    await runAction(async () => {
+        const userId = requiredNumber(userForm.value.id, 'User');
+        await apiRequest(`/api/users/${userId}`, {
+            method: 'DELETE',
+            token: token.value,
+        });
+        resetUserForm();
+        await refreshWorkspace();
+        setNotice('ok', 'User deactivated.');
+    });
+}
+
+async function refreshDailyReport(): Promise<void> {
+    await runAction(async () => {
+        const [summaryResponse, reconciliationResponse] = await Promise.all([
+            apiRequest<ApiItem<DailySummaryReport>>(
+                '/api/reports/daily-summary',
+                {
+                    token: token.value,
+                    query: { date: reportForm.value.date },
+                },
+            ),
+            apiRequest<ApiCollection<DailyReconciliation>>(
+                '/api/reports/daily-reconciliations',
+                {
+                    token: token.value,
+                    query: { per_page: 5 },
+                },
+            ),
+        ]);
+        dailySummary.value = summaryResponse.data;
+        reconciliationLogs.value = reconciliationResponse.data;
+        setNotice('ok', 'Daily report refreshed.');
+    });
+}
+
+async function closeDailyReconciliation(): Promise<void> {
+    await runAction(async () => {
+        await apiRequest('/api/reports/daily-reconciliation', {
+            method: 'POST',
+            token: token.value,
+            body: {
+                date: reportForm.value.date,
+                notes: reportForm.value.notes || null,
+            },
+        });
+        reportForm.value.notes = '';
+        await refreshWorkspace();
+        setNotice('ok', 'Daily reconciliation closed.');
+    });
 }
 
 async function createCompany(): Promise<void> {
@@ -820,6 +1269,62 @@ function parseDenominations(
     return map;
 }
 
+function editUser(user: ManagedUser): void {
+    userForm.value = {
+        id: String(user.id),
+        username: user.username,
+        email: user.email ?? '',
+        full_name: user.full_name ?? '',
+        role: user.role,
+        password: '',
+        pin: '',
+        is_active: user.is_active,
+    };
+}
+
+function selectUserForEdit(): void {
+    const selected = users.value.find(
+        (user) => String(user.id) === userForm.value.id,
+    );
+
+    if (selected) {
+        editUser(selected);
+    }
+}
+
+function resetUserForm(): void {
+    userForm.value = {
+        id: '',
+        username: '',
+        email: '',
+        full_name: '',
+        role: 'employee',
+        password: '',
+        pin: '',
+        is_active: true,
+    };
+}
+
+function userPayload(requirePassword: boolean): Record<string, unknown> {
+    const body: Record<string, unknown> = {
+        username: userForm.value.username,
+        email: userForm.value.email || null,
+        full_name: userForm.value.full_name,
+        role: userForm.value.role,
+        is_active: userForm.value.is_active,
+    };
+
+    if (requirePassword || userForm.value.password !== '') {
+        body.password = userForm.value.password;
+    }
+
+    if (userForm.value.pin !== '') {
+        body.pin = userForm.value.pin;
+    }
+
+    return body;
+}
+
 function requiredNumber(value: string, label: string): number {
     const parsed = Number(value);
 
@@ -891,32 +1396,92 @@ function clearSession(): void {
 
 function clearWorkspace(): void {
     companies.value = [];
+    users.value = [];
     serviceTypes.value = [];
     accounts.value = [];
     transactions.value = [];
     cashFloats.value = [];
     inventory.value = null;
     vaultLog.value = [];
+    dailySummary.value = null;
+    reconciliationLogs.value = [];
     latestRate.value = null;
 }
 
-function readStoredToken(): string {
-    if (typeof window === 'undefined') {
-        return '';
-    }
+function todayDate(): string {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
 
-    return localStorage.getItem(tokenKey) ?? '';
+    return `${now.getFullYear()}-${month}-${day}`;
 }
 
-function storeToken(value: string): void {
-    if (typeof window !== 'undefined') {
-        localStorage.setItem(tokenKey, value);
+function canOpenPage(page: ConsolePage): boolean {
+    return menuSections.value.some((section) =>
+        section.items.some((item) =>
+            item.id === page ||
+            item.children?.some((child) => child.id === page),
+        ),
+    );
+}
+
+function selectPage(page: ConsolePage): void {
+    if (page === 'employee') {
+        menuGroupsOpen.value.employee = true;
+        activePage.value = 'cash-in';
+
+        return;
+    }
+
+    if (page === 'float-receipt') {
+        menuGroupsOpen.value['float-receipt'] = true;
+        activePage.value = 'float-receipt';
+
+        return;
+    }
+
+    if (canOpenPage(page)) {
+        activePage.value = page;
     }
 }
 
-function removeStoredToken(): void {
+function isMenuGroupOpen(id: ConsolePage): boolean {
+    if (menuGroupsOpen.value[id] !== undefined) {
+        return menuGroupsOpen.value[id];
+    }
+
+    const hasActiveChild =
+        menuSections.value
+            .find((section) => section.items.some((item) => item.id === id))
+            ?.items.find((item) => item.id === id)
+            ?.children?.some((child) => child.id === activePage.value) ?? false;
+
+    return activePage.value === id || hasActiveChild;
+}
+
+function toggleMenuGroup(id: ConsolePage): void {
+    menuGroupsOpen.value[id] = !isMenuGroupOpen(id);
+}
+
+function openSubMenuPage(_: ConsolePage, page: ConsolePage): void {
+    if (transactionPageIds.includes(page as TransactionMode)) {
+        transactionMode.value = page as TransactionMode;
+    }
+
+    selectPage(page);
+}
+
+function shouldShowMenuBadge(badge: ConsoleMenuItem['badge']): boolean {
+    if (typeof badge === 'number') {
+        return badge > 0;
+    }
+
+    return Boolean(badge);
+}
+
+function redirectToLogin(): void {
     if (typeof window !== 'undefined') {
-        localStorage.removeItem(tokenKey);
+        window.location.assign('/login');
     }
 }
 </script>
@@ -924,7 +1489,21 @@ function removeStoredToken(): void {
 <template>
     <Head title="Operations Console" />
 
-    <div class="console-shell">
+    <main v-if="!session" class="auth-redirect-shell" aria-live="polite">
+        <section class="auth-redirect-card">
+            <div class="brand-mark" aria-hidden="true">NL</div>
+            <h1>Ngwe Lwe System</h1>
+            <p>Opening secure console</p>
+        </section>
+    </main>
+
+    <div
+        v-else
+        :class="consoleShellClass"
+        :data-device="device.type"
+        :data-device-view="device.view"
+        :data-role="activeRole"
+    >
         <header class="topbar">
             <div class="brand-lockup">
                 <div class="brand-mark" aria-hidden="true">NL</div>
@@ -945,113 +1524,221 @@ function removeStoredToken(): void {
                 >
                     Refresh
                 </button>
-                <button
-                    v-if="session"
-                    type="button"
-                    class="ghost-button danger"
-                    @click="logout"
-                >
-                    Logout
-                </button>
+                <div class="user-menu">
+                    <button
+                        type="button"
+                        class="user-menu-trigger"
+                        aria-label="Account menu"
+                        aria-haspopup="true"
+                        :aria-expanded="userMenuOpen"
+                        @click="userMenuOpen = !userMenuOpen"
+                    >
+                        <span class="avatar" aria-hidden="true">
+                            {{ userInitials }}
+                        </span>
+                    </button>
+                    <template v-if="userMenuOpen">
+                        <div
+                            class="user-menu-backdrop"
+                            aria-hidden="true"
+                            @click="userMenuOpen = false"
+                        ></div>
+                        <div class="user-menu-pop">
+                            <div class="user-menu-head">
+                                <span class="avatar" aria-hidden="true">
+                                    {{ userInitials }}
+                                </span>
+                                <div>
+                                    <strong>{{ activeUserName }}</strong>
+                                    <span>
+                                        #{{ session?.id }} /
+                                        {{ currentRoleLabel }}
+                                    </span>
+                                </div>
+                            </div>
+                            <form
+                                class="user-menu-pin"
+                                @submit.prevent="setPin"
+                            >
+                                <label>
+                                    Security PIN
+                                    <input
+                                        v-model="pinForm.pin"
+                                        inputmode="numeric"
+                                        type="password"
+                                        autocomplete="new-password"
+                                    />
+                                </label>
+                                <button
+                                    type="submit"
+                                    class="compact-button"
+                                    :disabled="loading"
+                                >
+                                    Save PIN
+                                </button>
+                            </form>
+                            <button
+                                type="button"
+                                class="user-menu-logout"
+                                @click="logout"
+                            >
+                                Logout
+                            </button>
+                        </div>
+                    </template>
+                </div>
             </div>
         </header>
 
         <main class="workspace">
             <aside class="side-rail">
-                <section class="panel session-panel">
-                    <div class="panel-heading">
-                        <span>Session</span>
-                        <strong>{{ activeUserName }}</strong>
+                <div class="side-brand" aria-hidden="true">
+                    <div class="brand-mark">NL</div>
+                    <div>
+                        <strong>Ngwe Lwe</strong>
+                        <span>Operations</span>
                     </div>
+                </div>
 
-                    <form
-                        v-if="!session"
-                        class="stack-form"
-                        @submit.prevent="login"
+                <nav class="drawer-menu" aria-label="Console pages">
+                    <section
+                        v-for="section in menuSections"
+                        :key="section.label"
+                        class="drawer-menu-section"
                     >
-                        <label>
-                            Username
-                            <input
-                                v-model="loginForm.username"
-                                autocomplete="username"
-                            />
-                        </label>
-                        <label>
-                            Password
-                            <input
-                                v-model="loginForm.password"
-                                autocomplete="current-password"
-                                type="password"
-                            />
-                        </label>
-                        <button
-                            type="submit"
-                            class="primary-button"
-                            :disabled="loading"
+                        <p>{{ section.label }}</p>
+                        <template
+                            v-for="item in section.items"
+                            :key="item.id"
                         >
-                            Login
-                        </button>
-                    </form>
-
-                    <div v-else class="session-facts">
-                        <dl>
-                            <div>
-                                <dt>User ID</dt>
-                                <dd>#{{ session.id }}</dd>
-                            </div>
-                            <div>
-                                <dt>Role</dt>
-                                <dd>{{ currentRoleLabel }}</dd>
-                            </div>
-                        </dl>
-
-                        <form class="inline-form" @submit.prevent="setPin">
-                            <label>
-                                PIN
-                                <input
-                                    v-model="pinForm.pin"
-                                    inputmode="numeric"
-                                    type="password"
-                                />
-                            </label>
                             <button
-                                type="submit"
-                                class="compact-button"
-                                :disabled="loading"
+                                v-if="!item.children"
+                                type="button"
+                                :class="{ active: activePage === item.id }"
+                                @click="selectPage(item.id)"
                             >
-                                Save
+                                <span class="drawer-menu-icon">
+                                    <svg
+                                        aria-hidden="true"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path
+                                            v-for="path in menuIconPaths[
+                                                item.icon
+                                            ]"
+                                            :key="path"
+                                            :d="path"
+                                        />
+                                    </svg>
+                                </span>
+                                <span class="drawer-menu-label">
+                                    {{ item.label }}
+                                </span>
+                                <strong v-if="shouldShowMenuBadge(item.badge)">
+                                    {{ item.badge }}
+                                </strong>
                             </button>
-                        </form>
+                            <div
+                                v-else
+                                class="drawer-menu-group"
+                                :class="{
+                                    open: isMenuGroupOpen(item.id),
+                                    'group-active':
+                                        activePage === item.id ||
+                                        item.children?.some(
+                                            (child) => child.id === activePage,
+                                        ),
+                                }"
+                            >
+                                <button
+                                    type="button"
+                                    class="drawer-menu-group-toggle"
+                                    :aria-expanded="isMenuGroupOpen(item.id)"
+                                    @click="toggleMenuGroup(item.id)"
+                                >
+                                    <span class="drawer-menu-icon">
+                                        <svg
+                                            aria-hidden="true"
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                        >
+                                            <path
+                                                v-for="path in menuIconPaths[
+                                                    item.icon
+                                                ]"
+                                                :key="path"
+                                                :d="path"
+                                            />
+                                        </svg>
+                                    </span>
+                                    <span class="drawer-menu-label">
+                                        {{ item.label }}
+                                    </span>
+                                    <strong
+                                        v-if="shouldShowMenuBadge(item.badge)"
+                                    >
+                                        {{ item.badge }}
+                                    </strong>
+                                    <span
+                                        class="drawer-menu-arrow"
+                                        aria-hidden="true"
+                                    >
+                                        <svg fill="none" viewBox="0 0 24 24">
+                                            <path d="m9 6 6 6-6 6" />
+                                        </svg>
+                                    </span>
+                                </button>
+                                <div
+                                    v-if="isMenuGroupOpen(item.id)"
+                                    class="drawer-menu-children"
+                                >
+                                    <button
+                                        v-for="child in item.children"
+                                        :key="child.id"
+                                        type="button"
+                                        :class="{ active: activePage === child.id }"
+                                        @click="openSubMenuPage(item.id, child.id)"
+                                    >
+                                        <span
+                                            class="drawer-menu-dot"
+                                            aria-hidden="true"
+                                        ></span>
+                                        <span class="drawer-menu-label">
+                                            {{ child.label }}
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </section>
+                </nav>
+            </aside>
+
+            <section class="content-column" aria-live="polite">
+                <section class="content-toolbar">
+                    <div class="toolbar-title">
+                        <span>Operations</span>
+                        <strong>{{ currentPageLabel }}</strong>
+                    </div>
+                    <div class="toolbar-summary">
+                        <span>{{ transactions.length }} transactions</span>
+                        <span>{{ cashFloats.length }} floats</span>
+                        <span>{{ accounts.length }} accounts</span>
                     </div>
                 </section>
 
-                <section class="panel">
-                    <div class="panel-heading">
-                        <span>Role View</span>
-                        <strong>{{ currentRoleLabel }}</strong>
-                    </div>
-                    <div
-                        class="segmented-control"
-                        role="tablist"
-                        aria-label="Role view"
-                    >
-                        <button
-                            v-for="role in roles"
-                            :key="role.id"
-                            type="button"
-                            :class="{ active: activeRole === role.id }"
-                            :disabled="Boolean(session)"
-                            @click="previewRole = role.id"
-                        >
-                            {{ role.label }}
-                        </button>
-                    </div>
-                </section>
+                <div v-if="notice" class="notice" :data-tone="notice.tone">
+                    {{ notice.message }}
+                </div>
 
-                <section class="panel event-feed">
+                <section
+                    v-if="activePage === 'realtime'"
+                    class="panel event-feed page-event-feed"
+                >
                     <div class="panel-heading">
-                        <span>Realtime</span>
-                        <strong>{{ realtimeEvents.length }}</strong>
+                        <span>Realtime Events</span>
+                        <strong>{{ realtimeStatus }}</strong>
                     </div>
                     <button
                         v-if="activeRole === 'owner'"
@@ -1072,14 +1759,12 @@ function removeStoredToken(): void {
                         No realtime events.
                     </p>
                 </section>
-            </aside>
 
-            <section class="content-column" aria-live="polite">
-                <div v-if="notice" class="notice" :data-tone="notice.tone">
-                    {{ notice.message }}
-                </div>
-
-                <section class="metric-grid" aria-label="Operations summary">
+                <section
+                    v-if="activePage === 'dashboard'"
+                    class="metric-grid"
+                    aria-label="Operations summary"
+                >
                     <article class="metric">
                         <span>Main Vault</span>
                         <strong>{{ formatMoney(vaultTotal) }}</strong>
@@ -1102,7 +1787,13 @@ function removeStoredToken(): void {
                     </article>
                 </section>
 
-                <section class="panel data-panel">
+                <section
+                    v-if="
+                        activePage === 'dashboard' ||
+                        activePage === 'transactions'
+                    "
+                    class="panel data-panel"
+                >
                     <div class="panel-heading">
                         <span>Recent Transactions</span>
                         <strong>{{ transactions.length }}</strong>
@@ -1149,8 +1840,352 @@ function removeStoredToken(): void {
                     </p>
                 </section>
 
-                <section v-if="activeRole === 'owner'" class="role-grid">
-                    <section class="panel">
+                <section v-if="ownerPageActive" class="role-grid">
+                    <section
+                        v-if="activePage === 'users'"
+                        class="panel data-panel"
+                    >
+                        <div class="panel-heading">
+                            <span>Staff Users</span>
+                            <strong>{{ users.length }}</strong>
+                        </div>
+                        <form
+                            class="form-grid three"
+                            @submit.prevent="
+                                userForm.id ? updateUser() : createUser()
+                            "
+                        >
+                            <label>
+                                User
+                                <select
+                                    v-model="userForm.id"
+                                    @change="selectUserForEdit"
+                                >
+                                    <option value=""></option>
+                                    <option
+                                        v-for="user in userOptions"
+                                        :key="user.id"
+                                        :value="user.id"
+                                    >
+                                        {{ user.label }}
+                                    </option>
+                                </select>
+                            </label>
+                            <label>
+                                Username
+                                <input
+                                    v-model="userForm.username"
+                                    autocomplete="off"
+                                />
+                            </label>
+                            <label>
+                                Full name
+                                <input v-model="userForm.full_name" />
+                            </label>
+                            <label>
+                                Email
+                                <input
+                                    v-model="userForm.email"
+                                    autocomplete="off"
+                                />
+                            </label>
+                            <label>
+                                Role
+                                <select v-model="userForm.role">
+                                    <option value="owner">Owner</option>
+                                    <option value="cashier">Cashier</option>
+                                    <option value="employee">Employee</option>
+                                </select>
+                            </label>
+                            <label>
+                                Password
+                                <input
+                                    v-model="userForm.password"
+                                    autocomplete="new-password"
+                                    type="password"
+                                />
+                            </label>
+                            <label>
+                                PIN
+                                <input
+                                    v-model="userForm.pin"
+                                    autocomplete="off"
+                                    inputmode="numeric"
+                                    type="password"
+                                />
+                            </label>
+                            <label class="check-row">
+                                <input
+                                    v-model="userForm.is_active"
+                                    :disabled="selectedUserIsCurrentSession"
+                                    type="checkbox"
+                                />
+                                Active
+                            </label>
+                            <div class="button-cell">
+                                <button
+                                    type="submit"
+                                    class="primary-button"
+                                    :disabled="loading"
+                                >
+                                    {{
+                                        userForm.id
+                                            ? 'Update User'
+                                            : 'Create User'
+                                    }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="secondary-button"
+                                    :disabled="
+                                        loading ||
+                                        !userForm.id ||
+                                        selectedUserIsCurrentSession
+                                    "
+                                    @click="deactivateUser"
+                                >
+                                    Deactivate
+                                </button>
+                                <button
+                                    type="button"
+                                    class="ghost-button"
+                                    :disabled="loading"
+                                    @click="resetUserForm"
+                                >
+                                    Clear
+                                </button>
+                            </div>
+                        </form>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>User</th>
+                                        <th>Role</th>
+                                        <th>Status</th>
+                                        <th>PIN</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="user in users" :key="user.id">
+                                        <td>
+                                            <strong>
+                                                {{
+                                                    user.full_name ||
+                                                    user.username
+                                                }}
+                                            </strong>
+                                            <small>{{ user.username }}</small>
+                                        </td>
+                                        <td>{{ roleLabel(user.role) }}</td>
+                                        <td>
+                                            <span class="row-status">
+                                                {{
+                                                    user.is_active
+                                                        ? 'ACTIVE'
+                                                        : 'INACTIVE'
+                                                }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {{ user.has_pin ? 'Set' : '-' }}
+                                        </td>
+                                        <td class="button-cell">
+                                            <button
+                                                type="button"
+                                                class="ghost-button"
+                                                :disabled="loading"
+                                                @click="editUser(user)"
+                                            >
+                                                Edit
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+
+                    <section
+                        v-if="activePage === 'reports'"
+                        class="panel data-panel"
+                    >
+                        <div class="panel-heading">
+                            <span>Daily Report</span>
+                            <strong>
+                                {{
+                                    dailySummary?.summary_date ||
+                                    reportForm.date
+                                }}
+                            </strong>
+                        </div>
+                        <form
+                            class="form-grid three"
+                            @submit.prevent="refreshDailyReport"
+                        >
+                            <label>
+                                Date
+                                <input v-model="reportForm.date" type="date" />
+                            </label>
+                            <label>
+                                Close note
+                                <textarea v-model="reportForm.notes"></textarea>
+                            </label>
+                            <div class="button-cell">
+                                <button
+                                    type="submit"
+                                    class="secondary-button"
+                                    :disabled="loading"
+                                >
+                                    Refresh
+                                </button>
+                                <button
+                                    type="button"
+                                    class="primary-button"
+                                    :disabled="loading || !dailySummary"
+                                    @click="closeDailyReconciliation"
+                                >
+                                    Close Day
+                                </button>
+                            </div>
+                        </form>
+                        <div v-if="dailySummary" class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Cash In</th>
+                                        <th>Cash Out</th>
+                                        <th>Transfer</th>
+                                        <th>Exchange</th>
+                                        <th>Fees</th>
+                                        <th>Profit</th>
+                                        <th>Cash</th>
+                                        <th>Digital</th>
+                                        <th>Grand</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>
+                                            {{
+                                                formatMoney(
+                                                    dailySummary.total_cash_in,
+                                                )
+                                            }}
+                                        </td>
+                                        <td>
+                                            {{
+                                                formatMoney(
+                                                    dailySummary.total_cash_out,
+                                                )
+                                            }}
+                                        </td>
+                                        <td>
+                                            {{
+                                                formatMoney(
+                                                    dailySummary.total_transfer,
+                                                )
+                                            }}
+                                        </td>
+                                        <td>
+                                            {{
+                                                formatMoney(
+                                                    dailySummary.total_exchange,
+                                                )
+                                            }}
+                                        </td>
+                                        <td>
+                                            {{
+                                                formatMoney(
+                                                    dailySummary.total_customer_fees,
+                                                )
+                                            }}
+                                        </td>
+                                        <td>
+                                            {{
+                                                formatMoney(
+                                                    dailySummary.total_profit,
+                                                )
+                                            }}
+                                        </td>
+                                        <td>
+                                            {{
+                                                formatMoney(
+                                                    dailySummary.total_cash,
+                                                )
+                                            }}
+                                        </td>
+                                        <td>
+                                            {{
+                                                formatMoney(
+                                                    dailySummary.total_digital,
+                                                )
+                                            }}
+                                        </td>
+                                        <td>
+                                            {{
+                                                formatMoney(
+                                                    dailySummary.grand_total,
+                                                )
+                                            }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p v-if="dailySummary" class="empty-line">
+                            {{ dailySummary.transaction_count }} completed,
+                            {{ dailySummary.pending_cash_in_count }} pending
+                            cash in.
+                        </p>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Closed By</th>
+                                        <th>Closed At</th>
+                                        <th>Cash</th>
+                                        <th>Digital</th>
+                                        <th>Grand</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr
+                                        v-for="log in reconciliationLogs"
+                                        :key="log.id"
+                                    >
+                                        <td>{{ log.recon_date }}</td>
+                                        <td>
+                                            {{
+                                                log.closed_by_name ||
+                                                log.closed_by
+                                            }}
+                                        </td>
+                                        <td>{{ formatDate(log.closed_at) }}</td>
+                                        <td>
+                                            {{ formatMoney(log.total_cash) }}
+                                        </td>
+                                        <td>
+                                            {{ formatMoney(log.total_digital) }}
+                                        </td>
+                                        <td>
+                                            {{ formatMoney(log.grand_total) }}
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p
+                            v-if="reconciliationLogs.length === 0"
+                            class="empty-line"
+                        >
+                            No reconciliation logs.
+                        </p>
+                    </section>
+
+                    <section v-if="activePage === 'setup'" class="panel">
                         <div class="panel-heading">
                             <span>Setup</span>
                             <strong>{{ companies.length }} companies</strong>
@@ -1221,7 +2256,7 @@ function removeStoredToken(): void {
                         </form>
                     </section>
 
-                    <section class="panel">
+                    <section v-if="activePage === 'accounts'" class="panel">
                         <div class="panel-heading">
                             <span>Accounts</span>
                             <strong>{{ accounts.length }}</strong>
@@ -1282,7 +2317,7 @@ function removeStoredToken(): void {
                         </form>
                     </section>
 
-                    <section class="panel">
+                    <section v-if="activePage === 'vault'" class="panel">
                         <div class="panel-heading">
                             <span>Owner Operations</span>
                             <strong>Vault</strong>
@@ -1356,7 +2391,10 @@ function removeStoredToken(): void {
                         </form>
                     </section>
 
-                    <section class="panel data-panel">
+                    <section
+                        v-if="activePage === 'vault'"
+                        class="panel data-panel"
+                    >
                         <div class="panel-heading">
                             <span>Vault Log</span>
                             <strong>{{ vaultLog.length }}</strong>
@@ -1394,7 +2432,7 @@ function removeStoredToken(): void {
                     </section>
                 </section>
 
-                <section v-if="activeRole === 'cashier'" class="role-grid">
+                <section v-if="cashierPageActive" class="role-grid">
                     <section class="panel data-panel">
                         <div class="panel-heading">
                             <span>Pending Cash In</span>
@@ -1535,24 +2573,47 @@ function removeStoredToken(): void {
                     </section>
                 </section>
 
-                <section v-if="activeRole === 'employee'" class="role-grid">
-                    <section class="panel">
-                        <div class="panel-heading">
-                            <span>Transaction Entry</span>
-                            <strong>{{ transactionMode }}</strong>
+                <section
+                    v-if="employeePageActive"
+                    class="role-grid employee-grid"
+                >
+                    <section class="panel entry-title-panel bank-hero">
+                        <div class="bank-hero-balance">
+                            <span>Available Float Balance</span>
+                            <strong>
+                                {{ formatMoney(employeeFloatBalance) }}
+                                <small>MMK</small>
+                            </strong>
+                            <p>{{ activeFloatCount }} active floats</p>
                         </div>
-                        <div class="segmented-control compact" role="tablist">
-                            <button
-                                v-for="mode in transactionModes"
-                                :key="mode.id"
-                                type="button"
-                                :class="{ active: transactionMode === mode.id }"
-                                @click="transactionMode = mode.id"
+                        <div class="bank-hero-panel">
+                            <div class="bank-hero-heading">
+                                <span>
+                                    {{ transactionModeLabel }} Application
+                                </span>
+                                <p>{{ transactionScreenDescription }}</p>
+                            </div>
+                            <div
+                                class="bank-quick-actions"
+                                role="tablist"
+                                aria-label="Transaction mode"
                             >
-                                {{ mode.label }}
-                            </button>
+                                <button
+                                    v-for="mode in transactionModes"
+                                    :key="mode.id"
+                                    type="button"
+                                    :class="{
+                                        active: transactionMode === mode.id,
+                                    }"
+                                    @click="transactionMode = mode.id"
+                                >
+                                    {{ mode.label }}
+                                </button>
+                            </div>
                         </div>
+                    </section>
 
+                    <section class="panel entry-form-panel">
                         <form
                             class="form-grid three"
                             @submit.prevent="submitTransaction"
@@ -1641,6 +2702,7 @@ function removeStoredToken(): void {
                                     inputmode="decimal"
                                 />
                             </label>
+                            <hr class="form-divider" aria-hidden="true" />
                             <label class="wide-field">
                                 Denominations
                                 <textarea
@@ -1660,65 +2722,27 @@ function removeStoredToken(): void {
                                     rows="3"
                                 />
                             </label>
-                            <button
-                                type="submit"
-                                class="primary-button"
-                                :disabled="loading"
-                            >
-                                Create Transaction
-                            </button>
+                            <div class="form-actions">
+                                <button
+                                    type="submit"
+                                    class="primary-button"
+                                    :disabled="loading"
+                                >
+                                    Submit
+                                </button>
+                                <button
+                                    type="button"
+                                    class="ghost-button"
+                                    :disabled="loading"
+                                    @click="resetTransactionForm"
+                                >
+                                    Reset
+                                </button>
+                            </div>
                         </form>
                     </section>
 
-                    <section class="panel">
-                        <div class="panel-heading">
-                            <span>Float Receipt</span>
-                            <strong
-                                >{{
-                                    pendingReceiptFloats.length
-                                }}
-                                pending</strong
-                            >
-                        </div>
-                        <form
-                            class="form-grid two"
-                            @submit.prevent="activateFloat"
-                        >
-                            <label>
-                                Float ID
-                                <input
-                                    v-model="floatActivateForm.float_id"
-                                    inputmode="numeric"
-                                />
-                            </label>
-                            <label>
-                                PIN
-                                <input
-                                    v-model="floatActivateForm.pin"
-                                    inputmode="numeric"
-                                    type="password"
-                                />
-                            </label>
-                            <label class="wide-field">
-                                Verified Denominations
-                                <textarea
-                                    v-model="
-                                        floatActivateForm.verified_denominations
-                                    "
-                                    rows="4"
-                                />
-                            </label>
-                            <button
-                                type="submit"
-                                class="secondary-button"
-                                :disabled="loading"
-                            >
-                                Activate Float
-                            </button>
-                        </form>
-                    </section>
-
-                    <section class="panel">
+                    <section class="panel entry-return-panel">
                         <div class="panel-heading">
                             <span>Float Return</span>
                             <strong>{{ activeFloatCount }} active</strong>
@@ -1752,9 +2776,89 @@ function removeStoredToken(): void {
                             </button>
                         </form>
                     </section>
+
+                    <section class="panel entry-floats-panel">
+                        <div class="panel-heading">
+                            <span>Float Status</span>
+                            <strong>{{ cashFloats.length }} total</strong>
+                        </div>
+                        <div class="denom-grid">
+                            <div>
+                                <span>Active</span>
+                                <strong>{{ activeFloatCount }}</strong>
+                            </div>
+                            <div>
+                                <span>Pending Receipt</span>
+                                <strong>
+                                    {{ pendingReceiptFloats.length }}
+                                </strong>
+                            </div>
+                            <div>
+                                <span>Pending Reconciliation</span>
+                                <strong>{{ openReturnFloats.length }}</strong>
+                            </div>
+                        </div>
+                    </section>
                 </section>
 
-                <section class="panel data-panel">
+                <section v-if="floatReceiptPageActive" class="role-grid">
+                    <section class="panel">
+                        <div class="panel-heading">
+                            <span>Float Receipt</span>
+                            <strong
+                                >{{
+                                    pendingReceiptFloats.length
+                                }}
+                                pending</strong
+                            >
+                        </div>
+                        <p class="panel-note">
+                            Activate a received employee float after checking
+                            denominations and PIN.
+                        </p>
+                        <form
+                            class="form-grid two"
+                            @submit.prevent="activateFloat"
+                        >
+                            <label>
+                                Float ID
+                                <input
+                                    v-model="floatActivateForm.float_id"
+                                    inputmode="numeric"
+                                />
+                            </label>
+                            <label>
+                                PIN
+                                <input
+                                    v-model="floatActivateForm.pin"
+                                    inputmode="numeric"
+                                    type="password"
+                                />
+                            </label>
+                            <label class="wide-field">
+                                Verified Denominations
+                                <textarea
+                                    v-model="
+                                        floatActivateForm.verified_denominations
+                                    "
+                                    rows="4"
+                                />
+                            </label>
+                            <button
+                                type="submit"
+                                class="primary-button"
+                                :disabled="loading"
+                            >
+                                Activate Float
+                            </button>
+                        </form>
+                    </section>
+                </section>
+
+                <section
+                    v-if="activePage === 'cash-floats'"
+                    class="panel data-panel"
+                >
                     <div class="panel-heading">
                         <span>Cash Floats</span>
                         <strong>{{ cashFloats.length }}</strong>
@@ -1799,7 +2903,10 @@ function removeStoredToken(): void {
                     </p>
                 </section>
 
-                <section class="panel inventory-panel">
+                <section
+                    v-if="activePage === 'dashboard' || activePage === 'vault'"
+                    class="panel inventory-panel"
+                >
                     <div class="panel-heading">
                         <span>Vault Inventory</span>
                         <strong

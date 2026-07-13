@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\DeviceDetector;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -41,6 +42,7 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            'device' => app(DeviceDetector::class)->fromRequest($request),
         ];
     }
 }

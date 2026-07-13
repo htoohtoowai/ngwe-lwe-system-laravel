@@ -367,8 +367,248 @@ Completed in this slice:
   - Cash-in overpayment coverage now expects the correct remaining
     float balance after change is given.
 
+## Slice Update: Demo Seed Data
+
+Completed in this slice:
+
+- Replaced the placeholder Laravel `DatabaseSeeder` user with
+  deterministic Ngwe Lwe demo users:
+  - `owner` / `password123` / PIN `1111`
+  - `cashier` / `password123` / PIN `2222`
+  - `employee` / `password123` / PIN `3333`
+- Seeded a demo Wave Money setup with Cash In, Cash Out, Transfer, and
+  Exchange service types.
+- Seeded six demo accounts, including a fee account, without resetting
+  existing account balances on repeated seeder runs.
+- Seeded catch-all commission tiers and a THB/MMK exchange rate.
+- Seeded an opening main-vault denomination balance only when the vault
+  is empty, so repeated `db:seed` runs do not double-credit cash.
+- Added `DatabaseSeederTest` coverage for demo login, seeded operating
+  data, and idempotent repeated seeding.
+- Updated Docker and README instructions with the seeding command and
+  demo credentials.
+
+Verification passed:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe -l database\seeders\DatabaseSeeder.php
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe -l tests\Feature\DatabaseSeederTest.php
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test --filter=DatabaseSeederTest
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test database\seeders\DatabaseSeeder.php tests\Feature\DatabaseSeederTest.php
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+```
+
+Current PHPUnit result:
+
+```text
+114 tests, 114 passed, 525 assertions
+```
+
+## Slice Update: Manual Browser Workflow QA
+
+Completed in this slice:
+
+- Fixed the local runtime environment for browser QA:
+  - `.env` now points the local app to MySQL `ngwe_lwe_laravel`
+    instead of the default SQLite connection.
+  - Local Reverb was moved to port `8081` because Laragon/nginx was
+    already listening on `8080`.
+  - Removed stale local Octane and Telemetry env values from `.env`.
+- Started local services for the walkthrough:
+  - Laravel app: `http://127.0.0.1:8001`
+  - Vite dev server: `http://127.0.0.1:5173`
+  - Reverb: `127.0.0.1:8081`
+- Seeded the MySQL development database with the demo users and setup
+  data.
+- Verified owner login and realtime ping in the operations console.
+- Verified cashier workflow:
+  - Login as `cashier`.
+  - Issue float `#1` to employee `#3` for `40,000` MMK.
+  - Main vault changed from `4,135,000` to `4,095,000`.
+  - Employee cash changed from `0` to `40,000`.
+  - `float_status_changed` arrived without manual refresh.
+- Verified employee workflow:
+  - Login as `employee`.
+  - Activate float `#1` with PIN `3333` and verified denominations
+    `{"10000": 3, "5000": 2}`.
+  - Float moved to `ACTIVE`, current balance `40,000`.
+  - Create Cash In transaction `#1` for `1,000` MMK.
+  - `new_transaction` and `balance_update` arrived without manual
+    refresh.
+- Verified cashier confirmation:
+  - Login as `cashier`.
+  - Pending Cash In `#1` appeared in the cashier panel.
+  - Confirm changed transaction status to `COMPLETED`.
+  - Pending Cash In count returned to `0`.
+
+Notes:
+
+- The in-app browser uses one shared localStorage profile, so separate
+  tabs cannot stay logged in as different users at the same time. Real
+  cashier/employee computers or separate browser profiles will have
+  separate tokens.
+
+Verification passed:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan migrate --seed --force
+Invoke-WebRequest -UseBasicParsing -Method Post -Uri http://127.0.0.1:8001/api/auth/login -ContentType 'application/json' -Body '{"username":"owner","password":"password123"}'
+Browser QA through the Vue/Inertia operations console
+```
+
+## Slice Update: Docker Runtime Hardening
+
+Completed in this slice:
+
+- Extended `docker/ensure-env.sh` so Docker app and Reverb containers
+  fail fast when required runtime values are missing or unsafe.
+- Required environment values now include:
+  - `APP_KEY`
+  - MySQL connection identity: `DB_CONNECTION`, `DB_HOST`,
+    `DB_DATABASE`, `DB_USERNAME`
+  - `NGWE_LWE_AUTH_SECRET`
+  - `REVERB_APP_ID`, `REVERB_APP_KEY`, `REVERB_APP_SECRET`
+  - `VITE_REVERB_APP_KEY`
+- Added production guardrails:
+  - Reject placeholder `APP_KEY` values.
+  - Reject `APP_DEBUG=true` when `APP_ENV=production`.
+  - Require `NGWE_LWE_AUTH_SECRET` length of at least 32 characters.
+  - Require `VITE_REVERB_APP_KEY` to match `REVERB_APP_KEY`, preventing
+    browser realtime auth drift.
+- Added `DockerEnvironmentTest` to keep the `.env.example` and startup
+  guard aligned with the expected deployment variables.
+- Updated Docker docs to explain the startup guard and the Reverb key
+  match requirement.
+
+Verification passed:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe -l tests\Unit\DockerEnvironmentTest.php
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test --filter=DockerEnvironmentTest
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test tests\Unit\DockerEnvironmentTest.php
+docker compose config --quiet
+git diff --check
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+```
+
+Current PHPUnit result:
+
+```text
+114 tests, 114 passed, 525 assertions
+```
+
+## Slice Update: Owner Staff User Management
+
+Completed in this slice:
+
+- Added owner-only staff user management API endpoints:
+  - `GET /api/users`
+  - `POST /api/users`
+  - `GET /api/users/{user}`
+  - `PATCH /api/users/{user}`
+  - `DELETE /api/users/{user}`
+- Added `UserRequest` validation and `UserResource` output so password
+  and PIN hashes never leave the API.
+- Extended `UserRepository` with create, update, active/inactive
+  listing, and deactivate behavior.
+- Token safety is preserved:
+  - Role, username, password, and active-status changes increment
+    `auth_version`.
+  - Deactivating a user revokes existing tokens.
+  - Owners cannot deactivate their own active session.
+- Added a Staff Users panel to the Vue/Inertia operations console for
+  owner create/edit/deactivate workflows.
+- Added `UserManagementTest` coverage for owner CRUD, non-owner
+  rejection, self-deactivate rejection, and token revocation.
+
+Verification passed:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe -l app\Repositories\UserRepository.php
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe -l app\Http\Controllers\Api\UserController.php
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe -l app\Http\Requests\UserRequest.php
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test app\Repositories\UserRepository.php app\Http\Controllers\Api\UserController.php app\Http\Requests\UserRequest.php app\Http\Resources\UserResource.php routes\api.php tests\Feature\UserManagementTest.php
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\prettier\bin\prettier.cjs --check resources/
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\eslint\bin\eslint.js .
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\vue-tsc\bin\vue-tsc.js --noEmit
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\vite\bin\vite.js build
+docker compose config --quiet
+git diff --check
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test --filter=UserManagementTest
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+```
+
+Current PHPUnit result:
+
+```text
+118 tests, 118 passed, 557 assertions
+```
+
+## Slice Update: Daily Reports And Reconciliation
+
+Completed in this slice:
+
+- Added report/reconciliation models:
+  - `App\Models\DailySummary`
+  - `App\Models\DailyReconciliationLog`
+- Added `App\Services\DailyReportService` to calculate daily completed
+  transaction totals, fees, profit, pending Cash In count, vault cash,
+  employee float cash, active account digital balances, and grand total.
+- Added owner-only report endpoints:
+  - `GET /api/reports/daily-summary`
+  - `POST /api/reports/daily-reconciliation`
+  - `GET /api/reports/daily-reconciliations`
+- Closing a day upserts `daily_summary` and writes a
+  `daily_reconciliation_logs` snapshot with account, employee-float, and
+  vault denomination details.
+- Added a Daily Report panel to the Vue/Inertia operations console for
+  owner date refresh, Close Day, and recent reconciliation log review.
+- Added `DailyReportTest` coverage for completed-only totals, pending
+  Cash In counting, snapshot persistence, log listing, and non-owner
+  rejection.
+
+Verification passed:
+
+```bash
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test --filter=DailyReportTest
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test app\Models\DailySummary.php app\Models\DailyReconciliationLog.php app\Http\Requests\DailyReportRequest.php app\Http\Resources\DailyReconciliationResource.php app\Services\DailyReportService.php app\Http\Controllers\Api\ReportController.php routes\api.php tests\Feature\DailyReportTest.php
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\prettier\bin\prettier.cjs --check resources/
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\eslint\bin\eslint.js .
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\vue-tsc\bin\vue-tsc.js --noEmit
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\vite\bin\vite.js build
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe artisan test
+```
+
+Current PHPUnit result:
+
+```text
+121 tests, 121 passed, 589 assertions
+```
+
+## Slice Update: Dedicated Login Page
+
+Completed in this slice:
+
+- Added a standalone `/login` Inertia page for the Ngwe Lwe sign-in
+  flow.
+- Moved token storage helpers into `resources/js/lib/auth-token.ts`.
+- Removed the login form from the operations console sidebar.
+- The console now redirects unauthenticated users to `/login`; logout
+  also returns to `/login`.
+- Styled the login page as a focused enterprise sign-in surface.
+
+Verification passed:
+
+```bash
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\prettier\bin\prettier.cjs --check resources/
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\eslint\bin\eslint.js .
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\vue-tsc\bin\vue-tsc.js --noEmit
+C:\laragon\bin\nodejs\node-v22.14.0-win-x64\node.exe node_modules\vite\bin\vite.js build
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe -l routes\web.php
+C:\laragon\bin\php\php-8.4.1-Win32-vs17-x64\php.exe vendor\bin\pint --test routes\web.php
+Browser QA: `/login` renders standalone form; `/` redirects to `/login` without a token.
+```
+
 ## Remaining Work
 
-1. Add seed/demo owner, cashier, and employee users or a user management flow.
-2. Manually exercise the Vue/Inertia operations console against the MySQL development database.
-3. Harden production/deployment settings once the local workflows are comfortable.
+1. Do a final Docker image build/run on the target machine before production use.

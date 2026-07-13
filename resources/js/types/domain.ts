@@ -10,6 +10,12 @@ export type SessionUser = {
     updated_at: string | null;
 };
 
+export type ManagedUser = SessionUser & {
+    email: string | null;
+    auth_version: number;
+    has_pin: boolean;
+};
+
 export type LoginResponse = {
     token: string;
     user: SessionUser;
@@ -125,6 +131,82 @@ export type VaultTransaction = {
     verified_by_name: string | null;
     note: string | null;
     created_at: string | null;
+};
+
+export type ReportDenominationRow = {
+    denomination: number;
+    quantity: number;
+    total: number;
+};
+
+export type ReportEmployeeSnapshot = {
+    float_id: number;
+    employee_id: number;
+    employee_name: string | null;
+    status: string;
+    current_balance: string;
+    total_amount: string;
+    denomination_balance: Record<string, number>;
+    denom_total: string;
+};
+
+export type ReportAccountSnapshot = {
+    id: number;
+    account_name: string;
+    service_type: string | null;
+    company: string | null;
+    balance: string;
+    is_fee_account: boolean;
+};
+
+export type ReportVaultSnapshot = {
+    denominations: Record<string, number>;
+    denomination_rows: ReportDenominationRow[];
+    total: string;
+};
+
+export type DailySummaryReport = {
+    summary_date: string;
+    total_cash_in: string;
+    total_cash_out: string;
+    total_transfer: string;
+    total_exchange: string;
+    total_commission: string;
+    total_customer_fees: string;
+    total_profit: string;
+    transaction_count: number;
+    pending_cash_in_count: number;
+    main_vault_total: string;
+    employee_floats_total: string;
+    total_cash: string;
+    total_digital: string;
+    grand_total: string;
+    vault_snapshot: ReportVaultSnapshot;
+    employee_snapshots: ReportEmployeeSnapshot[];
+    account_snapshots: ReportAccountSnapshot[];
+};
+
+export type DailyReconciliation = {
+    id: number;
+    recon_date: string;
+    closed_by: number;
+    closed_by_name: string | null;
+    closed_at: string | null;
+    total_cash_in: string;
+    total_cash_out: string;
+    total_transfer: string;
+    total_exchange: string;
+    total_commission: string;
+    total_customer_fees: string;
+    main_vault_total: string;
+    employee_floats_total: string;
+    total_cash: string;
+    total_digital: string;
+    grand_total: string;
+    employee_snapshots: ReportEmployeeSnapshot[] | null;
+    account_snapshots: ReportAccountSnapshot[] | null;
+    vault_snapshot: ReportVaultSnapshot | null;
+    notes: string | null;
 };
 
 export type ExchangeRate = {
