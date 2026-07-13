@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import './teller.css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -2414,4 +2415,3 @@ tbody tr:hover {
 .console-shell.device-desktop.role-employee .entry-floats-panel .denom-grid {
     padding: 1.15rem 1.25rem 1.25rem;
 }
-

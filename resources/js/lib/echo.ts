@@ -7,6 +7,8 @@ export type RealtimeEventName =
     | 'balance_update'
     | 'new_transaction'
     | 'cash_in_pending'
+    | 'cash_in_confirmed'
+    | 'cash_in_cancelled'
     | 'float_status_changed'
     | 'ping';
 
