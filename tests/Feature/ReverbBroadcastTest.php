@@ -93,6 +93,8 @@ class ReverbBroadcastTest extends TestCase
                 'from_account_id' => $source->id,
                 'to_account_id' => $target->id,
                 'amount' => 5_000,
+                'customer_name' => 'Transfer Customer',
+                'customer_phone' => '09',
             ])
             ->assertCreated();
 
@@ -101,6 +103,9 @@ class ReverbBroadcastTest extends TestCase
                 'account_id' => $source->id,
                 'amount' => 2_000,
                 'currency' => 'MMK',
+                'customer_name' => 'Exchange Customer',
+                'customer_phone' => '09',
+                'exchange_payment_method' => 'account',
             ])
             ->assertCreated();
 

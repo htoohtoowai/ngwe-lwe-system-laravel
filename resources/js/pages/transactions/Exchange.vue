@@ -59,8 +59,12 @@ const step = ref<'form' | 'review'>('form');
 const accountId = ref<number | null>(null);
 const amount = ref(0);
 const currency = ref<'MMK' | 'THB'>('MMK');
+const exchangePaymentMethod = ref<'cash' | 'account'>('cash');
+const customerName = ref('');
+const customerPhone = ref('');
 const description = ref('');
 const denoms = ref<Record<number, number>>({});
+const receivedDenoms = ref<Record<number, number>>({});
 const submitting = ref(false);
 const errors = ref<Record<string, string>>({});
 const feePaymentMethod = ref<FeePaymentMethod>('cash');
@@ -77,8 +81,11 @@ const denomTotal = computed(() =>
         0,
     ),
 );
-const floatLocked = computed(
-    () => props.requiresDenominations && props.float?.status !== 'ACTIVE',
+const receivedDenomTotal = computed(() =>
+    props.notes.reduce(
+        (sum, note) => sum + note * (receivedDenoms.value[note] ?? 0),
+        0,
+    ),
 );
 const cashierLocked = computed(() => props.role === 'cashier');
 const feePaymentValid = computed(
@@ -90,11 +97,35 @@ const feePaymentValid = computed(
 const activeRate = computed(() =>
     currency.value === 'MMK' ? props.rate.sell_rate : props.rate.buy_rate,
 );
+const mmkSettlementAmount = computed(() =>
+    currency.value === 'THB'
+        ? Math.round((amount.value || 0) * Number(activeRate.value))
+        : amount.value || 0,
+);
+const needsPayoutDenoms = computed(
+    () => props.role === 'teller' && currency.value === 'THB',
+);
+const needsReceivedDenoms = computed(
+    () =>
+        props.role === 'teller' &&
+        currency.value === 'MMK' &&
+        exchangePaymentMethod.value === 'cash',
+);
+const floatLocked = computed(
+    () =>
+        (needsPayoutDenoms.value || needsReceivedDenoms.value) &&
+        props.float?.status !== 'ACTIVE',
+);
 const ready = computed(
     () =>
         accountId.value !== null &&
         amount.value > 0 &&
-        (!props.requiresDenominations || denomTotal.value === amount.value) &&
+        customerName.value.trim().length > 0 &&
+        customerPhone.value.trim().length > 0 &&
+        (!needsPayoutDenoms.value ||
+            denomTotal.value === mmkSettlementAmount.value) &&
+        (!needsReceivedDenoms.value ||
+            receivedDenomTotal.value === mmkSettlementAmount.value) &&
         feePaymentValid.value &&
         !floatLocked.value &&
         !cashierLocked.value,
@@ -136,14 +167,20 @@ function submit() {
             account_id: accountId.value,
             amount: amount.value,
             currency: currency.value,
+            customer_name: customerName.value.trim(),
+            customer_phone: customerPhone.value.trim(),
+            exchange_payment_method: exchangePaymentMethod.value,
             note: description.value,
             fee_payment_method: feePaymentMethod.value,
             fee_account_id:
                 feePaymentMethod.value === 'account'
                     ? feeAccountId.value
                     : null,
-            ...(props.requiresDenominations
+            ...(needsPayoutDenoms.value
                 ? { denominations: denoms.value }
+                : {}),
+            ...(needsReceivedDenoms.value
+                ? { received_denominations: receivedDenoms.value }
                 : {}),
         },
         {
@@ -333,6 +370,68 @@ function submit() {
                 />
             </div>
 
+            <div class="mt-5 grid gap-4 md:grid-cols-2">
+                <label>
+                    <span class="bank-label">{{
+                        t('transaction.customerName')
+                    }}</span>
+                    <input
+                        v-model="customerName"
+                        type="text"
+                        autocomplete="name"
+                        :placeholder="t('transaction.customerName')"
+                        class="bank-input"
+                    />
+                </label>
+                <label>
+                    <span class="bank-label">{{
+                        t('transaction.customerPhone')
+                    }}</span>
+                    <input
+                        v-model="customerPhone"
+                        type="tel"
+                        inputmode="tel"
+                        autocomplete="tel"
+                        :placeholder="t('transaction.customerPhone')"
+                        class="bank-input"
+                    />
+                </label>
+            </div>
+
+            <div v-if="currency === 'MMK'" class="mt-4">
+                <p class="mb-1.5 text-[13px] font-semibold text-slate">
+                    {{ t('transaction.cashReceived') }}
+                </p>
+                <div class="rounded-field bg-mist p-1">
+                    <button
+                        type="button"
+                        class="bank-choice w-1/2 rounded-field px-4 py-3 text-sm font-bold transition"
+                        :aria-pressed="exchangePaymentMethod === 'cash'"
+                        :class="
+                            exchangePaymentMethod === 'cash'
+                                ? 'bg-card text-ink shadow-sm'
+                                : 'text-slate'
+                        "
+                        @click="exchangePaymentMethod = 'cash'"
+                    >
+                        {{ t('transaction.feePaymentCash') }}
+                    </button>
+                    <button
+                        type="button"
+                        class="bank-choice w-1/2 rounded-field px-4 py-3 text-sm font-bold transition"
+                        :aria-pressed="exchangePaymentMethod === 'account'"
+                        :class="
+                            exchangePaymentMethod === 'account'
+                                ? 'bg-card text-ink shadow-sm'
+                                : 'text-slate'
+                        "
+                        @click="exchangePaymentMethod = 'account'"
+                    >
+                        {{ t('transaction.feePaymentAccount') }}
+                    </button>
+                </div>
+            </div>
+
             <div class="mt-4 grid gap-3 md:grid-cols-2">
                 <div class="rounded-field bg-mist px-4 py-3">
                     <p class="text-[13px] font-semibold text-slate">
@@ -350,6 +449,12 @@ function submit() {
                     <p class="money text-sm font-bold">
                         {{ mmk(feeNum) }}
                         <span class="text-[10px] text-slate">MMK</span>
+                    </p>
+                </div>
+                <div class="rounded-field bg-mist px-4 py-3 md:col-span-2">
+                    <p class="text-[13px] font-semibold text-slate">MMK</p>
+                    <p class="money text-sm font-bold">
+                        {{ mmk(mmkSettlementAmount) }}
                     </p>
                 </div>
             </div>
@@ -387,11 +492,22 @@ function submit() {
                 </div>
             </div>
 
-            <div v-if="requiresDenominations" class="mt-5">
+            <div v-if="needsReceivedDenoms" class="mt-5">
+                <DenomDrawer
+                    v-model="receivedDenoms"
+                    :notes="notes"
+                    :target="mmkSettlementAmount"
+                    :enforce-stock="false"
+                    :label="t('transaction.cashReceivedCustomer')"
+                    id-prefix="exchange-received-denomination"
+                />
+            </div>
+
+            <div v-if="needsPayoutDenoms" class="mt-5">
                 <DenomDrawer
                     v-model="denoms"
                     :notes="notes"
-                    :target="amount || 0"
+                    :target="mmkSettlementAmount"
                     :stock="floatStock"
                     :label="t('transaction.notesMyVault')"
                 />
@@ -455,6 +571,24 @@ function submit() {
                     <dd class="money font-bold">{{ mmk(activeRate) }}</dd>
                 </div>
                 <div class="flex justify-between py-3 text-sm">
+                    <dt class="text-slate">MMK</dt>
+                    <dd class="money font-bold">
+                        {{ mmk(mmkSettlementAmount) }} MMK
+                    </dd>
+                </div>
+                <div class="flex justify-between py-3 text-sm">
+                    <dt class="text-slate">
+                        {{ t('transaction.customerName') }}
+                    </dt>
+                    <dd class="text-right font-bold">{{ customerName }}</dd>
+                </div>
+                <div class="flex justify-between py-3 text-sm">
+                    <dt class="text-slate">
+                        {{ t('transaction.customerPhone') }}
+                    </dt>
+                    <dd class="text-right font-bold">{{ customerPhone }}</dd>
+                </div>
+                <div class="flex justify-between py-3 text-sm">
                     <dt class="text-slate">{{ t('transaction.fee') }}</dt>
                     <dd class="money font-bold">{{ mmk(feeNum) }} MMK</dd>
                 </div>
@@ -484,16 +618,27 @@ function submit() {
                         {{ account?.name }}
                     </dt>
                     <dd class="money font-bold text-balance">
-                        +{{ mmk(amount) }} MMK
+                        +{{ mmk(mmkSettlementAmount) }} MMK
                     </dd>
                 </div>
                 <div
-                    v-if="requiresDenominations"
+                    v-if="needsReceivedDenoms"
+                    class="flex justify-between py-3 text-sm"
+                >
+                    <dt class="font-bold">
+                        {{ t('transaction.cashReceivedCustomer') }}
+                    </dt>
+                    <dd class="money font-bold text-balance">
+                        +{{ mmk(receivedDenomTotal) }} MMK
+                    </dd>
+                </div>
+                <div
+                    v-if="needsPayoutDenoms"
                     class="flex justify-between py-3 text-sm"
                 >
                     <dt class="font-bold">Float cash paid</dt>
                     <dd class="money font-bold text-brand">
-                        −{{ mmk(amount) }} MMK
+                        -{{ mmk(mmkSettlementAmount) }} MMK
                     </dd>
                 </div>
                 <div

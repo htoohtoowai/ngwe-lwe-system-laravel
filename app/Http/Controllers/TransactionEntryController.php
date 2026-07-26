@@ -317,7 +317,7 @@ class TransactionEntryController extends Controller
     }
 
     /**
-     * @return array{id:int,amount:string,fee_amount:string,status:string,created_at:string,from_label:string,to_label:string}
+     * @return array{id:int,amount:string,fee_amount:string,status:string,created_at:string,from_label:string,to_label:string,customer_name:string|null,customer_phone:string|null}
      */
     private function completed(Transaction $transaction): array
     {
@@ -331,6 +331,8 @@ class TransactionEntryController extends Controller
             'created_at' => $transaction->created_at?->toDateTimeString() ?? now()->toDateTimeString(),
             'from_label' => $this->accountLabel($transaction->account_id) ?? 'Counter float',
             'to_label' => $this->accountLabel($transaction->to_account_id) ?? $this->accountLabel($transaction->account_id) ?? 'Counter float',
+            'customer_name' => $transaction->customer_name,
+            'customer_phone' => $transaction->customer_phone,
         ];
     }
 

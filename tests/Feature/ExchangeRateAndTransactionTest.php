@@ -139,6 +139,9 @@ class ExchangeRateAndTransactionTest extends TestCase
                 'account_id' => $account->id,
                 'amount' => 100_000,
                 'currency' => 'MMK',
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'exchange_payment_method' => 'account',
             ])
             ->assertCreated()
             ->assertJsonPath('data.transaction_type', 'exchange')
@@ -169,10 +172,15 @@ class ExchangeRateAndTransactionTest extends TestCase
                 'account_id' => $account->id,
                 'amount' => 1_000,
                 'currency' => 'THB',
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
             ])
             ->assertCreated()
             ->assertJsonPath('data.currency', 'THB')
-            ->assertJsonPath('data.exchange_rate', '145.0000');
+            ->assertJsonPath('data.exchange_rate', '145.0000')
+            ->assertJsonPath('data.balance_change', '145000.00');
+
+        $this->assertSame('145000.00', $account->fresh()->balance);
     }
 
     public function test_exchange_transaction_respects_base_amount_divisor(): void
@@ -194,6 +202,9 @@ class ExchangeRateAndTransactionTest extends TestCase
                 'account_id' => $account->id,
                 'amount' => 1_000,
                 'currency' => 'MMK',
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'exchange_payment_method' => 'account',
             ])
             ->assertCreated()
             ->assertJsonPath('data.exchange_rate', '148.0000');
@@ -210,6 +221,8 @@ class ExchangeRateAndTransactionTest extends TestCase
                 'account_id' => $account->id,
                 'amount' => 1_000,
                 'currency' => 'MMK',
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
             ])
             ->assertStatus(422);
     }
@@ -233,6 +246,8 @@ class ExchangeRateAndTransactionTest extends TestCase
                 'account_id' => $account->id,
                 'amount' => 1_000,
                 'currency' => 'USD',
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
             ])
             ->assertStatus(422);
     }
@@ -256,6 +271,8 @@ class ExchangeRateAndTransactionTest extends TestCase
                 'account_id' => $account->id,
                 'amount' => 1_000,
                 'currency' => 'MMK',
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
             ])
             ->assertForbidden();
     }

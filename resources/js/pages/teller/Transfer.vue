@@ -3,7 +3,6 @@ import { router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import AccountPicker from '@/components/teller/AccountPicker.vue';
 import AmountField from '@/components/teller/AmountField.vue';
-import DenominationDrawer from '@/components/teller/DenominationDrawer.vue';
 import MoneyText from '@/components/teller/MoneyText.vue';
 import ReceiptSlip from '@/components/teller/ReceiptSlip.vue';
 import ReviewSheet from '@/components/teller/ReviewSheet.vue';
@@ -32,6 +31,8 @@ type CompletedTxn = {
     created_at: string;
     account_label?: string;
     change_given?: string;
+    customer_name?: string | null;
+    customer_phone?: string | null;
 };
 
 const props = defineProps<{
@@ -46,29 +47,24 @@ const props = defineProps<{
 const fromAccountId = ref<number | null>(null);
 const toAccountId = ref<number | null>(null);
 const amount = ref<number>(0);
-const payout = ref<Record<number, number>>({});
+const customerName = ref('');
+const customerPhone = ref('');
 const reviewing = ref(false);
 const submitting = ref(false);
 const errors = ref<Record<string, string>>({});
 const { t } = useLocale();
 
-const activeFloat = computed(() => props.float?.status === 'ACTIVE');
 const feeNum = computed(() => Number(props.fee ?? 0));
-const payoutTotal = computed(() =>
-    props.notes.reduce((s, n) => s + n * (payout.value[n] ?? 0), 0),
-);
 const floatBalance = computed(() => Number(props.float?.current_balance ?? 0));
-const shortFloat = computed(() => (amount.value || 0) > floatBalance.value);
 
 const ready = computed(
     () =>
-        activeFloat.value &&
         fromAccountId.value !== null &&
         toAccountId.value !== null &&
         fromAccountId.value !== toAccountId.value &&
         amount.value > 0 &&
-        !shortFloat.value &&
-        payoutTotal.value === amount.value,
+        customerName.value.trim().length > 0 &&
+        customerPhone.value.trim().length > 0,
 );
 
 let feeTimer: ReturnType<typeof setTimeout>;
@@ -90,9 +86,14 @@ watch([amount, fromAccountId], ([a, acc]) => {
 
 const reviewLines = computed<ReviewLine[]>(() => [
     {
-        label: t('transaction.countedMovement'),
-        value: payoutTotal.value,
-        signed: 'debit',
+        label: t('transaction.customerName'),
+        value: customerName.value,
+        kind: 'text',
+    },
+    {
+        label: t('transaction.customerPhone'),
+        value: customerPhone.value,
+        kind: 'text',
     },
     {
         label: `${t('transaction.fee')} (${t('transaction.commissionTier')})`,
@@ -111,7 +112,7 @@ const reviewLines = computed<ReviewLine[]>(() => [
     },
     {
         label: t('transaction.floatAfterTransfer'),
-        value: floatBalance.value - payoutTotal.value,
+        value: floatBalance.value,
     },
 ]);
 
@@ -139,7 +140,8 @@ function submit() {
             from_account_id: fromAccountId.value,
             to_account_id: toAccountId.value,
             amount: amount.value,
-            denominations: payout.value,
+            customer_name: customerName.value.trim(),
+            customer_phone: customerPhone.value.trim(),
         },
         {
             headers: authHeaders(),
@@ -202,6 +204,37 @@ function submit() {
                                 v-model="amount"
                                 :label="t('transaction.transferAmount')"
                             />
+                            <div class="grid gap-4 sm:grid-cols-2">
+                                <label>
+                                    <span class="field-label">{{
+                                        t('transaction.customerName')
+                                    }}</span>
+                                    <input
+                                        v-model="customerName"
+                                        type="text"
+                                        autocomplete="name"
+                                        :placeholder="
+                                            t('transaction.customerName')
+                                        "
+                                        class="field-input mt-1.5"
+                                    />
+                                </label>
+                                <label>
+                                    <span class="field-label">{{
+                                        t('transaction.customerPhone')
+                                    }}</span>
+                                    <input
+                                        v-model="customerPhone"
+                                        type="tel"
+                                        inputmode="tel"
+                                        autocomplete="tel"
+                                        :placeholder="
+                                            t('transaction.customerPhone')
+                                        "
+                                        class="field-input mt-1.5"
+                                    />
+                                </label>
+                            </div>
                             <div>
                                 <p class="field-label">
                                     {{ t('transaction.fee') }} ({{
@@ -217,20 +250,6 @@ function submit() {
                         </div>
                     </section>
 
-                    <p
-                        v-if="shortFloat"
-                        class="rounded-counter border border-debit/30 bg-debit/5 px-4 py-2.5 text-sm text-debit"
-                    >
-                        {{ t('transaction.floatShort') }}
-                    </p>
-
-                    <DenominationDrawer
-                        v-model="payout"
-                        :notes="notes"
-                        :target="amount || 0"
-                        :stock="floatStock"
-                        :label="t('transaction.countedMovement')"
-                    />
                 </div>
 
                 <aside
@@ -242,10 +261,6 @@ function submit() {
                         {{ t('transaction.slip') }}
                     </h2>
                     <dl class="mt-4 space-y-3 text-sm">
-                        <div class="flex justify-between">
-                            <dt class="text-ink-300">Counted movement</dt>
-                            <dd><MoneyText :value="payoutTotal" /></dd>
-                        </div>
                         <div class="flex justify-between">
                             <dt class="text-ink-300">
                                 {{ t('transaction.fee') }}
@@ -279,9 +294,7 @@ function submit() {
                                 {{ t('transaction.floatAfterTransfer') }}
                             </dt>
                             <dd>
-                                <MoneyText
-                                    :value="floatBalance - payoutTotal"
-                                />
+                                <MoneyText :value="floatBalance" />
                             </dd>
                         </div>
                     </dl>

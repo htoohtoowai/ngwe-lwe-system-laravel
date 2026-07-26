@@ -17,6 +17,8 @@ defineProps<{
         created_at: string;
         account_label?: string;
         change_given?: string;
+        customer_name?: string | null;
+        customer_phone?: string | null;
     };
     nextHref: string;
     nextLabel: string;
@@ -77,6 +79,22 @@ function authHeaders(): Record<string, string> {
                             :value="txn.amount"
                             class="text-lg font-semibold"
                         />
+                    </dd>
+                </div>
+                <div
+                    v-if="txn.customer_name || txn.customer_phone"
+                    class="flex justify-between gap-3 py-2.5 text-sm"
+                >
+                    <dt class="text-ink-700">
+                        {{ t('transaction.customerName') }}
+                    </dt>
+                    <dd class="text-right font-medium">
+                        {{ txn.customer_name || '-' }}
+                        <span
+                            v-if="txn.customer_phone"
+                            class="block text-xs text-ink-700/70"
+                            >{{ txn.customer_phone }}</span
+                        >
                     </dd>
                 </div>
                 <div class="flex justify-between py-2.5 text-sm">

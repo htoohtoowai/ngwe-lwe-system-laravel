@@ -187,9 +187,13 @@ class TransactionEndpointsTest extends TestCase
                 'from_account_id' => $from->id,
                 'to_account_id' => $to->id,
                 'amount' => 10_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
             ])
             ->assertCreated()
             ->assertJsonPath('data.transaction_type', 'transfer')
+            ->assertJsonPath('data.customer_name', 'Aung')
+            ->assertJsonPath('data.customer_phone', '09')
             ->assertJsonPath('data.customer_fee', '300.00');
 
         $this->assertSame('20000.00', $from->fresh()->balance);
@@ -201,6 +205,8 @@ class TransactionEndpointsTest extends TestCase
                 'from_account_id' => $from->id,
                 'to_account_id' => $to->id,
                 'amount' => 100_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
             ])
             ->assertStatus(409);
 
@@ -219,6 +225,8 @@ class TransactionEndpointsTest extends TestCase
                 'from_account_id' => $account->id,
                 'to_account_id' => $account->id,
                 'amount' => 1_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
             ])
             ->assertStatus(422);
     }

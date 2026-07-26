@@ -410,7 +410,7 @@ class TellerController extends Controller
     }
 
     /**
-     * @return array{id:int,type:string,amount:string,fee_amount:string,status:string,created_at:string,account_label:string|null,change_given:string}
+     * @return array{id:int,type:string,amount:string,fee_amount:string,status:string,created_at:string,account_label:string|null,change_given:string,customer_name:string|null,customer_phone:string|null}
      */
     private function completed(Transaction $transaction): array
     {
@@ -425,6 +425,8 @@ class TellerController extends Controller
             'created_at' => $transaction->created_at?->toDateTimeString() ?? now()->toDateTimeString(),
             'account_label' => $this->accountLabel($transaction),
             'change_given' => $transaction->change_given ?? '0.00',
+            'customer_name' => $transaction->customer_name,
+            'customer_phone' => $transaction->customer_phone,
         ];
     }
 

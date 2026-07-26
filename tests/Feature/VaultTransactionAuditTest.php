@@ -90,6 +90,8 @@ class VaultTransactionAuditTest extends TestCase
         [$employee, $employeeToken, $floatId] = $this->activeEmployeeWithFloat([
             10_000 => 10,
             5_000 => 10,
+            1_000 => 5,
+            500 => 2,
         ]);
 
         [$cashOutAccount, $cashOutServiceType] = $this->accountWithServiceType('Cash Out', 'CashOut', 0);
@@ -122,12 +124,15 @@ class VaultTransactionAuditTest extends TestCase
                 'from_account_id' => $fromAccount->id,
                 'to_account_id' => $toAccount->id,
                 'amount' => 10_000,
-                'denominations' => [10_000 => 1],
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'fee_payment_method' => 'cash',
+                'fee_denominations' => [100 => 3],
             ])
             ->assertCreated()
             ->json('data.id');
 
-        $this->assertVaultRows('cash_out', $floatId, $transferId, [10_000 => 1], $employee->id);
+        $this->assertVaultRows('transfer_fee_received', $floatId, $transferId, [100 => 3], $employee->id);
 
         [$exchangeAccount, $exchangeServiceType] = $this->accountWithServiceType('Exchange', 'Exchange', 0);
         $this->fixedTier($exchangeServiceType->id, feeDeposit: 200);
@@ -136,14 +141,16 @@ class VaultTransactionAuditTest extends TestCase
         $exchangeId = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/exchange', [
                 'account_id' => $exchangeAccount->id,
-                'amount' => 10_000,
-                'currency' => 'MMK',
-                'denominations' => [5_000 => 2],
+                'amount' => 100,
+                'currency' => 'THB',
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'denominations' => [10_000 => 1, 1_000 => 4, 500 => 1],
             ])
             ->assertCreated()
             ->json('data.id');
 
-        $this->assertVaultRows('cash_out', $floatId, $exchangeId, [5_000 => 2], $employee->id);
+        $this->assertVaultRows('cash_out', $floatId, $exchangeId, [10_000 => 1, 1_000 => 4, 500 => 1], $employee->id);
 
         [$cashInAccount, $cashInServiceType] = $this->accountWithServiceType('Cash In', 'CashIn', 80_000);
         $this->fixedTier($cashInServiceType->id, feeDeposit: 100);

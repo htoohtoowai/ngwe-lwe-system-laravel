@@ -7,6 +7,7 @@ export interface ReviewLine {
     value: number | string;
     signed?: 'credit' | 'debit' | null;
     emphasize?: boolean;
+    kind?: 'money' | 'text';
 }
 
 defineProps<{
@@ -59,7 +60,14 @@ const emit = defineEmits<{ confirm: []; close: [] }>();
                         {{ line.label }}
                     </dt>
                     <dd>
+                        <span
+                            v-if="line.kind === 'text'"
+                            class="text-right text-sm font-semibold text-ink-900"
+                        >
+                            {{ line.value }}
+                        </span>
                         <MoneyText
+                            v-else
                             :value="line.value"
                             :signed="line.signed ?? null"
                             :class="line.emphasize ? 'text-lg' : 'text-sm'"

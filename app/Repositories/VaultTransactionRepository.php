@@ -20,6 +20,7 @@ class VaultTransactionRepository
         'cash_in_change',
         'cash_out',
         'cash_out_fee_received',
+        'transfer_fee_received',
         'return_initiate',
         'return_confirm',
         'adjustment',

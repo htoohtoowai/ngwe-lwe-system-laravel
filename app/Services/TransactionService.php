@@ -467,12 +467,15 @@ class TransactionService
      *   from_account_id: int,
      *   to_account_id: int,
      *   amount: float|string,
+     *   customer_name: string,
+     *   customer_phone: string,
      *   customer_fee?: float|string,
      *   additional_fee_amount?: float|string,
      *   fee_account_id?: int|null,
      *   screenshot_path?: string|null,
      *   note?: string|null,
      *   denominations?: array<int|string, int|string>|null,
+     *   fee_denominations?: array<int|string, int|string>|null,
      * }  $data
      */
     public function createTransfer(array $data, User $creator): Transaction
@@ -499,17 +502,38 @@ class TransactionService
         $fromCompanyId = $fromAccount->serviceType?->company_id;
         $toCompanyId = $toAccount->serviceType?->company_id;
 
-        $normalizedDenominations = null;
-        if ($creator->role === 'teller') {
-            $normalizedDenominations = $this->floatValidator->validateFloatOperation(
-                $creator->id,
-                is_array($data['denominations'] ?? null) ? $data['denominations'] : [],
-                $amount,
-                'transfer',
-            );
+        $rawDenominations = is_array($data['denominations'] ?? null) ? $data['denominations'] : [];
+        if ($rawDenominations !== []) {
+            throw new InvalidArgumentException('denominations are not required for account-to-account Transfer.');
         }
 
-        $transaction = DB::transaction(function () use ($data, $creator, $fromAccount, $toAccount, $amount, $fees, $feePayment, $commission, $fromCompanyId, $toCompanyId, $normalizedDenominations): Transaction {
+        $rawFeeDenominations = is_array($data['fee_denominations'] ?? null) ? $data['fee_denominations'] : [];
+        $cashFeeDenominationsExpected = $creator->role === 'teller'
+            && $feePayment['method'] === 'cash'
+            && (float) $fees['customer_fee'] > 0
+            && (array_key_exists('fee_payment_method', $data) || $rawFeeDenominations !== []);
+
+        $normalizedFeeDenominations = null;
+        if ($cashFeeDenominationsExpected) {
+            $normalizedFeeDenominations = $this->floatValidator->normalizeReceivedDenominations(
+                $rawFeeDenominations,
+            );
+
+            if ($normalizedFeeDenominations === []) {
+                throw new InvalidArgumentException('Fee denomination breakdown is required when Transfer fee is received in cash.');
+            }
+
+            $feeDenominationTotal = Money::denominationTotal($normalizedFeeDenominations);
+            if ($feeDenominationTotal !== (int) Money::normalize($fees['customer_fee'])) {
+                throw new InvalidArgumentException(
+                    "Fee denomination total {$feeDenominationTotal} does not match Transfer fee {$fees['customer_fee']}."
+                );
+            }
+        } elseif ($rawFeeDenominations !== []) {
+            throw new InvalidArgumentException('fee_denominations are only allowed for Teller Transfer fees paid in cash.');
+        }
+
+        $transaction = DB::transaction(function () use ($data, $creator, $fromAccount, $toAccount, $amount, $fees, $feePayment, $commission, $fromCompanyId, $toCompanyId, $normalizedFeeDenominations): Transaction {
             $this->accounts->debitBalance($fromAccount->id, (float) $amount + ($feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0));
             $this->creditAgentCommission($fromAccount->id, $commission);
 
@@ -527,6 +551,8 @@ class TransactionService
                 'account_id' => $fromAccount->id,
                 'to_account_id' => $toAccount->id,
                 'amount' => $amount,
+                'customer_name' => $data['customer_name'],
+                'customer_phone' => $data['customer_phone'],
                 'commission_amount' => $commission,
                 'customer_fee' => $fees['customer_fee'],
                 'additional_fee_amount' => $fees['additional_fee'],
@@ -540,23 +566,24 @@ class TransactionService
                 'from_company_id' => $fromCompanyId,
                 'to_company_id' => $toCompanyId,
                 'status' => 'COMPLETED',
+                'received_denominations' => $normalizedFeeDenominations,
             ]);
 
-            if ($normalizedDenominations !== null) {
+            if ($normalizedFeeDenominations !== null) {
                 $activeFloat = $this->floats->activeForEmployee($creator->id);
                 if ($activeFloat === null) {
-                    throw new RuntimeException('Employee float went inactive during transfer.');
+                    throw new RuntimeException('Employee float went inactive while receiving Transfer fee.');
                 }
-                $this->floats->deductDenominations($activeFloat->id, $normalizedDenominations);
-                $this->floats->deductBalance($creator->id, $amount);
+                $this->floats->addDenominations($activeFloat->id, $normalizedFeeDenominations);
+                $this->floats->incrementBalance($creator->id, $fees['customer_fee']);
 
                 $this->vaultTransactions->recordBulk(
-                    txnType: 'cash_out',
-                    denominations: $normalizedDenominations,
+                    txnType: 'transfer_fee_received',
+                    denominations: $normalizedFeeDenominations,
                     performedBy: $creator->id,
                     floatId: $activeFloat->id,
                     transactionId: $txn->id,
-                    note: "Transfer txn #{$txn->id}",
+                    note: "Transfer cash fee received txn #{$txn->id}",
                 );
             }
 
@@ -566,10 +593,12 @@ class TransactionService
                 'type' => 'transfer',
                 'from_account_id' => $fromAccount->id,
                 'to_account_id' => $toAccount->id,
+                'customer_name' => $data['customer_name'],
+                'customer_phone' => $data['customer_phone'],
                 'amount' => $amount,
                 'from_balance_delta' => $fromBalanceChange,
                 'to_balance_delta' => $amount,
-                'denominations' => $normalizedDenominations,
+                'fee_denominations' => $normalizedFeeDenominations,
             ]);
 
             return $txn;
@@ -585,12 +614,16 @@ class TransactionService
      *   account_id: int,
      *   amount: float|string,
      *   currency: string,
+     *   customer_name: string,
+     *   customer_phone: string,
+     *   exchange_payment_method?: string,
      *   customer_fee?: float|string,
      *   additional_fee_amount?: float|string,
      *   fee_account_id?: int|null,
      *   screenshot_path?: string|null,
      *   note?: string|null,
      *   denominations?: array<int|string, int|string>|null,
+     *   received_denominations?: array<int|string, int|string>|null,
      * }  $data
      */
     public function createExchange(array $data, User $creator): Transaction
@@ -622,31 +655,58 @@ class TransactionService
             ? ((float) $rate->sell_rate) / $baseAmount
             : ((float) $rate->buy_rate) / $baseAmount;
         $exchangeRate = Money::normalize($rawRate, 4);
+        $mmkSettlementAmount = Money::normalize($currency === 'THB'
+            ? (float) $amount * (float) $exchangeRate
+            : (float) $amount);
+        $exchangePaymentMethod = (string) ($data['exchange_payment_method'] ?? 'cash');
+        if (! in_array($exchangePaymentMethod, ['cash', 'account'], true)) {
+            throw new InvalidArgumentException('Exchange payment method must be cash or account.');
+        }
 
-        $fees = $this->calculator->resolveFees($account, $amount, TransactionFeeCalculator::MODE_CASH_IN);
-        $commission = $this->calculator->commission($account, $amount, TransactionFeeCalculator::COMMISSION_SEND);
+        $fees = $this->calculator->resolveFees($account, $mmkSettlementAmount, TransactionFeeCalculator::MODE_CASH_IN);
+        $commission = $this->calculator->commission($account, $mmkSettlementAmount, TransactionFeeCalculator::COMMISSION_SEND);
         $feePayment = $this->resolveFeePayment($data, $account, $fees['customer_fee']);
         $fromCompanyId = $account->serviceType?->company_id;
 
         $normalizedDenominations = null;
-        if ($creator->role === 'teller') {
+        if ($creator->role === 'teller' && $currency === 'THB') {
             $normalizedDenominations = $this->floatValidator->validateFloatOperation(
                 $creator->id,
                 is_array($data['denominations'] ?? null) ? $data['denominations'] : [],
-                $amount,
+                $mmkSettlementAmount,
                 'exchange',
             );
+        } elseif (is_array($data['denominations'] ?? null) && $data['denominations'] !== []) {
+            throw new InvalidArgumentException('denominations are only required when Exchange pays MMK cash from the teller vault.');
         }
 
-        $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $currency, $exchangeRate, $fees, $feePayment, $commission, $fromCompanyId, $normalizedDenominations): Transaction {
-            $applied = $this->accounts->incrementBalance($account->id, $amount);
+        $rawReceivedDenominations = is_array($data['received_denominations'] ?? null) ? $data['received_denominations'] : [];
+        $normalizedReceivedDenominations = null;
+        if ($creator->role === 'teller' && $currency === 'MMK' && $exchangePaymentMethod === 'cash') {
+            $normalizedReceivedDenominations = $this->floatValidator->normalizeReceivedDenominations($rawReceivedDenominations);
+            if ($normalizedReceivedDenominations === []) {
+                throw new InvalidArgumentException('Received denomination breakdown is required when MMK Exchange payment is cash.');
+            }
+
+            $receivedTotal = Money::denominationTotal($normalizedReceivedDenominations);
+            if ($receivedTotal !== (int) $mmkSettlementAmount) {
+                throw new InvalidArgumentException(
+                    "Received denomination total {$receivedTotal} does not match Exchange MMK amount {$mmkSettlementAmount}."
+                );
+            }
+        } elseif ($rawReceivedDenominations !== []) {
+            throw new InvalidArgumentException('received_denominations are only allowed for Teller MMK Exchange payments received in cash.');
+        }
+
+        $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $currency, $exchangeRate, $mmkSettlementAmount, $exchangePaymentMethod, $fees, $feePayment, $commission, $fromCompanyId, $normalizedDenominations, $normalizedReceivedDenominations): Transaction {
+            $applied = $this->accounts->incrementBalance($account->id, $mmkSettlementAmount);
             if ($applied === null) {
                 throw new RuntimeException("Unable to credit exchange balance for active account #{$account->id}.");
             }
             $this->debitFeeFromSourceIfNeeded($account, $feePayment, $fees['customer_fee']);
             $this->creditAgentCommission($account->id, $commission);
             $exchangeBalanceChange = Money::normalize(
-                (float) $amount
+                (float) $mmkSettlementAmount
                 - ($feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0)
                 + (float) $commission,
             );
@@ -654,6 +714,8 @@ class TransactionService
             $txn = $this->transactions->create([
                 'transaction_type' => 'exchange',
                 'account_id' => $account->id,
+                'customer_name' => $data['customer_name'],
+                'customer_phone' => $data['customer_phone'],
                 'amount' => $amount,
                 'commission_amount' => $commission,
                 'customer_fee' => $fees['customer_fee'],
@@ -668,7 +730,26 @@ class TransactionService
                 'created_by' => $creator->id,
                 'from_company_id' => $fromCompanyId,
                 'status' => 'COMPLETED',
+                'received_denominations' => $normalizedReceivedDenominations,
             ]);
+
+            if ($normalizedReceivedDenominations !== null) {
+                $activeFloat = $this->floats->activeForEmployee($creator->id);
+                if ($activeFloat === null) {
+                    throw new RuntimeException('Employee float went inactive while receiving Exchange cash.');
+                }
+                $this->floats->addDenominations($activeFloat->id, $normalizedReceivedDenominations);
+                $this->floats->incrementBalance($creator->id, $mmkSettlementAmount);
+
+                $this->vaultTransactions->recordBulk(
+                    txnType: 'cash_in_received',
+                    denominations: $normalizedReceivedDenominations,
+                    performedBy: $creator->id,
+                    floatId: $activeFloat->id,
+                    transactionId: $txn->id,
+                    note: "Exchange MMK cash received txn #{$txn->id}",
+                );
+            }
 
             if ($normalizedDenominations !== null) {
                 $activeFloat = $this->floats->activeForEmployee($creator->id);
@@ -676,7 +757,7 @@ class TransactionService
                     throw new RuntimeException('Employee float went inactive during exchange.');
                 }
                 $this->floats->deductDenominations($activeFloat->id, $normalizedDenominations);
-                $this->floats->deductBalance($creator->id, $amount);
+                $this->floats->deductBalance($creator->id, $mmkSettlementAmount);
 
                 $this->vaultTransactions->recordBulk(
                     txnType: 'cash_out',
@@ -694,10 +775,13 @@ class TransactionService
                 'type' => 'exchange',
                 'account_id' => $account->id,
                 'amount' => $amount,
+                'mmk_settlement_amount' => $mmkSettlementAmount,
                 'currency' => $currency,
+                'exchange_payment_method' => $exchangePaymentMethod,
                 'balance_delta' => $exchangeBalanceChange,
                 'exchange_rate' => $exchangeRate,
                 'denominations' => $normalizedDenominations,
+                'received_denominations' => $normalizedReceivedDenominations,
             ]);
 
             return $txn;

@@ -52,6 +52,8 @@ const props = withDefaults(
             created_at: string;
             from_label: string;
             to_label: string;
+            customer_name?: string | null;
+            customer_phone?: string | null;
         } | null;
         history?: TransactionHistoryRow[];
     }>(),
@@ -65,8 +67,10 @@ const step = ref<'form' | 'review'>('form');
 const fromId = ref<number | null>(null);
 const toId = ref<number | null>(null);
 const amount = ref(0);
+const customerName = ref('');
+const customerPhone = ref('');
 const description = ref('');
-const denoms = ref<Record<number, number>>({});
+const feeDenoms = ref<Record<number, number>>({});
 const submitting = ref(false);
 const errors = ref<Record<string, string>>({});
 const feePaymentMethod = ref<FeePaymentMethod>('cash');
@@ -81,12 +85,18 @@ const totalDebit = computed(
         (amount.value || 0) +
         (feePaymentMethod.value === 'account' ? feeNum.value : 0),
 );
-const denomTotal = computed(() =>
-    props.notes.reduce((s, n) => s + n * (denoms.value[n] ?? 0), 0),
+const feeDenomTotal = computed(() =>
+    props.notes.reduce((s, n) => s + n * (feeDenoms.value[n] ?? 0), 0),
 );
 
+const needsCashFeeDenoms = computed(
+    () =>
+        props.role === 'teller' &&
+        feePaymentMethod.value === 'cash' &&
+        feeNum.value > 0,
+);
 const floatLocked = computed(
-    () => props.requiresDenominations && props.float?.status !== 'ACTIVE',
+    () => needsCashFeeDenoms.value && props.float?.status !== 'ACTIVE',
 );
 const cashierLocked = computed(() => props.role === 'cashier');
 const feePaymentValid = computed(
@@ -102,8 +112,10 @@ const ready = computed(
         toId.value !== null &&
         fromId.value !== toId.value &&
         amount.value > 0 &&
+        customerName.value.trim().length > 0 &&
+        customerPhone.value.trim().length > 0 &&
         Number(from.value?.balance ?? 0) >= totalDebit.value &&
-        (!props.requiresDenominations || denomTotal.value === amount.value) &&
+        (!needsCashFeeDenoms.value || feeDenomTotal.value === feeNum.value) &&
         feePaymentValid.value &&
         !floatLocked.value &&
         !cashierLocked.value,
@@ -142,14 +154,16 @@ function submit() {
             from_account_id: fromId.value,
             to_account_id: toId.value,
             amount: amount.value,
+            customer_name: customerName.value.trim(),
+            customer_phone: customerPhone.value.trim(),
             note: description.value,
             fee_payment_method: feePaymentMethod.value,
             fee_account_id:
                 feePaymentMethod.value === 'account'
                     ? feeAccountId.value
                     : null,
-            ...(props.requiresDenominations
-                ? { denominations: denoms.value }
+            ...(needsCashFeeDenoms.value
+                ? { fee_denominations: feeDenoms.value }
                 : {}),
         },
         {
@@ -245,6 +259,22 @@ function submit() {
                         <span class="text-[11px] text-slate">MMK</span>
                     </dd>
                 </div>
+                <div
+                    v-if="completed.customer_name || completed.customer_phone"
+                    class="flex justify-between gap-3 py-3 text-sm"
+                >
+                    <dt class="text-slate">
+                        {{ t('transaction.customerName') }}
+                    </dt>
+                    <dd class="text-right font-bold">
+                        {{ completed.customer_name || '-' }}
+                        <span
+                            v-if="completed.customer_phone"
+                            class="block text-[11px] font-medium text-slate"
+                            >{{ completed.customer_phone }}</span
+                        >
+                    </dd>
+                </div>
                 <div class="flex justify-between py-3 text-sm">
                     <dt class="text-slate">{{ t('transaction.fee') }}</dt>
                     <dd class="money font-bold">
@@ -307,6 +337,34 @@ function submit() {
                 />
             </div>
 
+            <div class="mt-5 grid gap-4 md:grid-cols-2">
+                <label>
+                    <span class="bank-label">{{
+                        t('transaction.customerName')
+                    }}</span>
+                    <input
+                        v-model="customerName"
+                        type="text"
+                        autocomplete="name"
+                        :placeholder="t('transaction.customerName')"
+                        class="bank-input"
+                    />
+                </label>
+                <label>
+                    <span class="bank-label">{{
+                        t('transaction.customerPhone')
+                    }}</span>
+                    <input
+                        v-model="customerPhone"
+                        type="tel"
+                        inputmode="tel"
+                        autocomplete="tel"
+                        :placeholder="t('transaction.customerPhone')"
+                        class="bank-input"
+                    />
+                </label>
+            </div>
+
             <div
                 class="mt-4 flex items-center justify-between rounded-field bg-mist px-4 py-3"
             >
@@ -354,14 +412,18 @@ function submit() {
                 </div>
             </div>
 
-            <div v-if="requiresDenominations" class="mt-5">
+            <div v-if="needsCashFeeDenoms" class="mt-5">
                 <DenomDrawer
-                    v-model="denoms"
+                    v-model="feeDenoms"
                     :notes="notes"
-                    :target="amount || 0"
-                    :stock="floatStock"
-                    :label="t('transaction.notesMyVault')"
+                    :target="feeNum"
+                    :enforce-stock="false"
+                    :label="t('transaction.cashFeeReceivedNotes')"
+                    id-prefix="transfer-fee-denomination"
                 />
+                <p class="mt-2 text-xs font-semibold text-slate">
+                    {{ t('transaction.cashFeeReceivedHint') }}
+                </p>
             </div>
 
             <p
@@ -427,8 +489,29 @@ function submit() {
                     </dd>
                 </div>
                 <div class="flex justify-between py-3 text-sm">
+                    <dt class="text-slate">{{ t('transaction.customerName') }}</dt>
+                    <dd class="text-right font-bold">{{ customerName }}</dd>
+                </div>
+                <div class="flex justify-between py-3 text-sm">
+                    <dt class="text-slate">
+                        {{ t('transaction.customerPhone') }}
+                    </dt>
+                    <dd class="text-right font-bold">{{ customerPhone }}</dd>
+                </div>
+                <div class="flex justify-between py-3 text-sm">
                     <dt class="text-slate">{{ t('transaction.fee') }}</dt>
                     <dd class="money font-bold">{{ mmk(feeNum) }} MMK</dd>
+                </div>
+                <div
+                    v-if="needsCashFeeDenoms"
+                    class="flex justify-between py-3 text-sm"
+                >
+                    <dt class="font-bold">
+                        {{ t('transaction.cashFeeReceivedNotes') }}
+                    </dt>
+                    <dd class="money font-bold text-balance">
+                        +{{ mmk(feeDenomTotal) }} MMK
+                    </dd>
                 </div>
                 <div class="flex justify-between py-3 text-sm">
                     <dt class="text-slate">
