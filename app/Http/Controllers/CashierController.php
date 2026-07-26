@@ -15,19 +15,34 @@ use Inertia\Response;
 
 class CashierController extends Controller
 {
+    private const DEFAULT_SECTION = 'teller-entry-notifications';
+
+    private const SECTIONS = [
+        self::DEFAULT_SECTION,
+        'main-vault-denomination-stock',
+        'morning-issue',
+        'end-of-day',
+        'teller-entry-history',
+        'main-vault-audit-log',
+    ];
+
     public function __construct(
         private readonly CashDenominationRepository $vault,
         private readonly CashFloatRepository $floats,
         private readonly VaultTransactionRepository $vaultTransactions,
     ) {}
 
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request, ?string $section = null): Response
     {
+        $section ??= self::DEFAULT_SECTION;
+        abort_unless(in_array($section, self::SECTIONS, true), 404);
+
         $vault = $this->vault->getVaultBalance();
         $floatRows = $this->floats->list();
 
         return Inertia::render('cashier/Operations', [
             'role' => $request->user()->role,
+            'section' => $section,
             'announcement' => 'Manage the main vault, Teller floats and end-of-day returns.',
             'notificationCount' => Transaction::query()
                 ->where('transaction_type', 'cash_in')

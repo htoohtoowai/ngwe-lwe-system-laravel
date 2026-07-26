@@ -118,7 +118,22 @@ Route::middleware(['ngwe.auth', 'role:admin'])
             ->name('.detail');
     });
 Route::middleware(['ngwe.auth', 'role:cashier'])->get('/cashier', CashierController::class)->name('cashier');
-Route::middleware(['ngwe.auth', 'role:cashier'])->get('/cashier/profile', [CashierController::class, 'profile'])->name('cashier.profile');
+Route::middleware(['ngwe.auth', 'role:cashier'])
+    ->prefix('cashier')
+    ->name('cashier.')
+    ->group(function (): void {
+        Route::get('/profile', [CashierController::class, 'profile'])->name('profile');
+        Route::get('/{section}', CashierController::class)
+            ->whereIn('section', [
+                'teller-entry-notifications',
+                'main-vault-denomination-stock',
+                'morning-issue',
+                'end-of-day',
+                'teller-entry-history',
+                'main-vault-audit-log',
+            ])
+            ->name('section');
+    });
 Route::middleware(['ngwe.auth', 'role:teller'])
     ->prefix('transactions')
     ->name('transactions.')

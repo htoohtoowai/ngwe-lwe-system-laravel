@@ -62,9 +62,21 @@ type PendingCashIn = {
     change_given: string;
     created_at: string | null;
 };
+type CashierSection =
+    | 'teller-entry-notifications'
+    | 'main-vault-denomination-stock'
+    | 'morning-issue'
+    | 'end-of-day'
+    | 'teller-entry-history'
+    | 'main-vault-audit-log';
+type BreadcrumbItem = {
+    label: string;
+    href?: string;
+};
 
 const props = defineProps<{
     role: 'cashier';
+    section: CashierSection;
     announcement?: string | null;
     notificationCount?: number;
     notes: number[];
@@ -77,6 +89,33 @@ const props = defineProps<{
     transactions: RecentTransaction[];
     pendingCashIns: PendingCashIn[];
 }>();
+
+const sectionLabels: Record<CashierSection, string> = {
+    'teller-entry-notifications': 'Teller entry notifications',
+    'main-vault-denomination-stock': 'Main vault denomination stock',
+    'morning-issue': 'Morning issue',
+    'end-of-day': 'End-of-day',
+    'teller-entry-history': 'Teller entry history',
+    'main-vault-audit-log': 'Main vault audit log',
+};
+const sectionDescriptions: Record<CashierSection, string> = {
+    'teller-entry-notifications':
+        'New Teller Cash In entries waiting for cashier review.',
+    'main-vault-denomination-stock':
+        'Live note stock after issued Teller floats are removed.',
+    'morning-issue': 'Issue counted cash float notes to one Teller.',
+    'end-of-day': 'Verify Teller float returns and add cash back to the vault.',
+    'teller-entry-history': 'Read-only Teller transaction history.',
+    'main-vault-audit-log': 'Every main vault denomination movement.',
+};
+const sectionPaths: Record<CashierSection, string> = {
+    'teller-entry-notifications': '/cashier',
+    'main-vault-denomination-stock': '/cashier/main-vault-denomination-stock',
+    'morning-issue': '/cashier/morning-issue',
+    'end-of-day': '/cashier/end-of-day',
+    'teller-entry-history': '/cashier/teller-entry-history',
+    'main-vault-audit-log': '/cashier/main-vault-audit-log',
+};
 
 const vaultEntryOpen = ref(false);
 const vaultEntryType = ref<'vault_in' | 'adjustment'>('vault_in');
@@ -100,6 +139,23 @@ let unwatchEchoConnection: (() => void) | null = null;
 let stopRealtimeFallback: (() => void) | null = null;
 let realtimeConnected = false;
 
+const activeSection = computed(() => props.section);
+const pageTitle = computed(() => sectionLabels[activeSection.value]);
+const pageDescription = computed(
+    () => sectionDescriptions[activeSection.value],
+);
+const breadcrumbItems = computed<BreadcrumbItem[]>(() => [
+    {
+        label: 'Cashier',
+        href:
+            activeSection.value === 'teller-entry-notifications'
+                ? undefined
+                : sectionPaths['teller-entry-notifications'],
+    },
+    {
+        label: pageTitle.value,
+    },
+]);
 const availableByNumber = computed(() => {
     const result: Denoms = {};
     props.notes.forEach((note) => {
@@ -377,32 +433,45 @@ function statusLabel(status: string): string {
         :announcement="announcement"
         :notification-count="notificationCount"
     >
-        <header class="mb-6 flex flex-wrap items-start justify-between gap-4">
-            <div>
-                <p
-                    class="text-xs font-black tracking-[0.18em] text-brand uppercase"
-                >
-                    Cashier operations
+        <header
+            class="mb-4 flex flex-col gap-2 border-b border-line pb-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+            <nav class="min-w-0 text-sm font-black" aria-label="Breadcrumb">
+                <ol class="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <li
+                        v-for="(item, index) in breadcrumbItems"
+                        :key="`${item.label}-${index}`"
+                        class="flex min-w-0 items-center gap-1.5"
+                    >
+                        <span
+                            v-if="index > 0"
+                            class="text-xs text-slate/50"
+                            aria-hidden="true"
+                            >/</span
+                        >
+                        <Link
+                            v-if="item.href"
+                            :href="item.href"
+                            :headers="authHeaders()"
+                            class="truncate text-slate transition hover:text-brand"
+                        >
+                            {{ item.label }}
+                        </Link>
+                        <span v-else class="truncate text-ink">
+                            {{ item.label }}
+                        </span>
+                    </li>
+                </ol>
+                <p class="mt-1 text-xs font-semibold text-slate">
+                    {{ pageDescription }}
                 </p>
-                <h1 class="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
-                    Main vault & Teller floats
-                </h1>
-                <p class="mt-1 max-w-2xl text-sm text-slate">
-                    Issue morning cash, review Cash In handoffs, and reconcile
-                    every Teller at closing.
-                </p>
-            </div>
-            <div
-                class="rounded-2xl border border-line bg-card px-4 py-3 text-right shadow-sm"
-            >
-                <p
-                    class="text-[10px] font-black tracking-wide text-slate uppercase"
-                >
+            </nav>
+            <div class="shrink-0 text-left sm:text-right">
+                <p class="text-[10px] font-black text-slate uppercase">
                     Main vault
                 </p>
-                <p class="money mt-1 text-2xl font-black">
-                    {{ formatMoney(vaultTotal) }}
-                    <span class="text-xs text-slate">MMK</span>
+                <p class="money text-base font-black text-ink">
+                    {{ formatMoney(vaultTotal) }} MMK
                 </p>
             </div>
         </header>
@@ -423,6 +492,7 @@ function statusLabel(status: string): string {
         </div>
 
         <section
+            v-if="activeSection === 'teller-entry-notifications'"
             class="mb-6 overflow-hidden rounded-2xl border border-brand/25 bg-card shadow-sm"
         >
             <header
@@ -532,7 +602,10 @@ function statusLabel(status: string): string {
             </p>
         </section>
 
-        <section class="rounded-2xl border border-line bg-card shadow-sm">
+        <section
+            v-if="activeSection === 'main-vault-denomination-stock'"
+            class="rounded-2xl border border-line bg-card shadow-sm"
+        >
             <div
                 class="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-4 sm:px-6"
             >
@@ -581,9 +654,16 @@ function statusLabel(status: string): string {
         </section>
 
         <section
-            class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+            v-if="
+                activeSection === 'morning-issue' ||
+                activeSection === 'end-of-day'
+            "
+            class="grid gap-6"
         >
-            <section class="rounded-2xl border border-line bg-card shadow-sm">
+            <section
+                v-if="activeSection === 'morning-issue'"
+                class="rounded-2xl border border-line bg-card shadow-sm"
+            >
                 <header class="border-b border-line px-4 py-4 sm:px-6">
                     <p
                         class="text-xs font-black tracking-wide text-brand uppercase"
@@ -653,7 +733,10 @@ function statusLabel(status: string): string {
                 </div>
             </section>
 
-            <section class="rounded-2xl border border-line bg-card shadow-sm">
+            <section
+                v-if="activeSection === 'end-of-day'"
+                class="rounded-2xl border border-line bg-card shadow-sm"
+            >
                 <header class="border-b border-line px-4 py-4 sm:px-6">
                     <p
                         class="text-xs font-black tracking-wide text-balance uppercase"
@@ -735,7 +818,10 @@ function statusLabel(status: string): string {
             </section>
         </section>
 
-        <section class="mt-6 rounded-2xl border border-line bg-card shadow-sm">
+        <section
+            v-if="activeSection === 'teller-entry-history'"
+            class="rounded-2xl border border-line bg-card shadow-sm"
+        >
             <header
                 class="flex flex-wrap items-end justify-between gap-3 border-b border-line px-4 py-4 sm:px-6"
             >
@@ -839,7 +925,10 @@ function statusLabel(status: string): string {
             </div>
         </section>
 
-        <section class="mt-6 rounded-2xl border border-line bg-card shadow-sm">
+        <section
+            v-if="activeSection === 'main-vault-audit-log'"
+            class="rounded-2xl border border-line bg-card shadow-sm"
+        >
             <header class="border-b border-line px-4 py-4 sm:px-6">
                 <h2 class="text-lg font-black">Main vault audit log</h2>
                 <p class="mt-1 text-xs text-slate">

@@ -79,14 +79,54 @@ const NAV: NavItem[] = [
         labelMm: 'အနှစ်ချုပ်',
         href: '/dashboard',
         icon: 'overview',
-        roles: ['cashier', 'teller'],
+        roles: ['teller'],
         section: 'Banking',
     },
     {
-        label: 'Cashier Operations',
-        labelMm: 'Cashier ငွေစီမံခန့်ခွဲမှု',
+        label: 'Teller entry notifications',
+        labelMm: 'Teller entry notifications',
         href: '/cashier',
-        icon: 'counter',
+        icon: 'transactions',
+        roles: ['cashier'],
+        section: 'Banking',
+    },
+    {
+        label: 'Main vault denomination stock',
+        labelMm: 'Main vault denomination stock',
+        href: '/cashier/main-vault-denomination-stock',
+        icon: 'vault',
+        roles: ['cashier'],
+        section: 'Banking',
+    },
+    {
+        label: 'Morning issue',
+        labelMm: 'Morning issue',
+        href: '/cashier/morning-issue',
+        icon: 'floats',
+        roles: ['cashier'],
+        section: 'Banking',
+    },
+    {
+        label: 'End-of-day',
+        labelMm: 'End-of-day',
+        href: '/cashier/end-of-day',
+        icon: 'reconcile',
+        roles: ['cashier'],
+        section: 'Banking',
+    },
+    {
+        label: 'Teller entry history',
+        labelMm: 'Teller entry history',
+        href: '/cashier/teller-entry-history',
+        icon: 'reports',
+        roles: ['cashier'],
+        section: 'Banking',
+    },
+    {
+        label: 'Main vault audit log',
+        labelMm: 'Main vault audit log',
+        href: '/cashier/main-vault-audit-log',
+        icon: 'settings',
         roles: ['cashier'],
         section: 'Banking',
     },
@@ -95,7 +135,7 @@ const NAV: NavItem[] = [
         labelMm: 'ကိုယ်ရေးအချက်အလက်',
         href: '/cashier/profile',
         icon: 'settings',
-        roles: ['cashier'],
+        roles: [],
         section: 'Office',
     },
     {
@@ -335,7 +375,11 @@ const homeHref = computed(() => {
     return '/dashboard';
 });
 const notificationHref = computed(() =>
-    props.role === 'admin' ? '/admin/transactions' : '/dashboard',
+    props.role === 'admin'
+        ? '/admin/transactions'
+        : props.role === 'cashier'
+          ? '/cashier'
+          : '/dashboard',
 );
 const navSections = computed(() => {
     const sections: NavSection[] = ['Banking', 'Office', 'Admin'];
@@ -410,6 +454,13 @@ const isActive = (href: string, exact = false) => {
 
     if (resolved === '/admin') {
         return path === '/admin' || path === '/admin/overview';
+    }
+
+    if (resolved === '/cashier') {
+        return (
+            path === '/cashier' ||
+            path === '/cashier/teller-entry-notifications'
+        );
     }
 
     return (
