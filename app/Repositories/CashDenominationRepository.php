@@ -121,9 +121,9 @@ class CashDenominationRepository
     }
 
     /**
-     * Denomination quantities reserved by PENDING_RECEIPT floats. In the
-     * post-refactor Python flow this always returns zeros because vault_out is
-     * already logged at issuance; kept for parity/diagnostics.
+     * Denomination quantities sitting with PENDING_RECEIPT floats. These notes
+     * are already removed from the main vault by the `vault_out` issue log, so
+     * this is diagnostic only and must not be subtracted from availability.
      *
      * @return array<int, int>
      */
@@ -149,14 +149,7 @@ class CashDenominationRepository
      */
     public function getAvailableBalance(): array
     {
-        $vault = $this->getVaultBalance();
-        $pending = $this->getPendingReserved();
-        $result = [];
-        foreach (Money::supportedDenominations() as $denom) {
-            $result[$denom] = max(0, ($vault[$denom] ?? 0) - ($pending[$denom] ?? 0));
-        }
-
-        return $result;
+        return $this->getVaultBalance();
     }
 
     /**

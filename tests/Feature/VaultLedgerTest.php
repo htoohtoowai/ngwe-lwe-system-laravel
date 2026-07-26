@@ -81,6 +81,25 @@ class VaultLedgerTest extends TestCase
             ->count());
     }
 
+    public function test_available_balance_does_not_double_subtract_pending_float(): void
+    {
+        $vault = app(CashDenominationRepository::class);
+        $cashier = $this->userWithRole('cashier');
+        $employee = $this->userWithRole('teller', 'emp');
+
+        $vault->recordBulk('vault_in', [20_000 => 300], $cashier->id);
+
+        app(CashFloatService::class)->issue(
+            $cashier,
+            $employee->id,
+            [20_000 => 92],
+        );
+
+        $this->assertSame(208, $vault->getVaultBalance()[20_000]);
+        $this->assertSame(92, $vault->getPendingReserved()[20_000]);
+        $this->assertSame(208, $vault->getAvailableBalance()[20_000]);
+    }
+
     public function test_float_issue_fails_when_vault_stock_is_insufficient(): void
     {
         $cashier = $this->userWithRole('cashier');
