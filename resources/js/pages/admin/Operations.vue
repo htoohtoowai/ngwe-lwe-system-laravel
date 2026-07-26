@@ -203,6 +203,10 @@ type AdminTab =
     | 'reports';
 type AdminMode = 'list' | 'detail' | 'create' | 'edit';
 type AdminTransactionSubsection = 'records' | 'activity-logs';
+type AdminBreadcrumbItem = {
+    label: string;
+    href?: string;
+};
 
 const props = defineProps<{
     role: 'admin';
@@ -429,6 +433,23 @@ const sectionSlugs: Record<AdminTab, string> = {
     vault: 'vault',
     reports: 'reports',
 };
+const adminTabLabels: Record<AdminTab, string> = {
+    overview: 'Owner Console',
+    companies: 'Companies',
+    'service-types': 'Service Types',
+    'exchange-rates': 'Exchange Rates',
+    accounts: 'Accounts',
+    fees: 'Fees',
+    users: 'Users',
+    transactions: 'Transactions',
+    vault: 'Vault',
+    reports: 'Reports',
+};
+const adminModeLabels: Record<Exclude<AdminMode, 'list'>, string> = {
+    detail: 'Detail',
+    edit: 'Update',
+    create: 'Create',
+};
 const pageHeading = computed(() => {
     if (activeTab.value === 'transactions' && activeMode.value === 'list') {
         return activeTransactionSubsection.value === 'activity-logs'
@@ -436,30 +457,46 @@ const pageHeading = computed(() => {
             : 'Transactions';
     }
 
-    const labels: Record<AdminTab, string> = {
-        overview: 'Admin Operations',
-        companies: 'Companies',
-        'service-types': 'Service Types',
-        'exchange-rates': 'Exchange Rates',
-        accounts: 'Accounts',
-        fees: 'Fees',
-        users: 'Users',
-        transactions: 'Transactions',
-        vault: 'Vault',
-        reports: 'Reports',
-    };
     const modeLabel =
-        activeMode.value === 'list'
-            ? ''
-            : activeMode.value === 'detail'
-              ? 'Detail'
-              : activeMode.value === 'edit'
-                ? 'Update'
-                : 'Create';
+        activeMode.value === 'list' ? '' : adminModeLabels[activeMode.value];
 
     return modeLabel
-        ? `${labels[activeTab.value]} ${modeLabel}`
-        : labels[activeTab.value];
+        ? `${adminTabLabels[activeTab.value]} ${modeLabel}`
+        : adminTabLabels[activeTab.value];
+});
+const breadcrumbItems = computed<AdminBreadcrumbItem[]>(() => {
+    const items: AdminBreadcrumbItem[] = [
+        {
+            label: 'Owner Console',
+            href:
+                activeTab.value === 'overview'
+                    ? undefined
+                    : adminPath('overview'),
+        },
+    ];
+
+    if (activeTab.value !== 'overview') {
+        items.push({
+            label:
+                activeTab.value === 'transactions' &&
+                activeMode.value === 'list' &&
+                activeTransactionSubsection.value === 'activity-logs'
+                    ? 'Activity Logs'
+                    : adminTabLabels[activeTab.value],
+            href:
+                activeMode.value === 'list'
+                    ? undefined
+                    : adminPath(activeTab.value),
+        });
+    }
+
+    if (activeMode.value !== 'list') {
+        items.push({
+            label: adminModeLabels[activeMode.value],
+        });
+    }
+
+    return items;
 });
 
 watch(
@@ -1377,36 +1414,48 @@ async function sendBroadcastTest(): Promise<void> {
         :notification-count="notificationCount"
     >
         <div class="flex flex-col gap-5">
-            <header
-                class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
+            <div
+                class="flex flex-col gap-2 border-b border-line pb-3 sm:flex-row sm:items-center sm:justify-between"
             >
-                <div>
-                    <p
-                        class="text-xs font-black tracking-[0.18em] text-brand uppercase"
-                    >
-                        Owner Console
-                    </p>
-                    <h1
-                        class="mt-1 text-2xl font-black tracking-tight text-ink"
-                    >
-                        {{ pageHeading }}
-                    </h1>
-                    <p class="mt-1 max-w-3xl text-sm font-semibold text-slate">
-                        Master data, staff access, fee tiers, audit review,
-                        vault visibility and daily closing.
-                    </p>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
+                <nav class="min-w-0 text-sm font-black" aria-label="Breadcrumb">
+                    <ol class="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <li
+                            v-for="(item, index) in breadcrumbItems"
+                            :key="`${item.label}-${index}`"
+                            class="flex min-w-0 items-center gap-1.5"
+                        >
+                            <span
+                                v-if="index > 0"
+                                class="text-xs text-slate/50"
+                                aria-hidden="true"
+                                >/</span
+                            >
+                            <Link
+                                v-if="item.href"
+                                :href="item.href"
+                                :headers="authHeaders()"
+                                class="truncate text-slate transition hover:text-brand"
+                            >
+                                {{ item.label }}
+                            </Link>
+                            <span v-else class="truncate text-ink">
+                                {{ item.label }}
+                            </span>
+                        </li>
+                    </ol>
+                    <p class="sr-only">{{ pageHeading }}</p>
+                </nav>
+                <div class="flex shrink-0 flex-wrap items-center gap-2">
                     <button
                         type="button"
-                        class="bank-button bank-button-primary"
+                        class="bank-button bank-button-primary min-h-9 px-3.5 py-2 text-xs"
                         :disabled="loading || busy !== ''"
                         @click="refreshAll"
                     >
                         {{ loading ? 'Refreshing...' : 'Refresh' }}
                     </button>
                 </div>
-            </header>
+            </div>
 
             <div
                 v-if="notice"
