@@ -56,6 +56,7 @@ export function createNgweLweEcho(token: string | null): NgweLweEcho | null {
         wssPort: Number(import.meta.env.VITE_REVERB_PORT || 443),
         forceTLS: import.meta.env.VITE_REVERB_SCHEME === 'https',
         enabledTransports: ['ws', 'wss'],
+        disableStats: true,
         authEndpoint: '/broadcasting/auth',
         auth: {
             headers: token
