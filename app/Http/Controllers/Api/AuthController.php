@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SetPinRequest;
+use App\Http\Requests\ChangePasswordRequest;
 use App\Repositories\UserRepository;
 use App\Services\NgweLweTokenService;
 use Illuminate\Http\JsonResponse;
@@ -54,6 +55,19 @@ class AuthController extends Controller
         $user->save();
 
         return response()->json(['message' => 'PIN updated']);
+    }
+
+    public function changePassword(ChangePasswordRequest $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! Hash::check($request->validated()['current_password'], (string) $user->password)) {
+            return response()->json(['message' => 'Current password is incorrect.'], 422);
+        }
+
+        $this->users->update($user, ['password' => $request->validated()['password']]);
+
+        return response()->json(['message' => 'Password updated. Please sign in again.']);
     }
 
     private function safeUser($user): array

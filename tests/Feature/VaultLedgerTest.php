@@ -29,7 +29,7 @@ class VaultLedgerTest extends TestCase
     public function test_vault_balance_reflects_vault_in_minus_vault_out(): void
     {
         $vault = app(CashDenominationRepository::class);
-        $owner = $this->userWithRole('owner');
+        $owner = $this->userWithRole('admin');
 
         $vault->recordBulk('vault_in', [10_000 => 5, 5_000 => 4], $owner->id);
         $vault->recordBulk('vault_out', [10_000 => 2], $owner->id);
@@ -46,7 +46,7 @@ class VaultLedgerTest extends TestCase
     public function test_recording_vault_out_that_would_go_negative_throws(): void
     {
         $vault = app(CashDenominationRepository::class);
-        $owner = $this->userWithRole('owner');
+        $owner = $this->userWithRole('admin');
 
         $vault->recordBulk('vault_in', [10_000 => 2], $owner->id);
 
@@ -59,7 +59,7 @@ class VaultLedgerTest extends TestCase
     {
         $vault = app(CashDenominationRepository::class);
         $cashier = $this->userWithRole('cashier');
-        $employee = $this->userWithRole('employee', 'emp');
+        $employee = $this->userWithRole('teller', 'emp');
 
         $vault->recordBulk('vault_in', [10_000 => 10, 5_000 => 10], $cashier->id);
 
@@ -84,7 +84,7 @@ class VaultLedgerTest extends TestCase
     public function test_float_issue_fails_when_vault_stock_is_insufficient(): void
     {
         $cashier = $this->userWithRole('cashier');
-        $employee = $this->userWithRole('employee', 'emp');
+        $employee = $this->userWithRole('teller', 'emp');
 
         // Only stock 1x10k — issuing 2x10k must reject.
         app(CashDenominationRepository::class)
@@ -103,7 +103,7 @@ class VaultLedgerTest extends TestCase
     {
         $vault = app(CashDenominationRepository::class);
         $cashier = $this->userWithRole('cashier');
-        $employee = $this->userWithRole('employee', 'emp');
+        $employee = $this->userWithRole('teller', 'emp');
         $this->setPin($cashier, '9999');
         $this->setPin($employee, '1234');
 
@@ -127,7 +127,7 @@ class VaultLedgerTest extends TestCase
 
     public function test_vault_balance_endpoint_returns_totals(): void
     {
-        $owner = $this->userWithRole('owner');
+        $owner = $this->userWithRole('admin');
         $ownerToken = app(NgweLweTokenService::class)->create($owner);
 
         app(CashDenominationRepository::class)->recordBulk(
@@ -148,8 +148,8 @@ class VaultLedgerTest extends TestCase
     public function test_vault_inventory_endpoint_shows_open_floats(): void
     {
         $cashier = $this->userWithRole('cashier');
-        $employee = $this->userWithRole('employee', 'emp');
-        $ownerToken = app(NgweLweTokenService::class)->create($this->userWithRole('owner'));
+        $employee = $this->userWithRole('teller', 'emp');
+        $ownerToken = app(NgweLweTokenService::class)->create($this->userWithRole('admin'));
 
         app(CashDenominationRepository::class)->recordBulk(
             'vault_in',
@@ -181,10 +181,10 @@ class VaultLedgerTest extends TestCase
     public function test_closed_floats_do_not_appear_in_inventory(): void
     {
         $cashier = $this->userWithRole('cashier');
-        $employee = $this->userWithRole('employee', 'emp');
+        $employee = $this->userWithRole('teller', 'emp');
         $this->setPin($cashier, '9999');
         $this->setPin($employee, '1234');
-        $ownerToken = app(NgweLweTokenService::class)->create($this->userWithRole('owner'));
+        $ownerToken = app(NgweLweTokenService::class)->create($this->userWithRole('admin'));
 
         app(CashDenominationRepository::class)->recordBulk(
             'vault_in',

@@ -27,9 +27,16 @@ class TransactionResource extends JsonResource
             'change_denominations' => is_array($this->change_denominations)
                 ? (object) $this->change_denominations
                 : $this->change_denominations,
+            'received_denominations' => is_array($this->received_denominations)
+                ? (object) $this->received_denominations
+                : $this->received_denominations,
+            'handoff_denominations' => is_array($this->handoff_denominations)
+                ? (object) $this->handoff_denominations
+                : $this->handoff_denominations,
             'currency' => $this->currency,
             'exchange_rate' => $this->exchange_rate,
             'fee_account_id' => $this->fee_account_id,
+            'fee_payment_method' => $this->fee_payment_method,
             'screenshot_path' => $this->screenshot_path,
             'note' => $this->note,
             'created_by' => $this->created_by,

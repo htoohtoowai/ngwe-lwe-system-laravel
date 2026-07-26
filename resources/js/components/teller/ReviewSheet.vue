@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useLocale } from '@/lib/i18n'
 import MoneyText from './MoneyText.vue'
 
 export interface ReviewLine {
@@ -17,6 +18,8 @@ defineProps<{
   busy?: boolean
 }>()
 
+const { t } = useLocale()
+
 const emit = defineEmits<{ confirm: []; close: [] }>()
 </script>
 
@@ -25,7 +28,7 @@ const emit = defineEmits<{ confirm: []; close: [] }>()
        @keydown.esc="emit('close')">
     <div class="w-full rounded-t-2xl border border-ink-800 bg-white shadow-2xl sm:max-w-md sm:rounded-counter">
       <header class="border-b border-paper-edge px-5 py-4">
-        <p class="field-label">Check before you commit</p>
+        <p class="field-label">{{ t('component.checkBeforeCommit') }}</p>
         <h2 class="mt-0.5 font-display text-lg font-semibold text-ink-900">{{ title }}</h2>
       </header>
 
@@ -46,11 +49,11 @@ const emit = defineEmits<{ confirm: []; close: [] }>()
       <footer class="flex gap-2 border-t border-paper-edge px-5 py-3">
         <button type="button" @click="emit('close')"
                 class="flex-1 rounded-counter border border-paper-edge py-3 text-sm font-medium text-ink-800 transition hover:border-ink-700">
-          Back to edit
+          {{ t('common.backToEdit') }}
         </button>
         <button type="button" :disabled="busy" @click="emit('confirm')"
                 class="flex-1 rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110 disabled:opacity-40">
-          {{ busy ? 'Recording...' : confirmLabel }}
+          {{ busy ? t('common.recording') : confirmLabel }}
         </button>
       </footer>
     </div>

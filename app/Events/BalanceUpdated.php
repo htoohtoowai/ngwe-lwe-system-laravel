@@ -19,7 +19,7 @@ class BalanceUpdated implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return $this->roleChannels(['owner', 'cashier', 'employee']);
+        return $this->roleChannels(['admin', 'cashier', 'teller']);
     }
 
     public function broadcastAs(): string

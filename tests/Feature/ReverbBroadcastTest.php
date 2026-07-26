@@ -35,7 +35,7 @@ class ReverbBroadcastTest extends TestCase
 
     public function test_pending_cash_in_broadcasts_transaction_pending_and_balance_events(): void
     {
-        [, $ownerToken] = $this->userWithToken('owner');
+        [$owner, $ownerToken] = $this->userWithToken('admin');
         [$account, $serviceType] = $this->accountWithBalance(50_000);
         $this->fixedTier($serviceType->id, feeDeposit: 500);
 
@@ -47,6 +47,7 @@ class ReverbBroadcastTest extends TestCase
                 'amount' => 10_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
+                'received_denominations' => [10_000 => 1],
             ])
             ->assertCreated()
             ->json('data.id');
@@ -61,7 +62,7 @@ class ReverbBroadcastTest extends TestCase
 
     public function test_completed_transaction_creates_broadcast_new_transaction_and_balance_events(): void
     {
-        [, $ownerToken] = $this->userWithToken('owner');
+        [$owner, $ownerToken] = $this->userWithToken('admin');
         [$source, $serviceType] = $this->accountWithBalance(100_000, 'Source');
         $target = Account::query()->create([
             'service_type_id' => $serviceType->id,
@@ -70,6 +71,7 @@ class ReverbBroadcastTest extends TestCase
             'balance' => 5_000,
         ]);
         $this->fixedTier($serviceType->id, feeDeposit: 300, feeWithdraw: 700);
+        $this->seedVaultBalance([10_000 => 1], $owner);
         $this->exchangeRate();
 
         Event::fake([BalanceUpdated::class, CashInPending::class, NewTransaction::class]);
@@ -80,6 +82,7 @@ class ReverbBroadcastTest extends TestCase
                 'amount' => 10_000,
                 'customer_name' => 'Cash Out',
                 'customer_phone' => '09',
+                'denominations' => [10_000 => 1],
             ])
             ->assertCreated();
 
@@ -106,7 +109,7 @@ class ReverbBroadcastTest extends TestCase
 
     public function test_cash_in_confirm_cancel_and_balance_adjust_broadcast_balance_updates(): void
     {
-        [, $ownerToken] = $this->userWithToken('owner');
+        [, $ownerToken] = $this->userWithToken('admin');
         [, $cashierToken] = $this->userWithToken('cashier');
         [$account, $serviceType] = $this->accountWithBalance(100_000);
         $this->fixedTier($serviceType->id);
@@ -187,8 +190,8 @@ class ReverbBroadcastTest extends TestCase
 
     public function test_owner_broadcast_test_endpoint_dispatches_ping(): void
     {
-        [, $ownerToken] = $this->userWithToken('owner');
-        [, $employeeToken] = $this->userWithToken('employee');
+        [, $ownerToken] = $this->userWithToken('admin');
+        [, $employeeToken] = $this->userWithToken('teller');
 
         Event::fake([BroadcastPing::class]);
 
@@ -214,6 +217,7 @@ class ReverbBroadcastTest extends TestCase
                 'amount' => $amount,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
+                'received_denominations' => [$amount => 1],
             ])
             ->assertCreated()
             ->json('data.id');
@@ -238,7 +242,7 @@ class ReverbBroadcastTest extends TestCase
     {
         return User::factory()->create([
             'username' => $prefix.'_'.uniqid('', true),
-            'role' => 'employee',
+            'role' => 'teller',
             'is_active' => true,
             'password' => Hash::make('password123'),
         ]);

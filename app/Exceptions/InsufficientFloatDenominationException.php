@@ -12,7 +12,7 @@ class InsufficientFloatDenominationException extends RuntimeException
         public readonly int $requested,
     ) {
         parent::__construct(
-            "Insufficient {$denomination} MMK notes on employee float. "
+            "Insufficient {$denomination} MMK notes on Teller float. "
             ."Available: {$available}, Requested: {$requested}."
         );
     }

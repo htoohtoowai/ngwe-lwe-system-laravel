@@ -8,8 +8,9 @@ import MoneyText from '@/components/teller/MoneyText.vue'
 import ReceiptSlip from '@/components/teller/ReceiptSlip.vue'
 import ReviewSheet from '@/components/teller/ReviewSheet.vue'
 import type {ReviewLine} from '@/components/teller/ReviewSheet.vue';
-import EmployeeLayout from '@/layouts/EmployeeLayout.vue'
+import TellerLayout from '@/layouts/TellerLayout.vue'
 import { readStoredToken } from '@/lib/auth-token'
+import { useLocale } from '@/lib/i18n'
 
 type TellerAccount = { id: number; name: string; company: string; balance: string }
 type TellerFloat = { id: number; status: string; current_balance: string } | null
@@ -30,17 +31,18 @@ const props = defineProps<{
   floatStock: Record<number, number>
   accounts: TellerAccount[]
   fee: string
+  rate: { buy_rate: string; sell_rate: string }
   completed?: CompletedTxn | null
 }>()
 
 const accountId = ref<number | null>(null)
 const amount = ref<number>(0)
-const customerName = ref('')
-const customerPhone = ref('')
+const currency = ref<'MMK' | 'THB'>('MMK')
 const payout = ref<Record<number, number>>({})
 const reviewing = ref(false)
 const submitting = ref(false)
 const errors = ref<Record<string, string>>({})
+const { t } = useLocale()
 
 const activeFloat = computed(() => props.float?.status === 'ACTIVE')
 const feeNum = computed(() => Number(props.fee ?? 0))
@@ -52,8 +54,6 @@ const ready = computed(() =>
   activeFloat.value &&
   accountId.value !== null &&
   amount.value > 0 &&
-  customerName.value.trim() !== '' &&
-  customerPhone.value.trim() !== '' &&
   !shortFloat.value &&
   payoutTotal.value === amount.value,
 )
@@ -69,10 +69,11 @@ watch([amount, accountId], ([a, acc]) => {
 })
 
 const reviewLines = computed<ReviewLine[]>(() => [
-  { label: 'Cash paid to customer', value: payoutTotal.value, signed: 'debit' },
-  { label: 'Fee from commission tier', value: feeNum.value },
-  { label: 'Account credited', value: (amount.value || 0) + feeNum.value, signed: 'credit', emphasize: true },
-  { label: 'Your float after payout', value: floatBalance.value - payoutTotal.value },
+  { label: t('transaction.countedMovement'), value: payoutTotal.value, signed: 'debit' },
+  { label: `${t('transaction.fee')} (${t('transaction.commissionTier')})`, value: feeNum.value },
+  { label: `${t('transaction.direction')} ${currency.value}`, value: amount.value || 0 },
+  { label: t('transaction.accountCredited'), value: amount.value || 0, signed: 'credit', emphasize: true },
+  { label: t('transaction.floatAfterExchange'), value: floatBalance.value - payoutTotal.value },
 ])
 
 function authHeaders(): Record<string, string> {
@@ -89,12 +90,11 @@ function submit() {
   submitting.value = true
   errors.value = {}
 
-  router.post('/employee/transactions/cash-out', {
+  router.post('/teller/transactions/exchange', {
     _token: csrfToken(),
     account_id: accountId.value,
     amount: amount.value,
-    customer_name: customerName.value,
-    customer_phone: customerPhone.value,
+    currency: currency.value,
     denominations: payout.value,
   }, {
     headers: authHeaders(),
@@ -107,54 +107,59 @@ function submit() {
 </script>
 
 <template>
-  <EmployeeLayout :float="float">
+  <TellerLayout :float="float">
     <template v-if="completed">
       <header class="mb-6 text-center">
-        <h1 class="font-display text-2xl font-semibold tracking-tight">Cash Out completed</h1>
-        <p class="mt-1 text-sm text-ink-700/70">Count the notes across the counter with the customer watching.</p>
+        <h1 class="font-display text-2xl font-semibold tracking-tight">{{ t('transaction.exchange') }} ပြီးပါပြီ</h1>
+        <p class="mt-1 text-sm text-ink-700/70">{{ t('transaction.completedHint') }}</p>
       </header>
-      <ReceiptSlip :txn="completed" next-href="/employee/cash-out" next-label="Next Cash Out" />
+      <ReceiptSlip :txn="completed" next-href="/teller/exchange" :next-label="t('transaction.exchange')" />
     </template>
 
     <template v-else>
       <header class="mb-5">
-        <h1 class="font-display text-2xl font-semibold tracking-tight">Cash Out</h1>
+        <h1 class="font-display text-2xl font-semibold tracking-tight">{{ t('transaction.exchange') }}</h1>
         <p class="mt-1 text-sm text-ink-700/70">
-          Pay the customer from your float. The account is credited the moment the notes are counted out.
+          {{ t('transaction.exchangeDescription') }}
         </p>
       </header>
 
       <div class="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <div class="space-y-5">
           <section class="rounded-counter border border-paper-edge bg-white p-5">
-            <div class="grid gap-5 sm:grid-cols-2">
-              <div class="sm:col-span-2">
-                <AccountPicker v-model="accountId" :accounts="accounts" label="Account to credit" />
-              </div>
-              <div class="sm:col-span-2">
-                <AmountField v-model="amount" label="Cash to pay out" />
+            <div class="grid gap-5">
+              <AccountPicker v-model="accountId" :accounts="accounts" :label="t('transaction.exchangeAccount')" />
+              <AmountField v-model="amount" :label="t('transaction.cashToExchange')" />
+              <div>
+                <p class="field-label">{{ t('transaction.direction') }}</p>
+                <div class="mt-1.5 grid grid-cols-2 overflow-hidden rounded-counter border border-paper-edge">
+                  <button
+                    type="button"
+                    class="px-3 py-2.5 text-sm font-semibold"
+                    :class="currency === 'MMK' ? 'bg-ink-900 text-white' : 'bg-white text-ink-800'"
+                    @click="currency = 'MMK'"
+                  >
+                    {{ t('transaction.mmkToThb') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="border-l border-paper-edge px-3 py-2.5 text-sm font-semibold"
+                    :class="currency === 'THB' ? 'bg-ink-900 text-white' : 'bg-white text-ink-800'"
+                    @click="currency = 'THB'"
+                  >
+                    {{ t('transaction.thbToMmk') }}
+                  </button>
+                </div>
               </div>
               <div>
-                <label class="field-label" for="name">Customer name</label>
-                <input id="name" v-model="customerName" class="field-input mt-1.5" />
-              </div>
-              <div>
-                <label class="field-label" for="phone">Customer phone</label>
-                <input id="phone" v-model="customerPhone" class="field-input mt-1.5" />
-              </div>
-              <div class="sm:col-span-2">
-                <p class="field-label">Fee from commission tier</p>
+                <p class="field-label">{{ t('transaction.fee') }} ({{ t('transaction.commissionTier') }})</p>
                 <p class="field-input money mt-1.5 bg-paper text-lg text-ink-700">{{ feeNum.toLocaleString() }}</p>
-                <p class="mt-1 text-xs text-ink-700/55">
-                  Set by commission tiers and MMK rounding rules. It cannot be edited here.
-                </p>
               </div>
             </div>
           </section>
 
           <p v-if="shortFloat" class="rounded-counter border border-debit/30 bg-debit/5 px-4 py-2.5 text-sm text-debit">
-            Your float holds <MoneyText :value="floatBalance" class="font-semibold" />. Reduce the amount or ask the
-            cashier for a top-up.
+            {{ t('transaction.floatShort') }}
           </p>
 
           <DenominationDrawer
@@ -162,30 +167,29 @@ function submit() {
             :notes="notes"
             :target="amount || 0"
             :stock="floatStock"
-            label="Notes counted out to customer"
+            :label="t('transaction.countedMovement')"
           />
         </div>
 
         <aside class="h-fit rounded-counter border border-ink-800 bg-ink-900 p-5 text-ink-100 lg:sticky lg:top-24">
-          <h2 class="font-display text-sm font-semibold uppercase tracking-[0.14em] text-ink-300">Slip</h2>
+          <h2 class="font-display text-sm font-semibold uppercase tracking-[0.14em] text-ink-300">{{ t('transaction.slip') }}</h2>
           <dl class="mt-4 space-y-3 text-sm">
-            <div class="flex justify-between"><dt class="text-ink-300">Paid to customer</dt><dd><MoneyText :value="payoutTotal" /></dd></div>
-            <div class="flex justify-between"><dt class="text-ink-300">Fee</dt><dd><MoneyText :value="feeNum" /></dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">{{ t('transaction.sellRate') }}</dt><dd class="money">{{ rate.sell_rate }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">{{ t('transaction.buyRate') }}</dt><dd class="money">{{ rate.buy_rate }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">{{ t('transaction.direction') }}</dt><dd>{{ currency }}</dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">{{ t('transaction.countedMovement') }}</dt><dd><MoneyText :value="payoutTotal" /></dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">{{ t('transaction.fee') }}</dt><dd><MoneyText :value="feeNum" /></dd></div>
             <div class="flex justify-between border-t border-ink-800 pt-3">
-              <dt class="font-semibold">Account credited</dt>
-              <dd class="font-semibold"><MoneyText :value="(amount || 0) + feeNum" signed="credit" /></dd>
+              <dt class="font-semibold">{{ t('transaction.accountCredited') }}</dt>
+              <dd class="font-semibold"><MoneyText :value="amount || 0" signed="credit" /></dd>
             </div>
-            <div class="flex justify-between"><dt class="text-ink-300">Float after payout</dt>
-              <dd><MoneyText :value="floatBalance - payoutTotal" /></dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">{{ t('transaction.floatAfterExchange') }}</dt><dd><MoneyText :value="floatBalance - payoutTotal" /></dd></div>
           </dl>
 
           <button type="button" :disabled="!ready" @click="reviewing = true"
                   class="mt-5 w-full rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-35">
-            Review slip
+            {{ t('common.reviewSlip') }}
           </button>
-          <p class="mt-2.5 text-center text-[11px] leading-relaxed text-ink-300">
-            Cash Out completes immediately on confirm. No cashier step.
-          </p>
           <p v-for="(msg, key) in errors" :key="key" class="mt-2 text-sm text-debit">{{ msg }}</p>
         </aside>
       </div>
@@ -193,13 +197,13 @@ function submit() {
       <ReviewSheet
         :open="reviewing"
         :busy="submitting"
-        title="Cash Out"
+        :title="t('transaction.exchange')"
         :lines="reviewLines"
-        confirm-label="Pay out cash"
-        consequence="On confirm, the account is credited and these exact notes are deducted from your float."
+        :confirm-label="t('transaction.confirmExchange')"
+        :consequence="t('transaction.exchangeConsequence')"
         @confirm="submit"
         @close="reviewing = false"
       />
     </template>
-  </EmployeeLayout>
+  </TellerLayout>
 </template>

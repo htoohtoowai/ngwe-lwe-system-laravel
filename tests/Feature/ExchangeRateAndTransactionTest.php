@@ -28,7 +28,7 @@ class ExchangeRateAndTransactionTest extends TestCase
 
     public function test_owner_can_create_and_update_exchange_rate(): void
     {
-        [, $token] = $this->userWithToken('owner');
+        [, $token] = $this->userWithToken('admin');
 
         $rateId = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/exchange-rates', [
@@ -56,7 +56,7 @@ class ExchangeRateAndTransactionTest extends TestCase
 
     public function test_employee_cannot_create_exchange_rate(): void
     {
-        [, $employeeToken] = $this->userWithToken('employee');
+        [, $employeeToken] = $this->userWithToken('teller');
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/exchange-rates', [
@@ -71,7 +71,7 @@ class ExchangeRateAndTransactionTest extends TestCase
 
     public function test_latest_endpoint_returns_placeholder_when_no_rate_stored(): void
     {
-        [, $token] = $this->userWithToken('employee');
+        [, $token] = $this->userWithToken('teller');
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->getJson('/api/exchange-rates/latest?base=THB&quote=MMK')
@@ -84,7 +84,7 @@ class ExchangeRateAndTransactionTest extends TestCase
 
     public function test_latest_endpoint_returns_stored_rate(): void
     {
-        [, $token] = $this->userWithToken('employee');
+        [, $token] = $this->userWithToken('teller');
 
         ExchangeRate::query()->create([
             'base_currency' => 'THB',
@@ -103,7 +103,7 @@ class ExchangeRateAndTransactionTest extends TestCase
 
     public function test_exchange_transaction_credits_account_and_uses_sell_rate_for_mmk(): void
     {
-        [, $token] = $this->userWithToken('owner');
+        [, $token] = $this->userWithToken('admin');
         [$account, $serviceType] = $this->accountWithBalance(0);
         $this->fixedTier($serviceType->id, feeDeposit: 300);
 
@@ -133,7 +133,7 @@ class ExchangeRateAndTransactionTest extends TestCase
 
     public function test_exchange_transaction_uses_buy_rate_for_thb(): void
     {
-        [, $token] = $this->userWithToken('owner');
+        [, $token] = $this->userWithToken('admin');
         [$account, $serviceType] = $this->accountWithBalance(0);
         $this->fixedTier($serviceType->id);
 
@@ -158,7 +158,7 @@ class ExchangeRateAndTransactionTest extends TestCase
 
     public function test_exchange_transaction_respects_base_amount_divisor(): void
     {
-        [, $token] = $this->userWithToken('owner');
+        [, $token] = $this->userWithToken('admin');
         [$account, $serviceType] = $this->accountWithBalance(0);
         $this->fixedTier($serviceType->id);
 
@@ -182,7 +182,7 @@ class ExchangeRateAndTransactionTest extends TestCase
 
     public function test_exchange_rejects_when_no_rate_stored(): void
     {
-        [, $token] = $this->userWithToken('owner');
+        [, $token] = $this->userWithToken('admin');
         [$account, $serviceType] = $this->accountWithBalance(0);
         $this->fixedTier($serviceType->id);
 
@@ -197,7 +197,7 @@ class ExchangeRateAndTransactionTest extends TestCase
 
     public function test_exchange_rejects_unsupported_currency(): void
     {
-        [, $token] = $this->userWithToken('owner');
+        [, $token] = $this->userWithToken('admin');
         [$account, $serviceType] = $this->accountWithBalance(0);
         $this->fixedTier($serviceType->id);
 

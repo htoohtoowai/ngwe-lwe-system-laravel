@@ -5,9 +5,10 @@ import DenominationDrawer from '@/components/teller/DenominationDrawer.vue'
 import MoneyText from '@/components/teller/MoneyText.vue'
 import PinSeal from '@/components/teller/PinSeal.vue'
 import StateChip from '@/components/teller/StateChip.vue'
-import EmployeeLayout from '@/layouts/EmployeeLayout.vue'
+import BankLayout from '@/layouts/BankLayout.vue'
 import { apiRequest } from '@/lib/api'
 import { readStoredToken } from '@/lib/auth-token'
+import { useLocale } from '@/lib/i18n'
 
 type TellerFloat = { id: number; status: string; current_balance: string } | null
 
@@ -33,6 +34,7 @@ const countMatches = computed(() =>
 const returnTotal = computed(() => props.notes.reduce((s, n) => s + n * (returning.value[n] ?? 0), 0))
 const expectedReturn = computed(() => Number(props.float?.current_balance ?? 0))
 const returnMatches = computed(() => returnTotal.value === expectedReturn.value)
+const { t } = useLocale()
 
 function open(kind: 'receive' | 'return') {
   intent.value = kind
@@ -85,52 +87,52 @@ async function confirm(pin: string) {
 </script>
 
 <template>
-  <EmployeeLayout :float="float">
+  <BankLayout role="teller">
     <header class="mb-5 flex items-start justify-between">
       <div>
-        <h1 class="font-display text-2xl font-semibold tracking-tight">My float</h1>
-        <p class="mt-1 text-sm text-ink-700/70">Cash you are personally accountable for until the cashier signs it back in.</p>
+        <h1 class="font-display text-2xl font-semibold tracking-tight">{{ t('teller.float') }}</h1>
+        <p class="mt-1 text-sm text-ink-700/70">{{ t('teller.floatDescription') }}</p>
       </div>
       <StateChip :status="status" />
     </header>
 
     <div v-if="!float || status === 'CLOSED'"
          class="rounded-counter border border-dashed border-paper-edge bg-white px-6 py-16 text-center">
-      <p class="font-display text-lg font-semibold">No float issued</p>
+      <p class="font-display text-lg font-semibold">{{ t('teller.noFloat') }}</p>
       <p class="mx-auto mt-1.5 max-w-sm text-sm text-ink-700/70">
-        Ask the cashier to issue one. It will appear here to be counted, and the counter opens as soon as you receive it.
+        {{ t('teller.askCashier') }}
       </p>
     </div>
 
     <div v-else-if="status === 'PENDING_RECEIPT'" class="grid gap-6 lg:grid-cols-[1fr_20rem]">
       <div class="space-y-4">
         <div class="rounded-counter border border-held/30 bg-held/5 px-4 py-3 text-sm text-held">
-          The cashier issued <MoneyText :value="issuedTotal" class="font-semibold" />. Count every note yourself.
+          {{ t('teller.countIssued') }}
         </div>
         <DenominationDrawer
           v-model="counted"
           :notes="notes"
           :target="issuedTotal"
           :expected="issued"
-          label="Count the notes you were handed"
+            :label="t('component.notesCounted')"
         />
       </div>
 
       <aside class="h-fit rounded-counter border border-ink-800 bg-ink-900 p-5 text-ink-100 lg:sticky lg:top-24">
-        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.14em] text-ink-300">Receipt</h2>
+        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.14em] text-ink-300">{{ t('teller.receipt') }}</h2>
         <dl class="mt-4 space-y-3 text-sm">
-          <div class="flex justify-between"><dt class="text-ink-300">Issued</dt><dd><MoneyText :value="issuedTotal" /></dd></div>
+          <div class="flex justify-between"><dt class="text-ink-300">{{ t('teller.issued') }}</dt><dd><MoneyText :value="issuedTotal" /></dd></div>
           <div class="flex justify-between">
-            <dt class="text-ink-300">Your count</dt>
+            <dt class="text-ink-300">{{ t('teller.youCounted') }}</dt>
             <dd><MoneyText :value="notes.reduce((s, n) => s + n * (counted[n] ?? 0), 0)" /></dd>
           </div>
         </dl>
         <p v-if="!countMatches" class="mt-3 text-xs leading-relaxed text-held">
-          Quantities must match the cashier's note-for-note, not just in total.
+          {{ t('teller.countMatch') }}
         </p>
         <button type="button" :disabled="!countMatches" @click="open('receive')"
                 class="mt-5 w-full rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110 disabled:opacity-35">
-          Receive float with PIN
+          {{ t('teller.receiveFloatPin') }}
         </button>
       </aside>
     </div>
@@ -141,29 +143,28 @@ async function confirm(pin: string) {
         :notes="notes"
         :target="expectedReturn"
         :stock="onHand"
-        label="Count the cash you are handing back"
+        :label="t('component.notesCounted')"
       />
       <aside class="h-fit rounded-counter border border-ink-800 bg-ink-900 p-5 text-ink-100 lg:sticky lg:top-24">
-        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.14em] text-ink-300">Return</h2>
+        <h2 class="font-display text-sm font-semibold uppercase tracking-[0.14em] text-ink-300">{{ t('teller.return') }}</h2>
         <dl class="mt-4 space-y-3 text-sm">
-          <div class="flex justify-between"><dt class="text-ink-300">System says on hand</dt><dd><MoneyText :value="expectedReturn" /></dd></div>
-          <div class="flex justify-between"><dt class="text-ink-300">You counted</dt><dd><MoneyText :value="returnTotal" /></dd></div>
+          <div class="flex justify-between"><dt class="text-ink-300">{{ t('teller.systemOnHand') }}</dt><dd><MoneyText :value="expectedReturn" /></dd></div>
+          <div class="flex justify-between"><dt class="text-ink-300">{{ t('teller.youCounted') }}</dt><dd><MoneyText :value="returnTotal" /></dd></div>
         </dl>
         <p class="mt-3 text-xs leading-relaxed text-ink-300">
-          Once returned, the counter closes until a new float is issued.
+          {{ t('teller.returnCloses') }}
         </p>
         <button type="button" :disabled="!returnMatches" @click="open('return')"
                 class="mt-5 w-full rounded-counter border border-seal py-3 text-sm font-semibold text-seal transition hover:bg-seal hover:text-ink-950 disabled:opacity-35">
-          Hand back to cashier
+          {{ t('teller.handBackCashier') }}
         </button>
       </aside>
     </div>
 
     <div v-else class="rounded-counter border border-paper-edge bg-white px-6 py-16 text-center">
-      <p class="font-display text-lg font-semibold">Waiting for the cashier to confirm</p>
+      <p class="font-display text-lg font-semibold">{{ t('teller.waitingCashier') }}</p>
       <p class="mx-auto mt-1.5 max-w-sm text-sm text-ink-700/70">
-        You handed back <MoneyText :value="expectedReturn" class="font-semibold" />. When the cashier confirms with
-        their PIN, the vault is credited and this float closes.
+        {{ t('teller.waitingCashier') }}
       </p>
     </div>
 
@@ -171,10 +172,10 @@ async function confirm(pin: string) {
       :open="pinOpen"
       :busy="pinBusy"
       :error="pinError"
-      :title="intent === 'receive' ? 'Confirm you counted the float' : 'Confirm the cash you are returning'"
-      :detail="intent === 'receive' ? 'Your PIN records that the notes match.' : 'Your PIN records the return count.'"
+      :title="intent === 'receive' ? t('teller.confirmCount') : t('teller.confirmReturn')"
+      :detail="intent === 'receive' ? t('teller.pinCount') : t('teller.pinReturn')"
       @confirm="confirm"
       @close="pinOpen = false"
     />
-  </EmployeeLayout>
+  </BankLayout>
 </template>

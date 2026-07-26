@@ -26,7 +26,7 @@ use Inertia\Response;
 use InvalidArgumentException;
 use RuntimeException;
 
-class EmployeeController extends Controller
+class TellerController extends Controller
 {
     public function __construct(
         private readonly AccountRepository $accounts,
@@ -39,7 +39,7 @@ class EmployeeController extends Controller
 
     public function counter(Request $request): Response
     {
-        return Inertia::render('employee/Counter', [
+        return Inertia::render('teller/Counter', [
             'float' => $this->floatProp($request),
             'denominations' => $this->denominationRows($request),
             'today' => $this->today($request),
@@ -49,7 +49,7 @@ class EmployeeController extends Controller
 
     public function cashIn(Request $request): Response
     {
-        return Inertia::render('employee/CashIn', [
+        return Inertia::render('teller/CashIn', [
             'float' => $this->floatProp($request),
             'notes' => $this->notes(),
             'floatStock' => $this->onHand($request),
@@ -60,7 +60,7 @@ class EmployeeController extends Controller
 
     public function cashOut(Request $request): Response
     {
-        return Inertia::render('employee/CashOut', [
+        return Inertia::render('teller/CashOut', [
             'float' => $this->floatProp($request),
             'notes' => $this->notes(),
             'floatStock' => $this->onHand($request),
@@ -72,7 +72,7 @@ class EmployeeController extends Controller
 
     public function transfer(Request $request): Response
     {
-        return Inertia::render('employee/Transfer', [
+        return Inertia::render('teller/Transfer', [
             'float' => $this->floatProp($request),
             'notes' => $this->notes(),
             'floatStock' => $this->onHand($request),
@@ -86,7 +86,7 @@ class EmployeeController extends Controller
     {
         $rate = $this->exchangeRates->getLatest('THB', 'MMK');
 
-        return Inertia::render('employee/Exchange', [
+        return Inertia::render('teller/Exchange', [
             'float' => $this->floatProp($request),
             'notes' => $this->notes(),
             'floatStock' => $this->onHand($request),
@@ -102,7 +102,7 @@ class EmployeeController extends Controller
 
     public function floatPage(Request $request): Response
     {
-        return Inertia::render('employee/Float', [
+        return Inertia::render('teller/Float', [
             'float' => $this->floatProp($request),
             'notes' => $this->notes(),
             'issued' => $this->issued($request),

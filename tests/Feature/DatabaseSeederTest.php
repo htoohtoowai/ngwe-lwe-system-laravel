@@ -30,9 +30,9 @@ class DatabaseSeederTest extends TestCase
         $this->seed(DatabaseSeeder::class);
 
         foreach ([
-            'owner' => ['role' => 'owner', 'pin' => '1111'],
+            'admin' => ['role' => 'admin', 'pin' => '1111'],
             'cashier' => ['role' => 'cashier', 'pin' => '2222'],
-            'employee' => ['role' => 'employee', 'pin' => '3333'],
+            'teller' => ['role' => 'teller', 'pin' => '3333'],
         ] as $username => $expected) {
             $user = User::query()->where('username', $username)->firstOrFail();
 
@@ -84,7 +84,7 @@ class DatabaseSeederTest extends TestCase
         $this->seed(DatabaseSeeder::class);
         $this->seed(DatabaseSeeder::class);
 
-        $this->assertSame(3, User::query()->whereIn('username', ['owner', 'cashier', 'employee'])->count());
+        $this->assertSame(3, User::query()->whereIn('username', ['admin', 'cashier', 'teller'])->count());
         $this->assertSame(1, Company::query()->where('name', 'Demo Wave Money')->count());
 
         $company = Company::query()->where('name', 'Demo Wave Money')->firstOrFail();

@@ -14,6 +14,7 @@ use App\Services\CashFloatService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use App\Support\Money;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -31,7 +32,7 @@ class CashFloatController extends Controller
         $employeeId = $request->integer('employee_id') ?: null;
         $status = $request->string('status')->trim()->value() ?: null;
 
-        if ($user->role === 'employee') {
+        if ($user->role === 'teller') {
             $employeeId = $user->id;
         }
 
@@ -44,11 +45,30 @@ class CashFloatController extends Controller
     {
         $user = $request->user();
 
-        if ($user->role === 'employee' && $float->employee_id !== $user->id) {
+        if ($user->role === 'teller' && $float->employee_id !== $user->id) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
         return new CashFloatResource($float->load(['denominations', 'employee', 'issuer']));
+    }
+
+    public function denominations(Request $request, CashFloatAssignment $float): JsonResponse
+    {
+        if ($request->user()->role === 'teller' && $float->employee_id !== $request->user()->id) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        $balance = $this->repository->getDenominationBalance($float->id);
+
+        return response()->json([
+            'data' => [
+                'float_id' => $float->id,
+                'denominations' => collect(Money::supportedDenominations())
+                    ->mapWithKeys(fn (int $denomination): array => [(string) $denomination => (int) ($balance[$denomination] ?? 0)])
+                    ->all(),
+                'total' => Money::denominationTotal($balance),
+            ],
+        ]);
     }
 
     public function store(IssueCashFloatRequest $request): JsonResponse
@@ -70,7 +90,7 @@ class CashFloatController extends Controller
     public function activate(ActivateCashFloatRequest $request, CashFloatAssignment $float): CashFloatResource|JsonResponse
     {
         if ($float->employee_id !== $request->user()->id) {
-            return response()->json(['message' => "Float #{$float->id} does not belong to this employee."], 403);
+            return response()->json(['message' => "Float #{$float->id} does not belong to this Teller."], 403);
         }
 
         try {

@@ -108,9 +108,9 @@ Demo credentials:
 
 | Username | Password | PIN | Role |
 | --- | --- | --- | --- |
-| `owner` | `password123` | `1111` | Owner |
+| `admin` | `password123` | `1111` | Admin |
 | `cashier` | `password123` | `2222` | Cashier |
-| `employee` | `password123` | `3333` | Employee |
+| `teller` | `password123` | `3333` | Teller |
 
 ## Open The App
 

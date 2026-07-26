@@ -76,7 +76,7 @@ class EmployeeCashOutFloatTest extends TestCase
 
     public function test_employee_cash_out_rejects_when_no_active_float(): void
     {
-        $employee = $this->createUser('employee');
+        $employee = $this->createUser('teller');
         $employeeToken = app(NgweLweTokenService::class)->create($employee);
         [$account, $serviceType] = $this->accountWithServiceType();
         $this->fixedTier($serviceType->id);
@@ -132,11 +132,12 @@ class EmployeeCashOutFloatTest extends TestCase
         $this->assertSame('10000.00', $activeFloat->current_balance);
     }
 
-    public function test_owner_cash_out_still_works_without_denominations(): void
+    public function test_owner_cash_out_uses_main_vault_denominations(): void
     {
-        [, $ownerToken] = $this->userWithToken('owner');
+        [$owner, $ownerToken] = $this->userWithToken('admin');
         [$account, $serviceType] = $this->accountWithServiceType();
         $this->fixedTier($serviceType->id, feeWithdraw: 200);
+        app(CashDenominationRepository::class)->recordBulk('vault_in', [5_000 => 1], $owner->id);
 
         $this->withHeader('Authorization', 'Bearer '.$ownerToken)
             ->postJson('/api/transactions/cash-out', [
@@ -144,9 +145,31 @@ class EmployeeCashOutFloatTest extends TestCase
                 'amount' => 5_000,
                 'customer_name' => 'Owner Test',
                 'customer_phone' => '09',
+                'denominations' => [5_000 => 1],
             ])
             ->assertCreated()
             ->assertJsonPath('data.customer_fee', '200.00');
+    }
+
+    public function test_employee_can_only_draw_notes_from_own_float(): void
+    {
+        [$employeeA, $employeeAToken] = $this->activeEmployeeWithFloat([10_000 => 1]);
+        $this->activeEmployeeWithFloat([5_000 => 1]);
+        [$account, $serviceType] = $this->accountWithServiceType();
+        $this->fixedTier($serviceType->id);
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeAToken)
+            ->postJson('/api/transactions/cash-out', [
+                'account_id' => $account->id,
+                'amount' => 5_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'denominations' => [5_000 => 1],
+            ])
+            ->assertStatus(409);
+
+        $activeFloat = app(CashFloatRepository::class)->activeForEmployee($employeeA->id);
+        $this->assertSame('10000.00', $activeFloat->current_balance);
     }
 
     /**
@@ -156,7 +179,7 @@ class EmployeeCashOutFloatTest extends TestCase
     private function activeEmployeeWithFloat(array $denominations): array
     {
         $cashier = $this->createUser('cashier');
-        $employee = $this->createUser('employee');
+        $employee = $this->createUser('teller');
         $employee->pin_hash = Hash::make('1234');
         $employee->save();
         $employeeToken = app(NgweLweTokenService::class)->create($employee);

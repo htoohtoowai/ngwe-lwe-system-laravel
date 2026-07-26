@@ -23,7 +23,7 @@ class FloatStatusChanged implements ShouldBroadcastNow
     public function broadcastOn(): array
     {
         return [
-            ...$this->roleChannels(['owner', 'cashier']),
+            ...$this->roleChannels(['admin', 'cashier']),
             $this->userChannel($this->employeeId),
         ];
     }

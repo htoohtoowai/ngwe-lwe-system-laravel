@@ -143,7 +143,7 @@ class CommissionTierAndBalanceTest extends TestCase
 
         $owner = User::factory()->create([
             'username' => 'balance_owner',
-            'role' => 'owner',
+            'role' => 'admin',
             'is_active' => true,
             'password' => Hash::make('password123'),
         ]);
@@ -183,8 +183,8 @@ class CommissionTierAndBalanceTest extends TestCase
         ]);
 
         $employee = User::factory()->create([
-            'username' => 'employee_balance',
-            'role' => 'employee',
+            'username' => 'teller_balance',
+            'role' => 'teller',
             'is_active' => true,
             'password' => Hash::make('password123'),
         ]);

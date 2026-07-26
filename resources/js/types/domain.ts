@@ -1,4 +1,4 @@
-export type Role = 'owner' | 'cashier' | 'employee';
+export type Role = 'admin' | 'cashier' | 'teller';
 
 export type SessionUser = {
     id: number;
@@ -72,6 +72,10 @@ export type Transaction = {
     customer_phone: string | null;
     amount: string;
     customer_fee: string | null;
+    fee_payment_method?: string | null;
+    received_denominations?: DenominationMap | null;
+    handoff_denominations?: DenominationMap | null;
+    change_denominations?: DenominationMap | null;
     currency: string | null;
     exchange_rate: string | null;
     created_by: number | null;
@@ -131,6 +135,37 @@ export type VaultTransaction = {
     verified_by_name: string | null;
     note: string | null;
     created_at: string | null;
+};
+
+export type ActivityLog = {
+    id: number;
+    user_id: number;
+    action: string;
+    entity_type: string;
+    entity_id: number | null;
+    details: Record<string, unknown> | string | null;
+    created_at: string | null;
+    user?: {
+        username: string;
+        full_name: string | null;
+    } | null;
+};
+
+export type CommissionTier = {
+    id: number;
+    service_type_id: number;
+    amount_from: string;
+    amount_to: string;
+    fee_amount_type: 'FIXED' | 'PERCENTAGE';
+    fee_amount_deposit: string;
+    fee_amount_withdraw: string;
+    comm_type: 'FIXED' | 'PERCENTAGE';
+    comm_deposit: string;
+    comm_withdraw: string;
+    additional_fee_type: 'FIXED' | 'PERCENTAGE';
+    additional_fee_deposit_amount: string;
+    additional_fee_withdraw_amount: string;
+    is_active: boolean;
 };
 
 export type ReportDenominationRow = {

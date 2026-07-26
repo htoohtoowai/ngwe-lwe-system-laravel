@@ -8,25 +8,26 @@
 
 @theme {
   /* Brand red — the only saturated color on the page */
-  --color-brand: #e01b26;
-  --color-brand-deep: #b31219;
-  --color-brand-soft: #fdeaea;
+  --color-brand: #b31b2c;
+  --color-brand-deep: #8f1321;
+  --color-brand-soft: #fff0f2;
 
   /* Surfaces */
   --color-canvas: #f5f6f8;   /* page background */
   --color-card: #ffffff;
-  --color-mist: #f1f2f4;     /* filled inputs / chips */
-  --color-line: #e7e9ec;     /* hairline borders */
+  --color-mist: #f2f3f4;     /* filled inputs / chips */
+  --color-line: #e4e6e8;     /* hairline borders */
 
   /* Text */
   --color-ink: #17181a;
-  --color-slate: #6f7580;
+  --color-slate: #6f7277;
 
   /* Semantics */
   --color-balance: #16a34a;  /* positive money, per reference */
   --color-alert: #d92d20;
 
   --font-sans: "Inter", "Padauk", ui-sans-serif, system-ui, sans-serif;
+  --font-burmese: "Padauk", "Noto Sans Myanmar", "Myanmar Text", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
   --radius-field: 0.875rem;  /* inputs: softly rounded, not full pill */
@@ -38,6 +39,69 @@
   @apply w-full rounded-field border-2 border-transparent bg-mist px-4 py-3.5
          text-ink placeholder:text-slate/60 outline-none transition
          focus:border-brand focus:bg-white;
+}
+
+/* Bank-grade form primitives: calm hierarchy, explicit error/focus states,
+   and a consistent action rhythm across every workflow. */
+.bank-form-shell {
+  @apply rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-7;
+}
+
+.bank-form-section {
+  @apply rounded-2xl border border-line bg-card p-4 shadow-sm sm:p-5;
+}
+
+.bank-input:focus-visible,
+.bank-button:focus-visible,
+.bank-choice:focus-visible {
+  @apply outline-none ring-2 ring-brand/35 ring-offset-2 ring-offset-card;
+}
+
+.bank-input[aria-invalid="true"] {
+  @apply border-brand bg-brand-soft;
+}
+
+.bank-input:disabled,
+.bank-input[aria-disabled="true"] {
+  @apply cursor-not-allowed bg-mist/70 text-slate/70;
+}
+
+.bank-help {
+  @apply mt-1.5 text-xs leading-5 text-slate;
+}
+
+.bank-error {
+  @apply mt-1.5 flex items-start gap-2 text-xs font-semibold leading-5 text-brand;
+}
+
+.bank-required::after {
+  content: ' *';
+  @apply text-brand;
+}
+
+.bank-button {
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-pill px-5 py-3 text-sm font-bold transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-mist disabled:text-slate disabled:shadow-none;
+}
+
+.bank-button-primary {
+  @apply bg-ink text-white shadow-sm hover:bg-ink/85;
+}
+
+.bank-button-secondary {
+  @apply border border-line bg-card text-slate hover:border-ink hover:text-ink;
+}
+
+.bank-button-danger {
+  @apply border border-brand/25 bg-brand-soft text-brand hover:border-brand;
+}
+
+select.bank-input {
+  @apply appearance-none bg-mist;
+}
+
+/* Leading icons must not overlap the typed value. */
+.bank-input.bank-input-leading {
+  padding-left: 3rem;
 }
 
 .bank-label {

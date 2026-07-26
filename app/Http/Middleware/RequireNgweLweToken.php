@@ -19,7 +19,14 @@ class RequireNgweLweToken
         try {
             $user = $this->tokens->userFromBearer($request->header('Authorization'));
         } catch (AuthenticationException $e) {
-            return response()->json(['message' => $e->getMessage()], 401);
+            // API callers need the machine-readable auth error. Browser and
+            // Inertia visits must receive a redirect so Inertia never tries
+            // to render a plain JSON payload as a page response.
+            if ($request->is('api/*') || ($request->expectsJson() && ! $request->header('X-Inertia'))) {
+                return response()->json(['message' => $e->getMessage()], 401);
+            }
+
+            return redirect()->route('login');
         }
 
         $request->setUserResolver(fn () => $user);

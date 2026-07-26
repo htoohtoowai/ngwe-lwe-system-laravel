@@ -23,7 +23,7 @@ The earlier Flight/Telemetry direction was wrong and should not be continued.
 - Added tests for money normalization, MMK fee rounding, denomination totals, and schema expectations.
 - Removed wrong Flight/Telemetry active code.
 - Added Ngwe Lwe base models and repositories.
-- Added HMAC bearer token auth foundation with username login, active-user checks, `auth_version`, and owner/cashier/employee role middleware.
+- Added HMAC bearer token auth foundation with username login, active-user checks, `auth_version`, and admin/cashier/teller role middleware.
 - Added authenticated CRUD API modules for companies, service types, and accounts.
 - Added owner-only setup mutations, authenticated read endpoints, active-only listing by default, soft-deactivate delete behavior, and account filters.
 - Added JSON resources and Form Requests for setup API validation/output.
@@ -373,9 +373,9 @@ Completed in this slice:
 
 - Replaced the placeholder Laravel `DatabaseSeeder` user with
   deterministic Ngwe Lwe demo users:
-  - `owner` / `password123` / PIN `1111`
+  - `admin` / `password123` / PIN `1111`
   - `cashier` / `password123` / PIN `2222`
-  - `employee` / `password123` / PIN `3333`
+  - `teller` / `password123` / PIN `3333`
 - Seeded a demo Wave Money setup with Cash In, Cash Out, Transfer, and
   Exchange service types.
 - Seeded six demo accounts, including a fee account, without resetting
@@ -423,12 +423,12 @@ Completed in this slice:
 - Verified owner login and realtime ping in the operations console.
 - Verified cashier workflow:
   - Login as `cashier`.
-  - Issue float `#1` to employee `#3` for `40,000` MMK.
+  - Issue float `#1` to teller `#3` for `40,000` MMK.
   - Main vault changed from `4,135,000` to `4,095,000`.
   - Employee cash changed from `0` to `40,000`.
   - `float_status_changed` arrived without manual refresh.
-- Verified employee workflow:
-  - Login as `employee`.
+- Verified teller workflow:
+  - Login as `teller`.
   - Activate float `#1` with PIN `3333` and verified denominations
     `{"10000": 3, "5000": 2}`.
   - Float moved to `ACTIVE`, current balance `40,000`.
@@ -445,7 +445,7 @@ Notes:
 
 - The in-app browser uses one shared localStorage profile, so separate
   tabs cannot stay logged in as different users at the same time. Real
-  cashier/employee computers or separate browser profiles will have
+  cashier/teller computers or separate browser profiles will have
   separate tokens.
 
 Verification passed:

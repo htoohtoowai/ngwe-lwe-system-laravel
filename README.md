@@ -13,13 +13,13 @@ This project is the PHP Laravel/Vue/MySQL version of the existing Python PyQt6/F
 
 The product domain is money-transfer operations:
 
-- Owner, cashier, and employee roles.
+- Admin, cashier, and teller roles.
 - Companies and service types.
 - Accounts and balances.
 - Cash In, Cash Out, Transfer, and Exchange transactions.
 - Commission tiers and MMK fee rounding.
 - Exchange rates.
-- Main vault and employee cash float workflows.
+- Main vault and teller cash float workflows.
 - Cash denomination tracking.
 - Daily summary, reconciliation, reports, and activity logs.
 - Responsive desktop, tablet, and mobile UI.
@@ -40,74 +40,74 @@ Completed correct Ngwe Lwe Laravel foundation slices:
 - Added Ngwe Lwe base models and repositories.
 - Added HMAC bearer token auth foundation with username login, active-user checks, `auth_version`, and role middleware.
 - Added authenticated CRUD API modules for companies, service types, and accounts.
-- Added owner-only setup mutations and active-only listing by default.
+- Added admin-only setup mutations and active-only listing by default.
 - Added `CommissionTierRepository` and `TransactionFeeCalculator` for FIXED / PERCENTAGE commission and fee resolution, including MMK fee rounding.
 - Added `AccountRepository::debitBalance` with `InsufficientBalanceException` guard so cash-in / transfer flows cannot overdraw the source account.
-- Added owner-only `POST /api/accounts/{account}/balance-adjust` with `activity_logs` audit records via `App\Models\ActivityLog`.
+- Added admin-only `POST /api/accounts/{account}/balance-adjust` with `activity_logs` audit records via `App\Models\ActivityLog`.
 - Added `App\Repositories\TransactionRepository` and `App\Services\TransactionService` for cash-in, cash-out, and transfer flows, using the calculator, balance guard, and activity log.
 - Added money-movement API endpoints:
   - `GET /api/transactions`, `GET /api/transactions/recent`, `GET /api/transactions/{transaction}`.
   - `POST /api/transactions/cash-in` (pending cashier confirm), `POST /api/transactions/cash-out`, `POST /api/transactions/transfer`.
-  - Cashier / owner: `POST /api/transactions/{transaction}/confirm-cash-in`, `POST /api/transactions/{transaction}/cancel-cash-in`.
-  - `DELETE /api/transactions/{transaction}` — owner only, always 409 with the Python "hard delete disabled" guard.
-- Added `App\Models\ExchangeRate`, `App\Repositories\ExchangeRateRepository`, and CRUD endpoints under `/api/exchange-rates` (owner writes, authenticated reads, `/latest` placeholder for empty state).
+  - Cashier / admin: `POST /api/transactions/{transaction}/confirm-cash-in`, `POST /api/transactions/{transaction}/cancel-cash-in`.
+  - `DELETE /api/transactions/{transaction}` — admin only, always 409 with the Python "hard delete disabled" guard.
+- Added `App\Models\ExchangeRate`, `App\Repositories\ExchangeRateRepository`, and CRUD endpoints under `/api/exchange-rates` (admin writes, authenticated reads, `/latest` placeholder for empty state).
 - Added `POST /api/transactions/exchange` that credits the source account using `sell_rate / base_amount` for MMK output and `buy_rate / base_amount` for THB output.
 - Added `App\Models\CashFloatDenomination`, `App\Repositories\CashFloatRepository`, and `App\Services\CashFloatService` for the cash float lifecycle: `PENDING_RECEIPT → ACTIVE → PENDING_RECONCILIATION → CLOSED`.
 - Added cash float API endpoints:
-  - `GET /api/cash-floats`, `GET /api/cash-floats/{float}` (employees scoped to their own).
-  - Cashier / owner: `POST /api/cash-floats` (issue), `POST /api/cash-floats/{float}/confirm-return`.
-  - Employee: `POST /api/cash-floats/{float}/activate`, `POST /api/cash-floats/{float}/initiate-return`.
+  - `GET /api/cash-floats`, `GET /api/cash-floats/{float}` (tellers scoped to their own).
+  - Cashier / admin: `POST /api/cash-floats` (issue), `POST /api/cash-floats/{float}/confirm-return`.
+  - Teller: `POST /api/cash-floats/{float}/activate`, `POST /api/cash-floats/{float}/initiate-return`.
 - Added the main vault denomination ledger:
   - `App\Models\CashDenominationLog`, `App\Models\VaultDenominationBalance`, `App\Repositories\CashDenominationRepository` (records `vault_in` / `vault_out` / `float_returned` / `adjustment` entries with an atomic balance guard).
   - Float issue now debits the main vault via `vault_out`; float return confirmation credits the vault via `float_returned`.
   - `GET /api/vault/balance` and `GET /api/vault/inventory` for authenticated dashboard reads.
 - Employee cash-out, transfer, and exchange are all denomination-aware:
   - `App\Services\EmployeeFloatValidator::validateFloatOperation` runs the same active-float / stock / total / balance checks before any writes.
-  - `POST /api/transactions/cash-out`, `POST /api/transactions/transfer`, and `POST /api/transactions/exchange` accept an optional `denominations` map; when the creator is an employee, denominations are required and the float is atomically decremented per note and by total.
+  - `POST /api/transactions/cash-out`, `POST /api/transactions/transfer`, and `POST /api/transactions/exchange` accept an optional `denominations` map; when the creator is a teller, denominations are required and the float is atomically decremented per note and by total.
   - Insufficient float or note stock returns HTTP 409.
-- Cash-in overpayment change flow: `POST /api/transactions/cash-in` accepts `amount_received` and `change_denominations`. When `amount_received > amount`, the change amount is drawn from the employee's active float (validated + deducted per note and by total). `change_given` and `change_denominations` are persisted on the transaction.
+- Cash-in overpayment change flow: `POST /api/transactions/cash-in` accepts `amount_received` and `change_denominations`. When `amount_received > amount`, the change amount is drawn from the teller's active float (validated + deducted per note and by total). `change_given` and `change_denominations` are persisted on the transaction.
 - PIN verification (bcrypt) is now enforced at float activation and cashier confirm-return:
   - `POST /api/auth/pin` — set or change the authenticated user's PIN (4–8 digits).
   - `POST /api/cash-floats/{float}/activate` and `.../confirm-return` now require a valid `pin` field.
   - Activation also requires `verified_denominations`; issued and counted quantities must match per MMK note before the float can move to `ACTIVE`.
 
 - Reverb broadcast foundation is wired:
-  - Private role channels: `owner`, `cashier`, `employee`.
+  - Private role channels: `admin`, `cashier`, `teller`.
   - Existing targeted private user channel: `user.{userId}`.
   - `balance_update`, `new_transaction`, `cash_in_pending`, `float_status_changed`, and `ping` events.
   - Owner-only `POST /api/broadcast/test` dispatches `ping`.
   - `resources/js/lib/echo.ts` provides the reusable Echo/Reverb helper for token-authenticated private channels.
 - Vault transaction audit rows are wired:
   - `App\Models\VaultTransaction` and `App\Repositories\VaultTransactionRepository`.
-  - One row per denomination quantity for float issue/receipt/return and employee cash draw operations.
+  - One row per denomination quantity for float issue/receipt/return and teller cash draw operations.
   - Owner-only `GET /api/vault/log` is paginated and filterable.
 - Float activation denomination re-verification is wired:
-  - Employee-counted `verified_denominations` are compared with the issued float denominations after PIN verification and before the status transition.
+  - Teller-counted `verified_denominations` are compared with the issued float denominations after PIN verification and before the status transition.
   - Short-count and over-count attempts return HTTP 422 and leave the float in `PENDING_RECEIPT`.
 - The Vue/Inertia frontend is now an operations console:
   - Dedicated `/login` page for sign-in, with token restore, logout, and PIN update handled outside the login form.
-  - Owner, cashier, and employee role views for the completed setup, transaction, float, vault, exchange-rate, and realtime workflows.
+  - Admin, cashier, and teller role views for the completed setup, transaction, float, vault, exchange-rate, and realtime workflows.
   - Echo/Reverb role and user-channel subscriptions feed realtime events into the console.
 - Owner-facing staff user management is wired:
   - Owner-only `/api/users` endpoints create, list, update, and deactivate staff accounts.
   - Role, password, username, and active-status changes revoke old tokens via `auth_version`.
-  - The operations console now includes a Staff Users panel for creating, editing, and deactivating owner/cashier/employee users.
+  - The operations console now includes a Staff Users panel for creating, editing, and deactivating admin/cashier/teller users.
 - Owner daily reporting and reconciliation are wired:
   - Owner-only `/api/reports/daily-summary`, `/api/reports/daily-reconciliation`, and `/api/reports/daily-reconciliations`.
-  - Daily summaries include completed transaction totals, fees, profit, cash/digital snapshots, pending Cash In count, and vault/account/employee float snapshots.
+  - Daily summaries include completed transaction totals, fees, profit, cash/digital snapshots, pending Cash In count, and vault/account/teller float snapshots.
   - The operations console now includes a Daily Report panel with refresh, Close Day, and recent reconciliation logs.
 - MySQL verification is wired:
   - Local databases: `ngwe_lwe_laravel` and `ngwe_lwe_laravel_test`.
   - PHPUnit defaults to the MySQL test database.
   - DB-backed schema/auth/API/feature suites now run against MySQL instead of being skipped for missing `pdo_sqlite`.
 - Demo seed data is wired for local walkthroughs:
-  - Login users: `owner`, `cashier`, and `employee`.
+  - Login users: `admin`, `cashier`, and `teller`.
   - Sample company, service types, accounts, commission tiers, exchange rate, and opening main-vault denominations.
   - The vault opening seed is idempotent and will not double-credit an already stocked vault.
 - Local browser workflow QA has passed for the seeded roles:
-  - Cashier issued an employee float.
-  - Employee activated the float with PIN and denomination re-count.
-  - Employee created a pending Cash In transaction.
+  - Cashier issued a teller float.
+  - Teller activated the float with PIN and denomination re-count.
+  - Teller created a pending Cash In transaction.
   - Cashier confirmed the pending Cash In.
   - Reverb events arrived in the operations console without manual refresh.
 - Docker startup hardening now validates required production env values before the app or Reverb starts.
@@ -180,9 +180,9 @@ Run `php artisan migrate --seed` locally, or `docker compose exec app php artisa
 
 | Username | Password | PIN | Role |
 | --- | --- | --- | --- |
-| `owner` | `password123` | `1111` | Owner |
+| `admin` | `password123` | `1111` | Admin |
 | `cashier` | `password123` | `2222` | Cashier |
-| `employee` | `password123` | `3333` | Employee |
+| `teller` | `password123` | `3333` | Teller |
 
 ## Next Steps
 

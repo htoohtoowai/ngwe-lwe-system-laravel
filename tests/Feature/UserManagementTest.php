@@ -24,9 +24,9 @@ class UserManagementTest extends TestCase
     public function test_owner_can_create_list_update_and_deactivate_staff_user(): void
     {
         $owner = User::factory()->create([
-            'username' => 'owner',
+            'username' => 'admin',
             'full_name' => 'Owner User',
-            'role' => 'owner',
+            'role' => 'admin',
             'is_active' => true,
             'password' => Hash::make('password123'),
         ]);
@@ -60,13 +60,13 @@ class UserManagementTest extends TestCase
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->patchJson('/api/users/'.$userId, [
                 'full_name' => 'Senior Cashier',
-                'role' => 'employee',
+                'role' => 'teller',
                 'password' => 'newpass123',
                 'pin' => null,
             ])
             ->assertOk()
             ->assertJsonPath('data.full_name', 'Senior Cashier')
-            ->assertJsonPath('data.role', 'employee')
+            ->assertJsonPath('data.role', 'teller')
             ->assertJsonPath('data.has_pin', false)
             ->assertJsonPath('data.auth_version', 1);
 
@@ -84,7 +84,7 @@ class UserManagementTest extends TestCase
             ->getJson('/api/users')
             ->assertOk()
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.username', 'owner');
+            ->assertJsonPath('data.0.username', 'admin');
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->getJson('/api/users?include_inactive=true')
@@ -95,8 +95,8 @@ class UserManagementTest extends TestCase
     public function test_non_owner_cannot_manage_users(): void
     {
         $employee = User::factory()->create([
-            'username' => 'employee',
-            'role' => 'employee',
+            'username' => 'teller',
+            'role' => 'teller',
             'is_active' => true,
             'password' => Hash::make('password123'),
         ]);
@@ -109,8 +109,8 @@ class UserManagementTest extends TestCase
     public function test_owner_cannot_deactivate_self(): void
     {
         $owner = User::factory()->create([
-            'username' => 'owner',
-            'role' => 'owner',
+            'username' => 'admin',
+            'role' => 'admin',
             'is_active' => true,
             'password' => Hash::make('password123'),
         ]);
@@ -118,25 +118,25 @@ class UserManagementTest extends TestCase
         $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($owner))
             ->deleteJson('/api/users/'.$owner->id)
             ->assertUnprocessable()
-            ->assertJsonPath('message', 'Owners cannot deactivate their own active session.');
+            ->assertJsonPath('message', 'Admins cannot deactivate their own active session.');
 
         $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($owner))
             ->patchJson('/api/users/'.$owner->id, ['is_active' => false])
             ->assertUnprocessable()
-            ->assertJsonPath('message', 'Owners cannot deactivate their own active session.');
+            ->assertJsonPath('message', 'Admins cannot deactivate their own active session.');
     }
 
     public function test_deactivating_user_revokes_existing_token(): void
     {
         $owner = User::factory()->create([
-            'username' => 'owner',
-            'role' => 'owner',
+            'username' => 'admin',
+            'role' => 'admin',
             'is_active' => true,
             'password' => Hash::make('password123'),
         ]);
         $employee = User::factory()->create([
-            'username' => 'employee',
-            'role' => 'employee',
+            'username' => 'teller',
+            'role' => 'teller',
             'is_active' => true,
             'password' => Hash::make('password123'),
         ]);

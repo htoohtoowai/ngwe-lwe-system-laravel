@@ -67,6 +67,18 @@ class EmployeeFloatValidator
     }
 
     /**
+     * Normalize a denomination map without checking float stock.
+     * Used when cash is received into a float rather than paid out of it.
+     *
+     * @param  array<int|string, int|string>  $raw
+     * @return array<int, int>
+     */
+    public function normalizeReceivedDenominations(array $raw): array
+    {
+        return $this->normalizeDenominations($raw);
+    }
+
+    /**
      * @param  array<int|string, int|string>  $raw
      * @return array<int, int>
      */

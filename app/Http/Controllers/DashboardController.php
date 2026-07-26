@@ -37,6 +37,7 @@ class DashboardController extends Controller
             'accounts' => $this->accounts(),
             'floats' => $this->floats($user),
             'recent' => $this->recent($user),
+            'pendingCashIns' => $user->role === 'cashier' ? $this->pendingCashIns() : [],
         ]);
     }
 
@@ -49,7 +50,7 @@ class DashboardController extends Controller
 
     private function notificationCount(User $user): int
     {
-        if ($user->role === 'employee') {
+        if ($user->role === 'teller') {
             return (int) Transaction::query()
                 ->where('created_by', $user->id)
                 ->where('transaction_type', 'cash_in')
@@ -77,7 +78,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * @return array<int, array{id:int,company:string,name:string,number:string|null,balance:string}>
+     * @return array<int, array{id:int,company:string,name:string,number:string|null,balance:string,is_fee_account:bool}>
      */
     private function accounts(): array
     {
@@ -92,6 +93,7 @@ class DashboardController extends Controller
                 'name' => $account->account_name,
                 'number' => $account->phone_number,
                 'balance' => Money::normalize($account->balance ?? 0),
+                'is_fee_account' => (bool) $account->is_fee_account,
             ])
             ->values()
             ->all();
@@ -104,15 +106,15 @@ class DashboardController extends Controller
     {
         return CashFloatAssignment::query()
             ->with('employee')
-            ->when($user->role === 'employee', fn (Builder $query) => $query->where('employee_id', $user->id))
+            ->when($user->role === 'teller', fn (Builder $query) => $query->where('employee_id', $user->id))
             ->whereIn('status', ['ACTIVE', 'PENDING_RECEIPT', 'PENDING_RECONCILIATION'])
             ->orderByRaw("CASE WHEN status = 'ACTIVE' THEN 0 WHEN status = 'PENDING_RECEIPT' THEN 1 ELSE 2 END")
             ->orderByDesc('created_at')
-            ->limit($user->role === 'employee' ? 3 : 12)
+            ->limit($user->role === 'teller' ? 3 : 12)
             ->get()
             ->map(fn (CashFloatAssignment $float): array => [
                 'id' => $float->id,
-                'holder' => $float->employee?->full_name ?? $float->employee?->username ?? 'Employee',
+                'holder' => $float->employee?->full_name ?? $float->employee?->username ?? 'Teller',
                 'status' => $float->status,
                 'amount' => Money::normalize($float->current_balance ?? $float->total_amount ?? 0),
                 'issued_at' => $float->created_at?->toDateTimeString() ?? '',
@@ -209,11 +211,43 @@ class DashboardController extends Controller
             ->all();
     }
 
+    /**
+     * Cashier-only review data. Denomination maps are included so the
+     * confirmation decision is based on physical cash, not just a total.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function pendingCashIns(): array
+    {
+        return Transaction::query()
+            ->with('creator')
+            ->where('transaction_type', 'cash_in')
+            ->where('status', 'PENDING_CASHIER_CONFIRM')
+            ->latest('created_at')
+            ->limit(50)
+            ->get()
+            ->map(fn (Transaction $transaction): array => [
+                'id' => $transaction->id,
+                'amount' => Money::normalize($transaction->amount ?? 0),
+                'customer_name' => $transaction->customer_name,
+                'teller' => $transaction->creator?->full_name ?? $transaction->creator?->username ?? 'Admin',
+                'customer_fee' => Money::normalize($transaction->customer_fee ?? 0),
+                'fee_payment_method' => $transaction->fee_payment_method,
+                'received_denominations' => $transaction->received_denominations ?? [],
+                'handoff_denominations' => $transaction->handoff_denominations ?? [],
+                'change_denominations' => $transaction->change_denominations ?? [],
+                'change_given' => Money::normalize($transaction->change_given ?? 0),
+                'created_at' => $transaction->created_at?->toDateTimeString() ?? '',
+            ])
+            ->values()
+            ->all();
+    }
+
     private function scopedTransactions(User $user): Builder
     {
         return Transaction::query()
             ->with('account.serviceType.company')
-            ->when($user->role === 'employee', fn (Builder $query) => $query->where('created_by', $user->id));
+            ->when($user->role === 'teller', fn (Builder $query) => $query->where('created_by', $user->id));
     }
 
     private function transactionLabel(Transaction $transaction): string

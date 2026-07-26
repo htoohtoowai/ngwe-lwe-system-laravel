@@ -77,7 +77,7 @@ class CashFloatLifecycleTest extends TestCase
 
     public function test_employee_cannot_issue_float(): void
     {
-        [, $employeeToken] = $this->userWithToken('employee');
+        [, $employeeToken] = $this->userWithToken('teller');
         $employee = $this->activeEmployee();
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
@@ -257,7 +257,7 @@ class CashFloatLifecycleTest extends TestCase
     {
         return User::factory()->create([
             'username' => $prefix.'_'.uniqid('', true),
-            'role' => 'employee',
+            'role' => 'teller',
             'is_active' => true,
             'password' => Hash::make('password123'),
         ]);

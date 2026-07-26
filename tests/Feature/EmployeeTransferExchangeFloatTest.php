@@ -95,7 +95,7 @@ class EmployeeTransferExchangeFloatTest extends TestCase
 
     public function test_owner_transfer_still_works_without_denominations(): void
     {
-        [, $ownerToken] = $this->userWithToken('owner');
+        [, $ownerToken] = $this->userWithToken('admin');
         [$from, $to, $serviceType] = $this->twoAccountsWithBalance(30_000);
         $this->fixedTier($serviceType->id);
 
@@ -198,7 +198,7 @@ class EmployeeTransferExchangeFloatTest extends TestCase
     private function activeEmployeeWithFloat(array $denominations): array
     {
         $cashier = $this->createUser('cashier');
-        $employee = $this->createUser('employee');
+        $employee = $this->createUser('teller');
         $employee->pin_hash = Hash::make('1234');
         $employee->save();
         $employeeToken = app(NgweLweTokenService::class)->create($employee);

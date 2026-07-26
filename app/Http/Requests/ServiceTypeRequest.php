@@ -15,9 +15,10 @@ class ServiceTypeRequest extends FormRequest
     public function rules(): array
     {
         $isUpdate = $this->isMethod('patch') || $this->isMethod('put');
+        $nestedCompany = $this->route('company') !== null;
 
         return [
-            'company_id' => [$isUpdate ? 'sometimes' : 'required', 'integer', 'exists:companies,id'],
+            'company_id' => [$isUpdate || $nestedCompany ? 'sometimes' : 'required', 'integer', 'exists:companies,id'],
             'name' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:255'],
             'operation' => [$isUpdate ? 'sometimes' : 'required', Rule::in(['CashIn', 'CashOut', 'Transfer', 'Exchange', 'All'])],
             'is_active' => ['sometimes', 'boolean'],

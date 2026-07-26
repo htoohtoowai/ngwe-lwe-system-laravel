@@ -37,9 +37,9 @@ class DatabaseSeeder extends Seeder
 
         $this->seedSetupData();
 
-        $owner = User::query()->where('username', 'owner')->first();
-        if ($owner instanceof User) {
-            $this->seedVaultOpeningBalance($owner);
+        $admin = User::query()->where('username', 'admin')->first();
+        if ($admin instanceof User) {
+            $this->seedVaultOpeningBalance($admin);
         }
     }
 
@@ -202,7 +202,7 @@ class DatabaseSeeder extends Seeder
         }
     }
 
-    private function seedVaultOpeningBalance(User $owner): void
+    private function seedVaultOpeningBalance(User $admin): void
     {
         $existingQuantity = (int) DB::table('vault_denomination_balances')->sum('quantity');
         if ($existingQuantity > 0) {
@@ -212,7 +212,7 @@ class DatabaseSeeder extends Seeder
         app(CashDenominationRepository::class)->recordBulk(
             entryType: 'vault_in',
             denominations: self::DEMO_VAULT_DENOMINATIONS,
-            createdBy: $owner->id,
+            createdBy: $admin->id,
             note: 'Demo vault opening balance',
         );
     }

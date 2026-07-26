@@ -22,6 +22,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'currency',
     'exchange_rate',
     'fee_account_id',
+    'fee_payment_method',
     'screenshot_path',
     'note',
     'created_by',
@@ -33,6 +34,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'confirmed_at',
     'change_given',
     'change_denominations',
+    'received_denominations',
+    'handoff_denominations',
 ])]
 class Transaction extends Model
 {
@@ -47,10 +50,13 @@ class Transaction extends Model
             'additional_fee_amount' => 'decimal:2',
             'balance_change' => 'decimal:2',
             'exchange_rate' => 'decimal:4',
+            'fee_payment_method' => 'string',
             'cash_approved_at' => 'datetime',
             'confirmed_at' => 'datetime',
             'change_given' => 'decimal:2',
             'change_denominations' => 'array',
+            'received_denominations' => 'array',
+            'handoff_denominations' => 'array',
         ];
     }
 

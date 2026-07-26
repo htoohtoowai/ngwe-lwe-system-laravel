@@ -16,7 +16,7 @@ class IssueCashFloatRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'employee_id' => ['required', 'integer', Rule::exists('users', 'id')->where('role', 'employee')->where('is_active', true)],
+            'employee_id' => ['required', 'integer', Rule::exists('users', 'id')->where('role', 'teller')->where('is_active', true)],
             'denominations' => ['required', 'array', 'min:1'],
             'denominations.*' => ['integer', 'min:0'],
             'note' => ['sometimes', 'nullable', 'string', 'max:2000'],

@@ -28,18 +28,20 @@ class CashInOverpaymentTest extends TestCase
         config()->set('ngwe_lwe.auth.secret', str_repeat('k', 32));
     }
 
-    public function test_cash_in_without_overpayment_leaves_float_untouched(): void
+    public function test_cash_in_without_overpayment_keeps_employee_float_balanced_until_cashier_handoff(): void
     {
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 5]);
         [$account, $serviceType] = $this->accountWithBalance(80_000);
         $this->fixedTier($serviceType->id, feeDeposit: 300);
 
-        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+        $response = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/cash-in', [
                 'account_id' => $account->id,
                 'amount' => 20_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
+                'received_denominations' => [10_000 => 2],
+                'handoff_denominations' => [10_000 => 2],
             ])
             ->assertCreated()
             ->assertJsonPath('data.status', 'PENDING_CASHIER_CONFIRM')
@@ -52,6 +54,13 @@ class CashInOverpaymentTest extends TestCase
 
         $balances = app(CashFloatRepository::class)->getDenominationBalance($activeFloat->id);
         $this->assertSame(5, $balances[10_000]);
+
+        [, $cashierToken] = $this->userWithToken('cashier');
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/transactions/'.$response->json('data.id').'/confirm-cash-in')
+            ->assertOk();
+
+        $this->assertSame(2, app(CashDenominationRepository::class)->getVaultBalance()[10_000]);
     }
 
     public function test_cash_in_with_overpayment_deducts_change_from_float(): void
@@ -67,6 +76,8 @@ class CashInOverpaymentTest extends TestCase
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
                 'amount_received' => 30_000,
+                'received_denominations' => [10_000 => 2, 5_000 => 2],
+                'handoff_denominations' => [10_000 => 2],
                 'change_denominations' => [10_000 => 1],
             ])
             ->assertCreated()
@@ -78,13 +89,53 @@ class CashInOverpaymentTest extends TestCase
         // Account digital balance debited by amount (20k).
         $this->assertSame('80000.00', $account->fresh()->balance);
 
-        // Employee float decremented by change_due (10k).
+        // Employee float receives 30k, gives 10k change, and hands over 20k: net 0.
         $activeFloat = app(CashFloatRepository::class)->activeForEmployee($employee->id);
-        $this->assertSame('40000.00', $activeFloat->current_balance);
+        $this->assertSame('50000.00', $activeFloat->current_balance);
 
         $balances = app(CashFloatRepository::class)->getDenominationBalance($activeFloat->id);
         $this->assertSame(2, $balances[10_000]);
-        $this->assertSame(4, $balances[5_000]);
+        $this->assertSame(6, $balances[5_000]);
+    }
+
+    public function test_teller_cash_in_keeps_value_balance_flat_but_changes_denominations(): void
+    {
+        [$employee, $employeeToken] = $this->activeEmployeeWithFloat([5_000 => 2]);
+        [$account, $serviceType] = $this->accountWithBalance(100_000);
+        $this->fixedTier($serviceType->id);
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 45_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'amount_received' => 50_000,
+                'received_denominations' => [10_000 => 5],
+                'handoff_denominations' => [10_000 => 4, 5_000 => 1],
+                'change_denominations' => [5_000 => 1],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.change_given', '5000.00');
+
+        $this->assertSame([10_000 => 5], $response->json('data.received_denominations'));
+        $handoff = $response->json('data.handoff_denominations');
+        ksort($handoff);
+        $this->assertSame([5_000 => 1, 10_000 => 4], $handoff);
+
+        $activeFloat = app(CashFloatRepository::class)->activeForEmployee($employee->id);
+        $this->assertSame('10000.00', $activeFloat->current_balance);
+        $this->assertSame([5_000 => 0, 10_000 => 1], app(CashFloatRepository::class)->getDenominationBalance($activeFloat->id));
+
+        [, $cashierToken] = $this->userWithToken('cashier');
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/transactions/'.$response->json('data.id').'/confirm-cash-in')
+            ->assertOk();
+
+        $mainVault = app(CashDenominationRepository::class)->getVaultBalance();
+        $mainVault = array_filter($mainVault, static fn (int $quantity): bool => $quantity > 0);
+        ksort($mainVault);
+        $this->assertSame([5_000 => 1, 10_000 => 4], $mainVault);
     }
 
     public function test_cash_in_change_denomination_total_must_match_change_due(): void
@@ -101,6 +152,7 @@ class CashInOverpaymentTest extends TestCase
                 'customer_name' => 'Aung',
                 'customer_phone' => '09',
                 'amount_received' => 25_000,
+                'received_denominations' => [10_000 => 2, 5_000 => 1],
                 'change_denominations' => [10_000 => 1],
             ])
             ->assertStatus(422);
@@ -119,6 +171,7 @@ class CashInOverpaymentTest extends TestCase
                 'customer_name' => 'Aung',
                 'customer_phone' => '09',
                 'amount_received' => 10_000,
+                'received_denominations' => [10_000 => 1],
             ])
             ->assertStatus(422);
     }
@@ -135,6 +188,8 @@ class CashInOverpaymentTest extends TestCase
                 'amount' => 20_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '09',
+                'received_denominations' => [10_000 => 2],
+                'handoff_denominations' => [10_000 => 2],
                 'change_denominations' => [10_000 => 1],
             ])
             ->assertStatus(422);
@@ -142,7 +197,7 @@ class CashInOverpaymentTest extends TestCase
 
     public function test_owner_cannot_do_overpayment_change(): void
     {
-        [, $ownerToken] = $this->userWithToken('owner');
+        [, $ownerToken] = $this->userWithToken('admin');
         [$account, $serviceType] = $this->accountWithBalance(100_000);
         $this->fixedTier($serviceType->id);
 
@@ -153,6 +208,7 @@ class CashInOverpaymentTest extends TestCase
                 'customer_name' => 'Aung',
                 'customer_phone' => '09',
                 'amount_received' => 25_000,
+                'received_denominations' => [10_000 => 2, 5_000 => 1],
                 'change_denominations' => [5_000 => 1],
             ])
             ->assertStatus(422);
@@ -172,6 +228,8 @@ class CashInOverpaymentTest extends TestCase
                 'customer_name' => 'Aung',
                 'customer_phone' => '09',
                 'amount_received' => 30_000,
+                'received_denominations' => [10_000 => 3],
+                'handoff_denominations' => [10_000 => 2],
                 'change_denominations' => [10_000 => 1],
             ])
             ->assertStatus(409);
@@ -182,6 +240,39 @@ class CashInOverpaymentTest extends TestCase
         $this->assertSame('5000.00', $activeFloat->current_balance);
     }
 
+    public function test_cancel_cash_in_reverses_received_cash_from_employee_float(): void
+    {
+        [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 5]);
+        [, $cashierToken] = $this->userWithToken('cashier');
+        [$account, $serviceType] = $this->accountWithBalance(100_000);
+        $this->fixedTier($serviceType->id);
+
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 20_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'received_denominations' => [10_000 => 2],
+                'handoff_denominations' => [10_000 => 2],
+            ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $activeFloat = app(CashFloatRepository::class)->activeForEmployee($employee->id);
+        $this->assertSame('50000.00', $activeFloat->current_balance);
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', ['note' => 'cash not received'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'CANCELLED');
+
+        $this->assertSame('100000.00', $account->fresh()->balance);
+        $activeFloat = app(CashFloatRepository::class)->activeForEmployee($employee->id);
+        $this->assertSame('50000.00', $activeFloat->current_balance);
+        $this->assertSame([10_000 => 5], app(CashFloatRepository::class)->getDenominationBalance($activeFloat->id));
+    }
+
     /**
      * @param  array<int, int>  $denominations
      * @return array{0: User, 1: string}
@@ -189,7 +280,7 @@ class CashInOverpaymentTest extends TestCase
     private function activeEmployeeWithFloat(array $denominations): array
     {
         $cashier = $this->createUser('cashier');
-        $employee = $this->createUser('employee');
+        $employee = $this->createUser('teller');
         $employee->pin_hash = Hash::make('1234');
         $employee->save();
         $employeeToken = app(NgweLweTokenService::class)->create($employee);

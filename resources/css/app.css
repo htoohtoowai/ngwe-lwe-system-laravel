@@ -5,6 +5,294 @@
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
+.cash-in-review-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 80;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    overflow-y: auto;
+    background: rgb(15 23 42 / 52%);
+    backdrop-filter: blur(4px);
+}
+
+.cash-in-review-modal {
+    width: min(100%, 920px);
+    max-height: min(900px, calc(100vh - 2rem));
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: var(--surface);
+    box-shadow: 0 24px 80px rgb(15 23 42 / 24%);
+}
+
+.cash-in-review-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.5rem 1.5rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.cash-in-review-eyebrow {
+    display: block;
+    margin-bottom: 0.35rem;
+    color: var(--accent);
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.cash-in-review-header h2 {
+    margin: 0;
+    color: var(--text);
+    font-size: clamp(1.1rem, 2vw, 1.45rem);
+    line-height: 1.25;
+}
+
+.cash-in-review-header p {
+    max-width: 44rem;
+    margin: 0.45rem 0 0;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+}
+
+.cash-in-review-close {
+    display: grid;
+    flex: 0 0 auto;
+    width: 2.25rem;
+    height: 2.25rem;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-dim);
+    font-size: 1.5rem;
+    line-height: 1;
+    background: var(--surface-soft);
+}
+
+.cash-in-review-close:hover:not(:disabled) {
+    color: var(--accent-strong);
+    border-color: var(--accent);
+}
+
+.cash-in-review-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    background: var(--surface-soft);
+}
+
+.cash-in-review-summary > div {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--surface);
+}
+
+.cash-in-review-summary span,
+.cash-in-review-card-heading span {
+    color: var(--text-dim);
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.cash-in-review-summary strong {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 0.95rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cash-in-review-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.9rem;
+    padding: 1rem 1.5rem 0;
+}
+
+.cash-in-review-card {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--surface);
+}
+
+.cash-in-review-card-primary {
+    border-color: rgb(15 118 110 / 38%);
+    box-shadow: 0 0 0 3px rgb(15 118 110 / 6%);
+}
+
+.cash-in-review-change {
+    margin: 0.9rem 1.5rem 0;
+    border-color: rgb(183 121 31 / 38%);
+}
+
+.cash-in-review-card-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-soft);
+}
+
+.cash-in-review-card-heading > div {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.cash-in-review-step {
+    display: grid;
+    flex: 0 0 auto;
+    width: 1.8rem;
+    height: 1.8rem;
+    place-items: center;
+    border-radius: 9px;
+    color: white !important;
+    background: var(--sidebar);
+    font-size: 0.65rem !important;
+    font-weight: 800 !important;
+}
+
+.cash-in-review-card-primary .cash-in-review-step {
+    background: var(--accent);
+}
+
+.cash-in-review-change .cash-in-review-step {
+    background: var(--amber);
+}
+
+.cash-in-review-card-heading h3 {
+    overflow: hidden;
+    margin: 0;
+    color: var(--text);
+    font-size: 0.88rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cash-in-review-card-heading > strong {
+    flex: 0 0 auto;
+    color: var(--text);
+    font-size: 0.9rem;
+}
+
+.cash-in-review-denoms {
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.85rem 1rem;
+}
+
+.cash-in-review-denoms > div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 9px;
+    background: var(--surface-soft);
+    color: var(--text-dim);
+    font-size: 0.8rem;
+}
+
+.cash-in-review-denoms > div strong {
+    color: var(--text);
+}
+
+.cash-in-review-denoms p {
+    margin: 0;
+    padding: 0.4rem 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.cash-in-review-denoms-inline {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cash-in-review-status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin: 1rem 1.5rem 0;
+    padding: 0.8rem 1rem;
+    border: 1px solid;
+    border-radius: 12px;
+    font-size: 0.8rem;
+}
+
+.cash-in-review-status.is-balanced {
+    border-color: rgb(21 128 61 / 30%);
+    color: var(--green);
+    background: rgb(21 128 61 / 6%);
+}
+
+.cash-in-review-status.is-warning {
+    border-color: rgb(180 35 24 / 32%);
+    color: var(--red);
+    background: rgb(180 35 24 / 6%);
+}
+
+.cash-in-review-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    padding: 1rem 1.5rem 1.5rem;
+}
+
+@media (max-width: 720px) {
+    .cash-in-review-backdrop {
+        align-items: end;
+        padding: 0;
+    }
+
+    .cash-in-review-modal {
+        max-height: calc(100vh - 0.5rem);
+        border-radius: 20px 20px 0 0;
+    }
+
+    .cash-in-review-header,
+    .cash-in-review-summary,
+    .cash-in-review-columns,
+    .cash-in-review-actions {
+        padding-right: 1rem;
+        padding-left: 1rem;
+    }
+
+    .cash-in-review-summary,
+    .cash-in-review-columns {
+        grid-template-columns: 1fr;
+    }
+
+    .cash-in-review-change,
+    .cash-in-review-status {
+        margin-right: 1rem;
+        margin-left: 1rem;
+    }
+
+    .cash-in-review-denoms-inline {
+        grid-template-columns: 1fr;
+    }
+
+    .cash-in-review-status {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+}
+
 :root {
     color-scheme: light;
     --bg: #f5f7fb;
@@ -700,7 +988,7 @@ tbody tr:hover {
     font-weight: 600;
 }
 
-.employee-grid > .entry-title-panel {
+.teller-grid > .entry-title-panel {
     grid-column: 1 / -1;
 }
 
@@ -1872,8 +2160,8 @@ tbody tr:hover {
     width: 100%;
 }
 
-/* Employee desktop: banking UI (navy sidebar, blue primary, slate text, crisp cards). Layout from Materio CRM reference. */
-.console-shell.device-desktop.role-employee {
+/* Teller desktop: banking UI (navy sidebar, blue primary, slate text, crisp cards). Layout from Materio CRM reference. */
+.console-shell.device-desktop.role-teller {
     --crm-primary: #1d4ed8;
     --crm-primary-strong: #1e40af;
     --crm-gradient: linear-gradient(98deg, #3b82f6, #1d4ed8 95%);
@@ -1895,7 +2183,7 @@ tbody tr:hover {
     font-variant-numeric: tabular-nums;
 }
 
-.console-shell.device-desktop.role-employee .side-rail {
+.console-shell.device-desktop.role-teller .side-rail {
     position: fixed;
     inset: 0 auto 0 0;
     z-index: 40;
@@ -1912,7 +2200,7 @@ tbody tr:hover {
     scrollbar-width: thin;
 }
 
-.console-shell.device-desktop.role-employee .side-brand {
+.console-shell.device-desktop.role-teller .side-brand {
     display: flex;
     align-items: center;
     gap: 0.78rem;
@@ -1922,7 +2210,7 @@ tbody tr:hover {
     padding: 0 1.2rem;
 }
 
-.console-shell.device-desktop.role-employee .side-brand .brand-mark {
+.console-shell.device-desktop.role-teller .side-brand .brand-mark {
     width: 2.25rem;
     height: 2.25rem;
     flex-basis: 2.25rem;
@@ -1931,26 +2219,26 @@ tbody tr:hover {
     box-shadow: 0 6px 14px rgb(29 78 216 / 24%);
 }
 
-.console-shell.device-desktop.role-employee .side-brand strong,
-.console-shell.device-desktop.role-employee .side-brand span {
+.console-shell.device-desktop.role-teller .side-brand strong,
+.console-shell.device-desktop.role-teller .side-brand span {
     display: block;
     line-height: 1.12;
 }
 
-.console-shell.device-desktop.role-employee .side-brand strong {
+.console-shell.device-desktop.role-teller .side-brand strong {
     color: #ffffff;
     font-size: 1rem;
     font-weight: 700;
 }
 
-.console-shell.device-desktop.role-employee .side-brand span {
+.console-shell.device-desktop.role-teller .side-brand span {
     margin-top: 0.2rem;
     color: rgb(255 255 255 / 58%);
     font-size: 0.72rem;
     font-weight: 500;
 }
 
-.console-shell.device-desktop.role-employee .topbar {
+.console-shell.device-desktop.role-teller .topbar {
     min-height: 64px;
     margin-left: -260px;
     border-bottom: 0;
@@ -1960,23 +2248,23 @@ tbody tr:hover {
     backdrop-filter: blur(10px);
 }
 
-.console-shell.device-desktop.role-employee .topbar .brand-mark {
+.console-shell.device-desktop.role-teller .topbar .brand-mark {
     display: none;
 }
 
-.console-shell.device-desktop.role-employee .brand-lockup h1 {
+.console-shell.device-desktop.role-teller .brand-lockup h1 {
     color: var(--crm-text);
     font-size: 1rem;
     font-weight: 600;
 }
 
-.console-shell.device-desktop.role-employee .brand-lockup p {
+.console-shell.device-desktop.role-teller .brand-lockup p {
     color: var(--crm-muted);
     font-size: 0.76rem;
     font-weight: 500;
 }
 
-.console-shell.device-desktop.role-employee .workspace {
+.console-shell.device-desktop.role-teller .workspace {
     display: block;
     width: 100%;
     max-width: none;
@@ -1984,30 +2272,30 @@ tbody tr:hover {
     padding: 1.5rem;
 }
 
-.console-shell.device-desktop.role-employee .content-column {
+.console-shell.device-desktop.role-teller .content-column {
     display: grid;
     gap: 1.5rem;
     min-width: 0;
     padding: 0;
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu {
+.console-shell.device-desktop.role-teller .drawer-menu {
     order: 2;
     gap: 1.05rem;
     margin: 0;
     padding: 0 0 0.75rem;
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu-section {
+.console-shell.device-desktop.role-teller .drawer-menu-section {
     position: relative;
     gap: 0.18rem;
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu-section + .drawer-menu-section {
+.console-shell.device-desktop.role-teller .drawer-menu-section + .drawer-menu-section {
     padding-top: 1.125rem;
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu-section + .drawer-menu-section::before {
+.console-shell.device-desktop.role-teller .drawer-menu-section + .drawer-menu-section::before {
     position: absolute;
     top: 0.12rem;
     right: 0.85rem;
@@ -2017,7 +2305,7 @@ tbody tr:hover {
     content: '';
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu-section p {
+.console-shell.device-desktop.role-teller .drawer-menu-section p {
     margin-bottom: 0.25rem;
     padding: 0 0.9rem;
     color: rgb(255 255 255 / 40%);
@@ -2027,7 +2315,7 @@ tbody tr:hover {
     text-transform: uppercase;
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu button {
+.console-shell.device-desktop.role-teller .drawer-menu button {
     grid-template-columns: 2rem minmax(0, 1fr) auto;
     min-height: 44px;
     border: 0;
@@ -2037,59 +2325,59 @@ tbody tr:hover {
     padding: 0 0.75rem 0 0.9rem;
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu button:hover:not(:disabled) {
+.console-shell.device-desktop.role-teller .drawer-menu button:hover:not(:disabled) {
     background: rgb(255 255 255 / 8%);
     color: #ffffff;
     transform: translateX(1px);
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu button.active {
+.console-shell.device-desktop.role-teller .drawer-menu button.active {
     background: var(--crm-gradient);
     box-shadow: 0 5px 10px -4px rgb(15 23 42 / 42%);
     color: #ffffff;
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu-icon {
+.console-shell.device-desktop.role-teller .drawer-menu-icon {
     width: 2rem;
     height: 2rem;
     border-radius: 8px;
     background: rgb(255 255 255 / 8%);
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu button.active .drawer-menu-icon,
-.console-shell.device-desktop.role-employee .drawer-menu button.active strong {
+.console-shell.device-desktop.role-teller .drawer-menu button.active .drawer-menu-icon,
+.console-shell.device-desktop.role-teller .drawer-menu button.active strong {
     background: rgb(255 255 255 / 18%);
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu-label {
+.console-shell.device-desktop.role-teller .drawer-menu-label {
     font-size: 0.875rem;
     font-weight: 500;
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu button strong {
+.console-shell.device-desktop.role-teller .drawer-menu button strong {
     min-width: 1.35rem;
     background: rgb(255 255 255 / 10%);
     color: inherit;
     font-size: 0.64rem;
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu button.drawer-menu-group-toggle {
+.console-shell.device-desktop.role-teller .drawer-menu button.drawer-menu-group-toggle {
     grid-template-columns: 2rem minmax(0, 1fr) auto auto;
 }
 
-.console-shell.device-desktop.role-employee
+.console-shell.device-desktop.role-teller
     .drawer-menu-group.group-active
     > .drawer-menu-group-toggle {
     background: rgb(255 255 255 / 8%);
     color: #ffffff;
 }
 
-.console-shell.device-desktop.role-employee .drawer-menu .drawer-menu-children button {
+.console-shell.device-desktop.role-teller .drawer-menu .drawer-menu-children button {
     grid-template-columns: 2rem minmax(0, 1fr);
     min-height: 38px;
 }
 
-.console-shell.device-desktop.role-employee .topbar .status-pill {
+.console-shell.device-desktop.role-teller .topbar .status-pill {
     min-height: 2.25rem;
     border-color: rgb(29 78 216 / 24%);
     border-radius: 8px;
@@ -2097,7 +2385,7 @@ tbody tr:hover {
     color: var(--crm-primary-strong);
 }
 
-.console-shell.device-desktop.role-employee .topbar .ghost-button {
+.console-shell.device-desktop.role-teller .topbar .ghost-button {
     min-height: 2.25rem;
     border-color: var(--crm-border);
     border-radius: 8px;
@@ -2106,177 +2394,177 @@ tbody tr:hover {
     box-shadow: none;
 }
 
-.console-shell.device-desktop.role-employee .topbar .ghost-button:hover:not(:disabled) {
+.console-shell.device-desktop.role-teller .topbar .ghost-button:hover:not(:disabled) {
     border-color: var(--crm-primary);
     background: rgb(29 78 216 / 10%);
     color: var(--crm-primary-strong);
 }
 
-.console-shell.device-desktop.role-employee .avatar {
+.console-shell.device-desktop.role-teller .avatar {
     background: var(--crm-gradient);
     box-shadow: 0 4px 8px -4px rgb(15 23 42 / 42%);
 }
 
-.console-shell.device-desktop.role-employee .user-menu-pop {
+.console-shell.device-desktop.role-teller .user-menu-pop {
     border: 0;
     border-radius: 12px;
     box-shadow: 0 4px 14px 0 rgb(15 23 42 / 14%);
 }
 
-.console-shell.device-desktop.role-employee .user-menu-head,
-.console-shell.device-desktop.role-employee .user-menu-pin {
+.console-shell.device-desktop.role-teller .user-menu-head,
+.console-shell.device-desktop.role-teller .user-menu-pin {
     border-color: var(--crm-border);
 }
 
-.console-shell.device-desktop.role-employee .user-menu-head strong {
+.console-shell.device-desktop.role-teller .user-menu-head strong {
     color: var(--crm-text);
     font-weight: 600;
 }
 
-.console-shell.device-desktop.role-employee .user-menu-head span {
+.console-shell.device-desktop.role-teller .user-menu-head span {
     color: var(--crm-muted);
     font-weight: 500;
 }
 
-.console-shell.device-desktop.role-employee .content-toolbar,
-.console-shell.device-desktop.role-employee .panel,
-.console-shell.device-desktop.role-employee .metric,
-.console-shell.device-desktop.role-employee .notice {
+.console-shell.device-desktop.role-teller .content-toolbar,
+.console-shell.device-desktop.role-teller .panel,
+.console-shell.device-desktop.role-teller .metric,
+.console-shell.device-desktop.role-teller .notice {
     border: 0;
     border-radius: 12px;
     background: var(--crm-card);
     box-shadow: var(--crm-shadow);
 }
 
-.console-shell.device-desktop.role-employee .panel {
+.console-shell.device-desktop.role-teller .panel {
     padding: 1.25rem;
 }
 
-.console-shell.device-desktop.role-employee .content-column > .data-panel,
-.console-shell.device-desktop.role-employee .role-grid > .data-panel,
-.console-shell.device-desktop.role-employee .content-column > .panel:not(.data-panel),
-.console-shell.device-desktop.role-employee .role-grid > .panel:not(.data-panel) {
+.console-shell.device-desktop.role-teller .content-column > .data-panel,
+.console-shell.device-desktop.role-teller .role-grid > .data-panel,
+.console-shell.device-desktop.role-teller .content-column > .panel:not(.data-panel),
+.console-shell.device-desktop.role-teller .role-grid > .panel:not(.data-panel) {
     padding: 0;
 }
 
-.console-shell.device-desktop.role-employee .content-column > .data-panel > .panel-heading,
-.console-shell.device-desktop.role-employee .role-grid > .data-panel > .panel-heading,
-.console-shell.device-desktop.role-employee .content-column > .panel:not(.data-panel) > .panel-heading,
-.console-shell.device-desktop.role-employee .role-grid > .panel:not(.data-panel) > .panel-heading {
+.console-shell.device-desktop.role-teller .content-column > .data-panel > .panel-heading,
+.console-shell.device-desktop.role-teller .role-grid > .data-panel > .panel-heading,
+.console-shell.device-desktop.role-teller .content-column > .panel:not(.data-panel) > .panel-heading,
+.console-shell.device-desktop.role-teller .role-grid > .panel:not(.data-panel) > .panel-heading {
     min-height: 3.85rem;
     margin: 0;
     border-bottom: 1px solid var(--crm-border);
     padding: 0 1.25rem;
 }
 
-.console-shell.device-desktop.role-employee .panel-heading span {
+.console-shell.device-desktop.role-teller .panel-heading span {
     color: var(--crm-text);
     font-size: 0.95rem;
     font-weight: 600;
 }
 
-.console-shell.device-desktop.role-employee .panel-heading strong {
+.console-shell.device-desktop.role-teller .panel-heading strong {
     color: var(--crm-muted);
     font-size: 0.76rem;
     font-weight: 500;
 }
 
-.console-shell.device-desktop.role-employee label {
+.console-shell.device-desktop.role-teller label {
     color: var(--crm-muted);
     font-weight: 600;
 }
 
-.console-shell.device-desktop.role-employee .form-grid,
-.console-shell.device-desktop.role-employee .stack-form {
+.console-shell.device-desktop.role-teller .form-grid,
+.console-shell.device-desktop.role-teller .stack-form {
     border-bottom: 1px solid var(--crm-border);
     margin: 0;
     padding: 1.15rem 1.25rem;
 }
 
-.console-shell.device-desktop.role-employee .content-column > .panel:not(.data-panel) > :not(.panel-heading),
-.console-shell.device-desktop.role-employee .role-grid > .panel:not(.data-panel) > :not(.panel-heading) {
+.console-shell.device-desktop.role-teller .content-column > .panel:not(.data-panel) > :not(.panel-heading),
+.console-shell.device-desktop.role-teller .role-grid > .panel:not(.data-panel) > :not(.panel-heading) {
     margin-inline: 0;
 }
 
-.console-shell.device-desktop.role-employee input,
-.console-shell.device-desktop.role-employee select,
-.console-shell.device-desktop.role-employee textarea {
+.console-shell.device-desktop.role-teller input,
+.console-shell.device-desktop.role-teller select,
+.console-shell.device-desktop.role-teller textarea {
     min-height: 2.55rem;
     border-color: rgba(15, 23, 42, 0.22);
     border-radius: 8px;
     color: var(--crm-text);
 }
 
-.console-shell.device-desktop.role-employee input:hover,
-.console-shell.device-desktop.role-employee select:hover,
-.console-shell.device-desktop.role-employee textarea:hover {
+.console-shell.device-desktop.role-teller input:hover,
+.console-shell.device-desktop.role-teller select:hover,
+.console-shell.device-desktop.role-teller textarea:hover {
     border-color: rgba(15, 23, 42, 0.28);
 }
 
-.console-shell.device-desktop.role-employee input:focus,
-.console-shell.device-desktop.role-employee select:focus,
-.console-shell.device-desktop.role-employee textarea:focus {
+.console-shell.device-desktop.role-teller input:focus,
+.console-shell.device-desktop.role-teller select:focus,
+.console-shell.device-desktop.role-teller textarea:focus {
     border-color: var(--crm-primary);
     box-shadow: 0 3px 10px 0 rgb(29 78 216 / 14%);
 }
 
-.console-shell.device-desktop.role-employee .primary-button {
+.console-shell.device-desktop.role-teller .primary-button {
     border-color: var(--crm-primary);
     border-radius: 8px;
     background: var(--crm-primary);
     color: #ffffff;
 }
 
-.console-shell.device-desktop.role-employee .primary-button:hover:not(:disabled) {
+.console-shell.device-desktop.role-teller .primary-button:hover:not(:disabled) {
     border-color: var(--crm-primary-strong);
     background: var(--crm-primary-strong);
 }
 
-.console-shell.device-desktop.role-employee .secondary-button {
+.console-shell.device-desktop.role-teller .secondary-button {
     border-color: rgb(29 78 216 / 22%);
     border-radius: 8px;
     background: rgb(29 78 216 / 12%);
     color: var(--crm-primary-strong);
 }
 
-.console-shell.device-desktop.role-employee .segmented-control {
+.console-shell.device-desktop.role-teller .segmented-control {
     border-color: var(--crm-border);
     border-radius: 8px;
     background: #f7f6fa;
 }
 
-.console-shell.device-desktop.role-employee .segmented-control button.active {
+.console-shell.device-desktop.role-teller .segmented-control button.active {
     background: var(--crm-primary);
     color: #ffffff;
 }
 
-.console-shell.device-desktop.role-employee .metric-grid {
+.console-shell.device-desktop.role-teller .metric-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 1.5rem;
 }
 
-.console-shell.device-desktop.role-employee .metric {
+.console-shell.device-desktop.role-teller .metric {
     min-height: 8rem;
     padding: 1.15rem 1.2rem;
 }
 
-.console-shell.device-desktop.role-employee .metric::before {
+.console-shell.device-desktop.role-teller .metric::before {
     background: var(--crm-primary);
 }
 
-.console-shell.device-desktop.role-employee .metric strong {
+.console-shell.device-desktop.role-teller .metric strong {
     color: var(--crm-text);
     font-size: 1.5rem;
     font-weight: 600;
 }
 
-.console-shell.device-desktop.role-employee .metric span,
-.console-shell.device-desktop.role-employee .metric small {
+.console-shell.device-desktop.role-teller .metric span,
+.console-shell.device-desktop.role-teller .metric small {
     color: var(--crm-muted);
     font-weight: 500;
 }
 
-.console-shell.device-desktop.role-employee .table-wrap {
+.console-shell.device-desktop.role-teller .table-wrap {
     max-height: 36rem;
     border: 0;
     border-top: 1px solid var(--crm-border);
@@ -2284,17 +2572,17 @@ tbody tr:hover {
     background: #ffffff;
 }
 
-.console-shell.device-desktop.role-employee table {
+.console-shell.device-desktop.role-teller table {
     min-width: 840px;
 }
 
-.console-shell.device-desktop.role-employee th,
-.console-shell.device-desktop.role-employee td {
+.console-shell.device-desktop.role-teller th,
+.console-shell.device-desktop.role-teller td {
     border-bottom: 1px solid var(--crm-border);
     padding: 0.62rem 0.85rem;
 }
 
-.console-shell.device-desktop.role-employee th {
+.console-shell.device-desktop.role-teller th {
     height: 3.375rem;
     background: #f8f8fb;
     color: var(--crm-muted);
@@ -2304,115 +2592,147 @@ tbody tr:hover {
     text-transform: uppercase;
 }
 
-.console-shell.device-desktop.role-employee td {
+.console-shell.device-desktop.role-teller td {
     height: 3.125rem;
     color: var(--crm-text);
     font-size: 0.82rem;
 }
 
-.console-shell.device-desktop.role-employee td strong {
+.console-shell.device-desktop.role-teller td strong {
     font-weight: 600;
 }
 
-.console-shell.device-desktop.role-employee td small {
+.console-shell.device-desktop.role-teller td small {
     font-weight: 500;
 }
 
-.console-shell.device-desktop.role-employee tbody tr:hover {
+.console-shell.device-desktop.role-teller tbody tr:hover {
     background: rgba(15, 23, 42, 0.04);
 }
 
-.console-shell.device-desktop.role-employee .row-status {
+.console-shell.device-desktop.role-teller .row-status {
     border-color: rgb(29 78 216 / 16%);
     background: rgb(29 78 216 / 10%);
     color: var(--crm-primary-strong);
 }
 
-.console-shell.device-desktop.role-employee .empty-line {
+.console-shell.device-desktop.role-teller .empty-line {
     margin: 0;
     border-top: 1px solid var(--crm-border);
     padding: 0.95rem 1.25rem;
 }
 
-.console-shell.device-desktop.role-employee .inventory-panel .denom-grid {
+.console-shell.device-desktop.role-teller .inventory-panel .denom-grid {
     padding: 1.15rem 1.25rem 1.25rem;
 }
 
-.console-shell.device-desktop.role-employee .denom-grid div {
+.console-shell.device-desktop.role-teller .denom-grid div {
     border-color: rgb(29 78 216 / 16%);
     border-radius: 8px;
     background: rgb(29 78 216 / 7%);
 }
 
-.console-shell.device-desktop.role-employee .denom-grid strong {
+.console-shell.device-desktop.role-teller .denom-grid strong {
     color: var(--crm-primary-strong);
 }
 
-.console-shell.device-desktop.role-employee .loading-bar {
+.console-shell.device-desktop.role-teller .loading-bar {
     left: 260px;
     width: calc(100% - 260px);
     background: var(--crm-primary);
 }
 
 /* Employee desktop entry layout (CRM action-screen reference: title card, 1/3 form, 2/3 support). */
-.console-shell.device-desktop.role-employee .employee-grid {
+.console-shell.device-desktop.role-teller .teller-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
     align-items: start;
 }
 
-.console-shell.device-desktop.role-employee .employee-grid > .entry-form-panel {
+.console-shell.device-desktop.role-teller .teller-grid > .entry-form-panel {
     grid-column: 1;
     grid-row: 2 / span 2;
 }
 
-.console-shell.device-desktop.role-employee .employee-grid > .entry-return-panel,
-.console-shell.device-desktop.role-employee .employee-grid > .entry-floats-panel {
+.console-shell.device-desktop.role-teller .teller-grid > .entry-return-panel,
+.console-shell.device-desktop.role-teller .teller-grid > .entry-floats-panel {
     grid-column: 2;
 }
 
-.console-shell.device-desktop.role-employee .entry-form-panel > .form-grid {
+.console-shell.device-desktop.role-teller .entry-form-panel > .form-grid {
     grid-template-columns: 1fr;
     border-bottom: 0;
 }
 
-.console-shell.device-desktop.role-employee .entry-return-panel > .form-grid {
+.console-shell.device-desktop.role-teller .entry-return-panel > .form-grid {
     border-bottom: 0;
 }
 
-.console-shell.device-desktop.role-employee
+.console-shell.device-desktop.role-teller
     .role-grid
     > .entry-title-panel.bank-hero {
     grid-template-columns: minmax(0, 24rem) minmax(0, 1fr);
     padding: 1.25rem;
 }
 
-.console-shell.device-desktop.role-employee .bank-hero-heading span {
+.console-shell.device-desktop.role-teller .bank-hero-heading span {
     color: var(--crm-text);
     font-weight: 600;
 }
 
-.console-shell.device-desktop.role-employee .bank-hero-heading p {
+.console-shell.device-desktop.role-teller .bank-hero-heading p {
     color: var(--crm-muted);
     font-weight: 500;
 }
 
-.console-shell.device-desktop.role-employee .bank-quick-actions button {
+.console-shell.device-desktop.role-teller .bank-quick-actions button {
     border-color: var(--crm-border);
     background: #ffffff;
     color: var(--crm-text);
 }
 
-.console-shell.device-desktop.role-employee .bank-quick-actions button.active {
+.console-shell.device-desktop.role-teller .bank-quick-actions button.active {
     border-color: transparent;
     background: var(--crm-gradient);
     color: #ffffff;
 }
 
-.console-shell.device-desktop.role-employee .form-divider {
+.console-shell.device-desktop.role-teller .form-divider {
     margin: 0.2rem 0;
     border-color: var(--crm-border);
 }
 
-.console-shell.device-desktop.role-employee .entry-floats-panel .denom-grid {
+.console-shell.device-desktop.role-teller .entry-floats-panel .denom-grid {
     padding: 1.15rem 1.25rem 1.25rem;
+}
+
+/* Legacy admin panels use the same calm, filled-control language as the
+   current transaction workflows. Checkboxes/radios stay native-sized. */
+.form-grid input:not([type='checkbox']):not([type='radio']),
+.form-grid select,
+.form-grid textarea {
+    min-height: 2.9rem;
+    border: 2px solid transparent;
+    border-radius: 0.875rem;
+    background: #f2f3f4;
+    box-shadow: none;
+    padding: 0.72rem 0.95rem;
+}
+
+.form-grid textarea {
+    min-height: 6.5rem;
+}
+
+.form-grid input:not([type='checkbox']):not([type='radio']):focus,
+.form-grid select:focus,
+.form-grid textarea:focus {
+    border-color: #b31b2c;
+    background: #ffffff;
+    box-shadow: 0 0 0 4px rgb(179 27 44 / 14%);
+}
+
+.form-grid input:not([type='checkbox']):not([type='radio']):focus-visible,
+.form-grid select:focus-visible,
+.form-grid textarea:focus-visible {
+    outline: 2px solid rgb(179 27 44 / 34%);
+    outline-offset: 2px;
 }

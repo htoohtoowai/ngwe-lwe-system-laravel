@@ -78,7 +78,7 @@ class FloatActivationDenominationVerificationTest extends TestCase
      */
     private function employeeWithPin(): array
     {
-        $employee = $this->createUser('employee');
+        $employee = $this->createUser('teller');
         $employee->pin_hash = Hash::make('1234');
         $employee->save();
 

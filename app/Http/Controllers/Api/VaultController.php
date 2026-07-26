@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\VaultLogRequest;
+use App\Http\Requests\CashierVaultEntryRequest;
 use App\Http\Resources\VaultTransactionResource;
 use App\Repositories\CashDenominationRepository;
 use App\Repositories\CashFloatRepository;
@@ -96,6 +97,30 @@ class VaultController extends Controller
                 perPage: $request->integer('per_page') ?: 50,
             )
         );
+    }
+
+    public function storeEntry(CashierVaultEntryRequest $request): JsonResponse
+    {
+        $data = $request->validated();
+        $denominations = collect($data['denominations'])
+            ->mapWithKeys(fn ($quantity, $denomination): array => [(int) $denomination => (int) $quantity])
+            ->all();
+
+        try {
+            $this->vault->recordBulk(
+                entryType: $data['entry_type'],
+                denominations: $denominations,
+                createdBy: $request->user()->id,
+                note: $data['note'] ?? null,
+            );
+        } catch (\Throwable $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Vault entry recorded.',
+            'vault' => $this->stringifyKeys($this->vault->getVaultBalance()),
+        ], 201);
     }
 
     /**

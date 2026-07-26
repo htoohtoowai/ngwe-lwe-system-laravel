@@ -32,7 +32,7 @@ class VaultTransactionAuditTest extends TestCase
     public function test_float_lifecycle_writes_one_vault_transaction_per_denomination(): void
     {
         $cashier = $this->createUser('cashier');
-        $employee = $this->createUser('employee');
+        $employee = $this->createUser('teller');
         $this->setPin($cashier, '9999');
         $this->setPin($employee, '1234');
 
@@ -155,12 +155,16 @@ class VaultTransactionAuditTest extends TestCase
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
                 'amount_received' => 15_000,
+                'received_denominations' => [10_000 => 1, 5_000 => 1],
+                'handoff_denominations' => [10_000 => 1],
                 'change_denominations' => [5_000 => 1],
             ])
             ->assertCreated()
             ->json('data.id');
 
-        $this->assertVaultRows('cash_out', $floatId, $cashInId, [5_000 => 1], $employee->id);
+        $this->assertVaultRows('cash_in_received', $floatId, $cashInId, [10_000 => 1, 5_000 => 1], $employee->id);
+        $this->assertVaultRows('cash_in_handoff', $floatId, $cashInId, [10_000 => 1], $employee->id);
+        $this->assertVaultRows('cash_in_change', $floatId, $cashInId, [5_000 => 1], $employee->id);
     }
 
     public function test_vault_log_endpoint_is_owner_only_paginated_and_filterable(): void
@@ -168,7 +172,7 @@ class VaultTransactionAuditTest extends TestCase
         [$employee, $employeeToken, $floatId] = $this->activeEmployeeWithFloat([10_000 => 3]);
         [$account, $serviceType] = $this->accountWithServiceType('Cash Out', 'CashOut', 0);
         $this->fixedTier($serviceType->id);
-        $ownerToken = app(NgweLweTokenService::class)->create($this->createUser('owner'));
+        $ownerToken = app(NgweLweTokenService::class)->create($this->createUser('admin'));
 
         $txnId = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/cash-out', [
@@ -205,7 +209,7 @@ class VaultTransactionAuditTest extends TestCase
     private function activeEmployeeWithFloat(array $denominations): array
     {
         $cashier = $this->createUser('cashier');
-        $employee = $this->createUser('employee');
+        $employee = $this->createUser('teller');
         $this->setPin($employee, '1234');
 
         app(CashDenominationRepository::class)->recordBulk(

@@ -1,7 +1,7 @@
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
 
-export type RealtimeRole = 'owner' | 'cashier' | 'employee';
+export type RealtimeRole = 'admin' | 'cashier' | 'teller';
 
 export type RealtimeEventName =
     | 'balance_update'

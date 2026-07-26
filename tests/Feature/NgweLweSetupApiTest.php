@@ -26,7 +26,7 @@ class NgweLweSetupApiTest extends TestCase
 
     public function test_owner_can_create_and_list_company(): void
     {
-        $token = $this->tokenForRole('owner');
+        $token = $this->tokenForRole('admin');
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/companies', [
@@ -50,7 +50,7 @@ class NgweLweSetupApiTest extends TestCase
             'category' => 'Pay',
         ]);
 
-        $token = $this->tokenForRole('employee');
+        $token = $this->tokenForRole('teller');
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->getJson('/api/companies')
@@ -67,7 +67,7 @@ class NgweLweSetupApiTest extends TestCase
 
     public function test_owner_can_create_service_type_and_account(): void
     {
-        $token = $this->tokenForRole('owner');
+        $token = $this->tokenForRole('admin');
         $company = Company::query()->create([
             'name' => 'Wave Money',
             'category' => 'Pay',
@@ -101,7 +101,7 @@ class NgweLweSetupApiTest extends TestCase
 
     public function test_delete_routes_soft_deactivate_setup_records(): void
     {
-        $token = $this->tokenForRole('owner');
+        $token = $this->tokenForRole('admin');
         $company = Company::query()->create([
             'name' => 'KBZ Bank',
             'category' => 'Bank',

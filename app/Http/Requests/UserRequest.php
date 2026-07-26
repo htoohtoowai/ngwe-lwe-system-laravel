@@ -33,7 +33,7 @@ class UserRequest extends FormRequest
                 Rule::unique('users', 'email')->ignore($userId),
             ],
             'full_name' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:255'],
-            'role' => [$isUpdate ? 'sometimes' : 'required', Rule::in(['owner', 'cashier', 'employee'])],
+            'role' => [$isUpdate ? 'sometimes' : 'required', Rule::in(['admin', 'cashier', 'teller'])],
             'password' => [$isUpdate ? 'sometimes' : 'required', 'string', 'min:8', 'max:255'],
             'pin' => ['sometimes', 'nullable', 'digits_between:4,8'],
             'is_active' => ['sometimes', 'boolean'],

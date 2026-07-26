@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useLocale } from '@/lib/i18n'
 
 const props = withDefaults(defineProps<{
   modelValue: number
   label?: string
+  id?: string
   chips?: number[]
 }>(), {
-  label: 'Amount',
+  id: 'teller-amount',
   chips: () => [5_000, 10_000, 50_000, 100_000, 500_000],
 })
 
 const emit = defineEmits<{ 'update:modelValue': [number] }>()
+const { t } = useLocale()
 
 const UNITS: [number, string][] = [
   [10_000_000, 'ကုဋေ'],
@@ -52,29 +55,32 @@ function set(v: number) {
 
 <template>
   <div>
-    <label class="field-label">{{ label }}</label>
+    <label class="field-label" :for="props.id">{{ label ?? t('component.amount') }}</label>
     <input
+      :id="props.id"
       :value="modelValue || ''"
       type="number"
       min="0"
       step="100"
       inputmode="numeric"
+      autocomplete="off"
       placeholder="0"
       class="field-input money mt-1.5 text-xl"
+      aria-describedby="teller-amount-reading"
       @input="set(Number(($event.target as HTMLInputElement).value))"
     />
 
-    <p class="mt-1.5 min-h-5 text-sm font-medium" :class="modelValue > 0 ? 'text-ink-800' : 'text-transparent'">
+    <p id="teller-amount-reading" class="mt-1.5 min-h-5 text-sm font-medium" aria-live="polite" :class="modelValue > 0 ? 'text-ink-800' : 'text-transparent'">
       {{ reading || '-' }} <span v-if="modelValue > 0" class="text-ink-700/50">ကျပ်</span>
     </p>
 
     <div class="mt-1 flex flex-wrap gap-1.5">
       <button v-for="c in chips" :key="c" type="button" @click="set((modelValue || 0) + c)"
-              class="money rounded-full border border-paper-edge bg-white px-3 py-1 text-xs font-semibold text-ink-800 transition hover:border-ink-700 active:scale-95">
+              class="bank-button bank-button-secondary money min-h-9 rounded-full px-3 py-1 text-xs">
         +{{ c.toLocaleString() }}
       </button>
       <button type="button" @click="set(0)"
-              class="rounded-full px-3 py-1 text-xs font-medium text-ink-700/60 transition hover:text-debit">
+              class="bank-button bank-button-danger min-h-9 rounded-full px-3 py-1 text-xs">
         Reset
       </button>
     </div>

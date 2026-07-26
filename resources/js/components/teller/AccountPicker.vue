@@ -1,19 +1,22 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useLocale } from '@/lib/i18n'
 import MoneyText from './MoneyText.vue'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: number | null
   accounts: { id: number; name: string; company: string; balance: string }[]
   label?: string
+  id?: string
   mustCover?: number | null
-}>()
+}>(), { id: 'teller-account' })
 
 const emit = defineEmits<{ 'update:modelValue': [number | null] }>()
 
 const open = ref(false)
 const query = ref('')
 const highlight = ref(0)
+const { t } = useLocale()
 
 const selected = computed(() => props.accounts.find(a => a.id === props.modelValue) ?? null)
 
@@ -55,10 +58,11 @@ function onKey(e: KeyboardEvent) {
 
 <template>
   <div class="relative">
-    <label class="field-label">{{ label ?? 'Account' }}</label>
+    <label class="field-label" :for="props.id">{{ label ?? t('component.account') }}</label>
 
     <button v-if="selected && !open" type="button" @click="open = true"
-            class="mt-1.5 flex w-full items-center justify-between rounded-counter border border-ink-700 bg-white px-3 py-2.5 text-left transition hover:bg-ink-100/50">
+            class="bank-button bank-button-secondary mt-1.5 flex w-full justify-between rounded-counter px-3 py-2.5 text-left"
+            aria-haspopup="listbox" :aria-expanded="open">
       <span>
         <span class="block text-[11px] font-semibold uppercase tracking-wide text-ink-700/60">{{ selected.company }}</span>
         <span class="font-medium text-ink-900">{{ selected.name }}</span>
@@ -68,20 +72,25 @@ function onKey(e: KeyboardEvent) {
 
     <template v-else>
       <input
+        :id="props.id"
         v-model="query"
         type="search"
-        placeholder="Search company or account..."
+        autocomplete="off"
+        :placeholder="t('component.searchAccount')"
         class="field-input mt-1.5"
+        role="combobox" aria-autocomplete="list" :aria-expanded="open" aria-controls="teller-account-options"
         @focus="open = true"
         @keydown="onKey"
       />
       <ul v-if="open"
+          id="teller-account-options" role="listbox"
           class="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-counter border border-paper-edge bg-white shadow-lg">
         <li v-if="!filtered.length" class="px-3 py-6 text-center text-sm text-ink-700/60">
-          No account matches "{{ query }}".
+          {{ t('common.noResults') }}
         </li>
         <li v-for="(a, i) in filtered" :key="a.id">
           <button type="button" @click="choose(a.id)" @mousemove="highlight = i"
+                  role="option" :aria-selected="i === highlight"
                   class="flex w-full items-center justify-between px-3 py-2.5 text-left transition"
                   :class="i === highlight ? 'bg-ink-100' : ''">
             <span>
@@ -96,8 +105,7 @@ function onKey(e: KeyboardEvent) {
     </template>
 
     <p v-if="insufficient" class="mt-1.5 text-sm text-debit">
-      This account holds <MoneyText :value="selected!.balance" class="font-semibold" />. It is less than the
-      <MoneyText :value="mustCover!" class="font-semibold" /> required.
+      {{ t('component.accountBelowRequired') }}
     </p>
   </div>
 </template>

@@ -8,8 +8,9 @@ import MoneyText from '@/components/teller/MoneyText.vue'
 import ReceiptSlip from '@/components/teller/ReceiptSlip.vue'
 import ReviewSheet from '@/components/teller/ReviewSheet.vue'
 import type {ReviewLine} from '@/components/teller/ReviewSheet.vue';
-import EmployeeLayout from '@/layouts/EmployeeLayout.vue'
+import TellerLayout from '@/layouts/TellerLayout.vue'
 import { readStoredToken } from '@/lib/auth-token'
+import { useLocale } from '@/lib/i18n'
 
 type TellerAccount = { id: number; name: string; company: string; balance: string }
 type TellerFloat = { id: number; status: string; current_balance: string } | null
@@ -30,17 +31,17 @@ const props = defineProps<{
   floatStock: Record<number, number>
   accounts: TellerAccount[]
   fee: string
-  rate: { buy_rate: string; sell_rate: string }
   completed?: CompletedTxn | null
 }>()
 
-const accountId = ref<number | null>(null)
+const fromAccountId = ref<number | null>(null)
+const toAccountId = ref<number | null>(null)
 const amount = ref<number>(0)
-const currency = ref<'MMK' | 'THB'>('MMK')
 const payout = ref<Record<number, number>>({})
 const reviewing = ref(false)
 const submitting = ref(false)
 const errors = ref<Record<string, string>>({})
+const { t } = useLocale()
 
 const activeFloat = computed(() => props.float?.status === 'ACTIVE')
 const feeNum = computed(() => Number(props.fee ?? 0))
@@ -50,14 +51,16 @@ const shortFloat = computed(() => (amount.value || 0) > floatBalance.value)
 
 const ready = computed(() =>
   activeFloat.value &&
-  accountId.value !== null &&
+  fromAccountId.value !== null &&
+  toAccountId.value !== null &&
+  fromAccountId.value !== toAccountId.value &&
   amount.value > 0 &&
   !shortFloat.value &&
   payoutTotal.value === amount.value,
 )
 
 let feeTimer: ReturnType<typeof setTimeout>
-watch([amount, accountId], ([a, acc]) => {
+watch([amount, fromAccountId], ([a, acc]) => {
   clearTimeout(feeTimer)
 
   if (a > 0 && acc) {
@@ -67,11 +70,11 @@ watch([amount, accountId], ([a, acc]) => {
 })
 
 const reviewLines = computed<ReviewLine[]>(() => [
-  { label: 'Cash counted for exchange', value: payoutTotal.value, signed: 'debit' },
-  { label: 'Fee from commission tier', value: feeNum.value },
-  { label: `Direction ${currency.value}`, value: amount.value || 0 },
-  { label: 'Account credited', value: amount.value || 0, signed: 'credit', emphasize: true },
-  { label: 'Your float after exchange', value: floatBalance.value - payoutTotal.value },
+  { label: t('transaction.countedMovement'), value: payoutTotal.value, signed: 'debit' },
+  { label: `${t('transaction.fee')} (${t('transaction.commissionTier')})`, value: feeNum.value },
+  { label: t('transaction.sourceAccount'), value: amount.value || 0, signed: 'debit' },
+  { label: t('transaction.destinationAccount'), value: amount.value || 0, signed: 'credit', emphasize: true },
+  { label: t('transaction.floatAfterTransfer'), value: floatBalance.value - payoutTotal.value },
 ])
 
 function authHeaders(): Record<string, string> {
@@ -88,11 +91,11 @@ function submit() {
   submitting.value = true
   errors.value = {}
 
-  router.post('/employee/transactions/exchange', {
+  router.post('/teller/transactions/transfer', {
     _token: csrfToken(),
-    account_id: accountId.value,
+    from_account_id: fromAccountId.value,
+    to_account_id: toAccountId.value,
     amount: amount.value,
-    currency: currency.value,
     denominations: payout.value,
   }, {
     headers: authHeaders(),
@@ -105,20 +108,20 @@ function submit() {
 </script>
 
 <template>
-  <EmployeeLayout :float="float">
+  <TellerLayout :float="float">
     <template v-if="completed">
       <header class="mb-6 text-center">
-        <h1 class="font-display text-2xl font-semibold tracking-tight">Exchange completed</h1>
-        <p class="mt-1 text-sm text-ink-700/70">Show this reference after confirming the rate with the customer.</p>
+        <h1 class="font-display text-2xl font-semibold tracking-tight">{{ t('transaction.transfer') }} ပြီးပါပြီ</h1>
+        <p class="mt-1 text-sm text-ink-700/70">{{ t('transaction.completedHint') }}</p>
       </header>
-      <ReceiptSlip :txn="completed" next-href="/employee/exchange" next-label="Next Exchange" />
+      <ReceiptSlip :txn="completed" next-href="/teller/transfer" :next-label="t('transaction.transfer')" />
     </template>
 
     <template v-else>
       <header class="mb-5">
-        <h1 class="font-display text-2xl font-semibold tracking-tight">Exchange</h1>
+        <h1 class="font-display text-2xl font-semibold tracking-tight">{{ t('transaction.transfer') }}</h1>
         <p class="mt-1 text-sm text-ink-700/70">
-          Record a currency exchange using the live buy and sell rates from the server.
+          {{ t('transaction.transferDescription') }}
         </p>
       </header>
 
@@ -126,38 +129,18 @@ function submit() {
         <div class="space-y-5">
           <section class="rounded-counter border border-paper-edge bg-white p-5">
             <div class="grid gap-5">
-              <AccountPicker v-model="accountId" :accounts="accounts" label="Exchange account" />
-              <AmountField v-model="amount" label="Cash to exchange" />
+              <AccountPicker v-model="fromAccountId" :accounts="accounts" :must-cover="amount" :label="t('transaction.sourceAccount')" />
+              <AccountPicker v-model="toAccountId" :accounts="accounts" :label="t('transaction.destinationAccount')" />
+              <AmountField v-model="amount" :label="t('transaction.transferAmount')" />
               <div>
-                <p class="field-label">Direction</p>
-                <div class="mt-1.5 grid grid-cols-2 overflow-hidden rounded-counter border border-paper-edge">
-                  <button
-                    type="button"
-                    class="px-3 py-2.5 text-sm font-semibold"
-                    :class="currency === 'MMK' ? 'bg-ink-900 text-white' : 'bg-white text-ink-800'"
-                    @click="currency = 'MMK'"
-                  >
-                    MMK to THB
-                  </button>
-                  <button
-                    type="button"
-                    class="border-l border-paper-edge px-3 py-2.5 text-sm font-semibold"
-                    :class="currency === 'THB' ? 'bg-ink-900 text-white' : 'bg-white text-ink-800'"
-                    @click="currency = 'THB'"
-                  >
-                    THB to MMK
-                  </button>
-                </div>
-              </div>
-              <div>
-                <p class="field-label">Fee from commission tier</p>
+                <p class="field-label">{{ t('transaction.fee') }} ({{ t('transaction.commissionTier') }})</p>
                 <p class="field-input money mt-1.5 bg-paper text-lg text-ink-700">{{ feeNum.toLocaleString() }}</p>
               </div>
             </div>
           </section>
 
           <p v-if="shortFloat" class="rounded-counter border border-debit/30 bg-debit/5 px-4 py-2.5 text-sm text-debit">
-            Your float holds <MoneyText :value="floatBalance" class="font-semibold" />. Reduce the amount or ask the cashier for a top-up.
+            {{ t('transaction.floatShort') }}
           </p>
 
           <DenominationDrawer
@@ -165,28 +148,26 @@ function submit() {
             :notes="notes"
             :target="amount || 0"
             :stock="floatStock"
-            label="Notes counted for exchange"
+            :label="t('transaction.countedMovement')"
           />
         </div>
 
         <aside class="h-fit rounded-counter border border-ink-800 bg-ink-900 p-5 text-ink-100 lg:sticky lg:top-24">
-          <h2 class="font-display text-sm font-semibold uppercase tracking-[0.14em] text-ink-300">Slip</h2>
+          <h2 class="font-display text-sm font-semibold uppercase tracking-[0.14em] text-ink-300">{{ t('transaction.slip') }}</h2>
           <dl class="mt-4 space-y-3 text-sm">
-            <div class="flex justify-between"><dt class="text-ink-300">Sell rate</dt><dd class="money">{{ rate.sell_rate }}</dd></div>
-            <div class="flex justify-between"><dt class="text-ink-300">Buy rate</dt><dd class="money">{{ rate.buy_rate }}</dd></div>
-            <div class="flex justify-between"><dt class="text-ink-300">Direction</dt><dd>{{ currency }}</dd></div>
             <div class="flex justify-between"><dt class="text-ink-300">Counted movement</dt><dd><MoneyText :value="payoutTotal" /></dd></div>
-            <div class="flex justify-between"><dt class="text-ink-300">Fee</dt><dd><MoneyText :value="feeNum" /></dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">{{ t('transaction.fee') }}</dt><dd><MoneyText :value="feeNum" /></dd></div>
             <div class="flex justify-between border-t border-ink-800 pt-3">
-              <dt class="font-semibold">Account credited</dt>
+              <dt class="font-semibold">{{ t('transaction.accountCredited') }}</dt>
               <dd class="font-semibold"><MoneyText :value="amount || 0" signed="credit" /></dd>
             </div>
-            <div class="flex justify-between"><dt class="text-ink-300">Float after exchange</dt><dd><MoneyText :value="floatBalance - payoutTotal" /></dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">Source debited</dt><dd><MoneyText :value="amount || 0" signed="debit" /></dd></div>
+            <div class="flex justify-between"><dt class="text-ink-300">{{ t('transaction.floatAfterTransfer') }}</dt><dd><MoneyText :value="floatBalance - payoutTotal" /></dd></div>
           </dl>
 
           <button type="button" :disabled="!ready" @click="reviewing = true"
                   class="mt-5 w-full rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-35">
-            Review slip
+            {{ t('common.reviewSlip') }}
           </button>
           <p v-for="(msg, key) in errors" :key="key" class="mt-2 text-sm text-debit">{{ msg }}</p>
         </aside>
@@ -195,13 +176,13 @@ function submit() {
       <ReviewSheet
         :open="reviewing"
         :busy="submitting"
-        title="Exchange"
+        :title="t('transaction.transfer')"
         :lines="reviewLines"
-        confirm-label="Complete exchange"
-        consequence="On confirm, the exchange account is credited and these exact notes are deducted from your float."
+        :confirm-label="t('transaction.confirmTransfer')"
+        :consequence="t('transaction.transferConsequence')"
         @confirm="submit"
         @close="reviewing = false"
       />
     </template>
-  </EmployeeLayout>
+  </TellerLayout>
 </template>

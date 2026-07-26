@@ -12,9 +12,9 @@ class LoginController extends Controller
         return Inertia::render('Login', [
             'demoUsers' => app()->environment('local')
                 ? [
-                    ['role' => 'Owner', 'username' => 'owner', 'password' => 'password123', 'pin' => '1111'],
+                    ['role' => 'Admin', 'username' => 'admin', 'password' => 'password123', 'pin' => '1111'],
                     ['role' => 'Cashier', 'username' => 'cashier', 'password' => 'password123', 'pin' => '2222'],
-                    ['role' => 'Employee', 'username' => 'employee', 'password' => 'password123', 'pin' => '3333'],
+                    ['role' => 'Teller', 'username' => 'teller', 'password' => 'password123', 'pin' => '3333'],
                 ]
                 : null,
         ]);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Exceptions\InsufficientBalanceException;
 use App\Exceptions\InsufficientFloatDenominationException;
 use App\Exceptions\InsufficientFloatException;
+use App\Exceptions\InsufficientVaultDenominationException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CancelCashInRequest;
 use App\Http\Requests\CashInRequest;
@@ -15,6 +16,7 @@ use App\Http\Resources\TransactionResource;
 use App\Models\Transaction;
 use App\Repositories\TransactionRepository;
 use App\Services\TransactionService;
+use App\Services\PinVerifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -25,20 +27,21 @@ class TransactionController extends Controller
     public function __construct(
         private readonly TransactionService $transactions,
         private readonly TransactionRepository $repository,
+        private readonly PinVerifier $pinVerifier,
     ) {}
 
     public function index(Request $request): AnonymousResourceCollection|JsonResponse
     {
         $user = $request->user();
 
-        if ($user->role === 'employee') {
+        if ($user->role === 'teller') {
             return TransactionResource::collection(
                 $this->repository->recentForUser($user, $request->integer('limit') ?: 200)
             );
         }
 
-        if ($user->role !== 'owner') {
-            return response()->json(['message' => 'Owner only'], 403);
+        if ($user->role !== 'admin') {
+            return response()->json(['message' => 'Admin only'], 403);
         }
 
         return TransactionResource::collection(
@@ -57,11 +60,28 @@ class TransactionController extends Controller
         $limit = min($request->integer('limit') ?: 20, 1000);
         $user = $request->user();
 
-        $transactions = $user->role === 'employee'
+        $transactions = $user->role === 'teller'
             ? $this->repository->recentForUser($user, $limit)
             : $this->repository->recent($limit);
 
         return TransactionResource::collection($transactions);
+    }
+
+    public function byDate(Request $request): AnonymousResourceCollection|JsonResponse
+    {
+        $date = $request->validate(['date' => ['required', 'date']])['date'];
+        $user = $request->user();
+
+        if ($user->role === 'teller') {
+            return TransactionResource::collection(
+                $this->repository->filter($date, $date, null, null, min($request->integer('limit') ?: 200, 1000))
+                    ->where('created_by', $user->id),
+            );
+        }
+
+        return TransactionResource::collection(
+            $this->repository->filter($date, $date, null, null, min($request->integer('limit') ?: 200, 1000)),
+        );
     }
 
     public function show(Transaction $transaction): TransactionResource
@@ -93,6 +113,8 @@ class TransactionController extends Controller
         return $this->guardCreator($request, function () use ($request): JsonResponse {
             try {
                 $txn = $this->transactions->createCashOut($request->validated(), $request->user());
+            } catch (InsufficientVaultDenominationException $exception) {
+                return response()->json(['message' => $exception->getMessage()], 409);
             } catch (InsufficientFloatDenominationException $exception) {
                 return response()->json(['message' => $exception->getMessage()], 409);
             } catch (InsufficientFloatException $exception) {
@@ -144,6 +166,7 @@ class TransactionController extends Controller
     public function confirmCashIn(Request $request, Transaction $transaction): TransactionResource|JsonResponse
     {
         try {
+            $this->pinVerifier->verify($request->user(), $request->input('pin'));
             $updated = $this->transactions->confirmPendingCashIn($transaction, $request->user());
         } catch (InvalidArgumentException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
@@ -157,6 +180,9 @@ class TransactionController extends Controller
     public function cancelCashIn(CancelCashInRequest $request, Transaction $transaction): TransactionResource|JsonResponse
     {
         try {
+            if ($request->filled('pin')) {
+                $this->pinVerifier->verify($request->user(), $request->validated()['pin']);
+            }
             $updated = $this->transactions->cancelPendingCashIn(
                 $transaction,
                 $request->user(),

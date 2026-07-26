@@ -27,7 +27,7 @@ class PinVerificationTest extends TestCase
 
     public function test_authenticated_user_can_set_pin(): void
     {
-        $user = $this->createUser('employee');
+        $user = $this->createUser('teller');
         $token = app(NgweLweTokenService::class)->create($user);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
@@ -40,7 +40,7 @@ class PinVerificationTest extends TestCase
 
     public function test_set_pin_rejects_non_numeric(): void
     {
-        $user = $this->createUser('employee');
+        $user = $this->createUser('teller');
         $token = app(NgweLweTokenService::class)->create($user);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
@@ -50,7 +50,7 @@ class PinVerificationTest extends TestCase
 
     public function test_set_pin_rejects_short_pin(): void
     {
-        $user = $this->createUser('employee');
+        $user = $this->createUser('teller');
         $token = app(NgweLweTokenService::class)->create($user);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
@@ -61,7 +61,7 @@ class PinVerificationTest extends TestCase
     public function test_activate_requires_correct_pin(): void
     {
         $cashier = $this->createUser('cashier');
-        $employee = $this->createUser('employee');
+        $employee = $this->createUser('teller');
         $employee->pin_hash = Hash::make('1234');
         $employee->save();
         $token = app(NgweLweTokenService::class)->create($employee);
@@ -82,7 +82,7 @@ class PinVerificationTest extends TestCase
     public function test_activate_requires_pin_to_be_set_first(): void
     {
         $cashier = $this->createUser('cashier');
-        $employee = $this->createUser('employee');
+        $employee = $this->createUser('teller');
         $token = app(NgweLweTokenService::class)->create($employee);
 
         $float = $this->pendingFloat($cashier, $employee, [10_000 => 1]);
@@ -99,7 +99,7 @@ class PinVerificationTest extends TestCase
     public function test_activate_rejects_missing_pin_at_validation(): void
     {
         $cashier = $this->createUser('cashier');
-        $employee = $this->createUser('employee');
+        $employee = $this->createUser('teller');
         $employee->pin_hash = Hash::make('1234');
         $employee->save();
         $token = app(NgweLweTokenService::class)->create($employee);
@@ -122,7 +122,7 @@ class PinVerificationTest extends TestCase
         $cashier->save();
         $cashierToken = app(NgweLweTokenService::class)->create($cashier);
 
-        $employee = $this->createUser('employee');
+        $employee = $this->createUser('teller');
         $employee->pin_hash = Hash::make('1234');
         $employee->save();
 

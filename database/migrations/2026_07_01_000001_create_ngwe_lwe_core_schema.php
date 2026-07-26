@@ -20,7 +20,7 @@ return new class extends Migration
                 $table->string('full_name')->after('pin_hash');
             }
             if (! Schema::hasColumn('users', 'role')) {
-                $table->enum('role', ['owner', 'employee', 'cashier'])->default('employee')->after('full_name');
+                $table->enum('role', ['admin', 'teller', 'cashier'])->default('teller')->after('full_name');
             }
             if (! Schema::hasColumn('users', 'is_active')) {
                 $table->boolean('is_active')->default(true)->after('role');
@@ -85,6 +85,7 @@ return new class extends Migration
             $table->string('currency')->default('MMK');
             $table->decimal('exchange_rate', 18, 4)->nullable();
             $table->foreignId('fee_account_id')->nullable()->constrained('accounts')->restrictOnDelete()->cascadeOnUpdate();
+            $table->string('fee_payment_method', 16)->default('cash');
             $table->string('screenshot_path')->nullable();
             $table->text('note')->nullable();
             $table->foreignId('created_by')->constrained('users')->restrictOnDelete()->cascadeOnUpdate();

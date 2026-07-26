@@ -9,6 +9,7 @@ use App\Models\Company;
 use App\Models\ServiceType;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Repositories\CashDenominationRepository;
 use App\Services\NgweLweTokenService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -39,6 +40,7 @@ class TransactionEndpointsTest extends TestCase
                 'amount' => 10_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
+                'received_denominations' => [10_000 => 1],
             ])
             ->assertCreated()
             ->assertJsonPath('data.transaction_type', 'cash_in')
@@ -68,6 +70,7 @@ class TransactionEndpointsTest extends TestCase
                 'amount' => 5_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
+                'received_denominations' => [5_000 => 1],
             ])
             ->assertStatus(409);
 
@@ -77,9 +80,10 @@ class TransactionEndpointsTest extends TestCase
 
     public function test_cash_out_credits_account_and_marks_completed(): void
     {
-        [, $token] = $this->owner();
+        [$owner, $token] = $this->owner();
         [$account, $serviceType] = $this->accountWithBalance(20_000);
         $this->fixedTier($serviceType->id, feeWithdraw: 700);
+        app(CashDenominationRepository::class)->recordBulk('vault_in', [10_000 => 1, 5_000 => 1], $owner->id);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/transactions/cash-out', [
@@ -87,6 +91,7 @@ class TransactionEndpointsTest extends TestCase
                 'amount' => 15_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
+                'denominations' => [10_000 => 1, 5_000 => 1],
             ])
             ->assertCreated()
             ->assertJsonPath('data.transaction_type', 'cash_out')
@@ -95,6 +100,27 @@ class TransactionEndpointsTest extends TestCase
             ->assertJsonPath('data.balance_change', '15000.00');
 
         $this->assertSame('35000.00', $account->fresh()->balance);
+    }
+
+    public function test_owner_cash_out_rejects_when_main_vault_stock_is_insufficient(): void
+    {
+        [$owner, $token] = $this->owner();
+        [$account, $serviceType] = $this->accountWithBalance(20_000);
+        $this->fixedTier($serviceType->id);
+        app(CashDenominationRepository::class)->recordBulk('vault_in', [10_000 => 1], $owner->id);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/cash-out', [
+                'account_id' => $account->id,
+                'amount' => 20_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'denominations' => [10_000 => 2],
+            ])
+            ->assertStatus(409);
+
+        $this->assertSame('20000.00', $account->fresh()->balance);
+        $this->assertSame(1, app(CashDenominationRepository::class)->getVaultBalance()[10_000]);
     }
 
     public function test_transfer_moves_balance_between_accounts_and_rejects_overdraw(): void
@@ -179,6 +205,7 @@ class TransactionEndpointsTest extends TestCase
                 'amount' => 5_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
+                'received_denominations' => [5_000 => 1],
             ])
             ->json('data.id');
 
@@ -194,6 +221,34 @@ class TransactionEndpointsTest extends TestCase
         $this->assertSame('45000.00', $account->fresh()->balance);
     }
 
+    public function test_owner_cash_in_posts_received_notes_to_main_vault_after_cashier_confirmation(): void
+    {
+        [$owner, $ownerToken] = $this->owner();
+        [$cashier, $cashierToken] = $this->userWithToken('cashier');
+        [$account, $serviceType] = $this->accountWithBalance(50_000);
+        $this->fixedTier($serviceType->id);
+
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$ownerToken)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 5_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'received_denominations' => [5_000 => 1],
+            ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->assertSame(0, app(CashDenominationRepository::class)->getVaultBalance()[5_000]);
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in')
+            ->assertOk()
+            ->assertJsonPath('data.confirmed_by', $cashier->id);
+
+        $this->assertSame(1, app(CashDenominationRepository::class)->getVaultBalance()[5_000]);
+    }
+
     public function test_cashier_can_cancel_pending_cash_in_and_balance_is_reversed(): void
     {
         [, $ownerToken] = $this->owner();
@@ -207,6 +262,7 @@ class TransactionEndpointsTest extends TestCase
                 'amount' => 5_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
+                'received_denominations' => [5_000 => 1],
             ])
             ->json('data.id');
 
@@ -235,6 +291,7 @@ class TransactionEndpointsTest extends TestCase
                 'amount' => 5_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
+                'received_denominations' => [5_000 => 1],
             ])
             ->json('data.id');
 
@@ -249,9 +306,10 @@ class TransactionEndpointsTest extends TestCase
 
     public function test_owner_transactions_list_supports_filters(): void
     {
-        [, $ownerToken] = $this->owner();
+        [$owner, $ownerToken] = $this->owner();
         [$account, $serviceType] = $this->accountWithBalance(50_000);
         $this->fixedTier($serviceType->id);
+        app(CashDenominationRepository::class)->recordBulk('vault_in', [1_000 => 3], $owner->id);
 
         for ($i = 0; $i < 3; $i++) {
             $this->withHeader('Authorization', 'Bearer '.$ownerToken)
@@ -260,6 +318,7 @@ class TransactionEndpointsTest extends TestCase
                     'amount' => 1_000,
                     'customer_name' => 'X'.$i,
                     'customer_phone' => '09',
+                    'denominations' => [1_000 => 1],
                 ])
                 ->assertCreated();
         }
@@ -272,9 +331,10 @@ class TransactionEndpointsTest extends TestCase
 
     public function test_hard_delete_is_disabled(): void
     {
-        [, $ownerToken] = $this->owner();
+        [$owner, $ownerToken] = $this->owner();
         [$account, $serviceType] = $this->accountWithBalance(50_000);
         $this->fixedTier($serviceType->id);
+        app(CashDenominationRepository::class)->recordBulk('vault_in', [1_000 => 1], $owner->id);
 
         $txnId = $this->withHeader('Authorization', 'Bearer '.$ownerToken)
             ->postJson('/api/transactions/cash-out', [
@@ -282,6 +342,8 @@ class TransactionEndpointsTest extends TestCase
                 'amount' => 1_000,
                 'customer_name' => 'X',
                 'customer_phone' => '09',
+                'received_denominations' => [5_000 => 1],
+                'denominations' => [1_000 => 1],
             ])
             ->json('data.id');
 
@@ -295,7 +357,7 @@ class TransactionEndpointsTest extends TestCase
      */
     private function owner(): array
     {
-        return $this->userWithToken('owner');
+        return $this->userWithToken('admin');
     }
 
     /**

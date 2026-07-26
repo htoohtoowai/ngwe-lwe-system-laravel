@@ -74,7 +74,7 @@ class DailyReportTest extends TestCase
     {
         [$owner, $token] = $this->owner();
         [$account] = $this->accounts();
-        $employee = $this->userWithRole('employee', 'employee');
+        $employee = $this->userWithRole('teller', 'teller');
         $date = '2026-07-02';
 
         $this->transaction($owner, $account, 'cash_in', 1_000, 100, 50, $date.' 09:00:00');
@@ -125,7 +125,7 @@ class DailyReportTest extends TestCase
 
     public function test_non_owner_cannot_access_reports(): void
     {
-        $employee = $this->userWithRole('employee', 'employee');
+        $employee = $this->userWithRole('teller', 'teller');
 
         $this->withHeader('Authorization', 'Bearer '.$this->tokenFor($employee))
             ->getJson('/api/reports/daily-summary?date=2026-07-02')
@@ -137,7 +137,7 @@ class DailyReportTest extends TestCase
      */
     private function owner(): array
     {
-        $owner = $this->userWithRole('owner', 'owner');
+        $owner = $this->userWithRole('admin', 'admin');
 
         return [$owner, $this->tokenFor($owner)];
     }

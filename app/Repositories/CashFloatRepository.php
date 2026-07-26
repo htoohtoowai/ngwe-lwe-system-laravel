@@ -193,6 +193,94 @@ class CashFloatRepository
         });
     }
 
+    /**
+     * Atomically add received cash notes to an active employee float.
+     *
+     * @param  array<int, int>  $denominations
+     */
+    public function addDenominations(int $floatId, array $denominations): void
+    {
+        Money::denominationTotal($denominations);
+
+        DB::transaction(function () use ($floatId, $denominations): void {
+            $float = CashFloatAssignment::query()
+                ->where('id', $floatId)
+                ->where('status', 'ACTIVE')
+                ->lockForUpdate()
+                ->first();
+
+            if ($float === null) {
+                throw new \RuntimeException("No active float #{$floatId}.");
+            }
+
+            foreach ($denominations as $denomination => $quantity) {
+                $denomination = (int) $denomination;
+                $quantity = (int) $quantity;
+                if ($quantity <= 0) {
+                    continue;
+                }
+
+                $line = CashFloatDenomination::query()
+                    ->where('float_id', $floatId)
+                    ->where('denomination', $denomination)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($line === null) {
+                    CashFloatDenomination::query()->create([
+                        'float_id' => $floatId,
+                        'denomination' => $denomination,
+                        'quantity' => $quantity,
+                    ]);
+                } else {
+                    $line->quantity = (int) $line->quantity + $quantity;
+                    $line->save();
+                }
+            }
+        });
+    }
+
+    /**
+     * Add received cash notes to the employee's active float.
+     *
+     * @param  array<int, int>  $denominations
+     */
+    public function addDenominationsForEmployee(int $employeeId, array $denominations): void
+    {
+        $active = $this->activeForEmployee($employeeId);
+        if ($active === null) {
+            throw new \RuntimeException("No active float for employee #{$employeeId}.");
+        }
+
+        $this->addDenominations($active->id, $denominations);
+    }
+
+    public function incrementBalance(int $employeeId, float|string $amount): string
+    {
+        $normalized = Money::normalize($amount);
+        if ((float) $normalized <= 0) {
+            throw new \InvalidArgumentException('Float increment must be greater than zero.');
+        }
+
+        return DB::transaction(function () use ($employeeId, $normalized): string {
+            $active = CashFloatAssignment::query()
+                ->where('employee_id', $employeeId)
+                ->where('status', 'ACTIVE')
+                ->orderByDesc('created_at')
+                ->lockForUpdate()
+                ->first();
+
+            if ($active === null) {
+                throw new \RuntimeException("No active float for employee #{$employeeId}.");
+            }
+
+            $active->current_balance = Money::normalize((float) ($active->current_balance ?? 0) + (float) $normalized);
+            $active->save();
+
+            return Money::normalize($active->current_balance);
+        });
+    }
+
     public function deductBalance(int $employeeId, float|string $amount): string
     {
         $normalized = Money::normalize($amount);

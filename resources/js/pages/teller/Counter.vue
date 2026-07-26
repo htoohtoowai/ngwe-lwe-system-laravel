@@ -3,8 +3,9 @@ import { Link } from '@inertiajs/vue3'
 import { computed } from 'vue'
 import MoneyText from '@/components/teller/MoneyText.vue'
 import StateChip from '@/components/teller/StateChip.vue'
-import EmployeeLayout from '@/layouts/EmployeeLayout.vue'
+import BankLayout from '@/layouts/BankLayout.vue'
 import { readStoredToken } from '@/lib/auth-token'
+import { useLocale } from '@/lib/i18n'
 
 type TellerFloat = { id: number; status: string; current_balance: string; issued_amount: string } | null
 
@@ -15,12 +16,13 @@ const props = defineProps<{
   recent: Array<{ id: number; type: string; amount: string; fee_amount: string; status: string }>
 }>()
 
-const actions = [
-  { label: 'Cash In', href: '/employee/cash-in', note: 'Customer hands cash, account is debited' },
-  { label: 'Cash Out', href: '/employee/cash-out', note: 'Pay cash from your float, account credited' },
-  { label: 'Transfer', href: '/employee/transfer', note: 'Move value between accounts' },
-  { label: 'Exchange', href: '/employee/exchange', note: "MMK / THB at today's rate" },
-]
+const { t } = useLocale()
+const actions = computed(() => [
+  { label: t('nav.cashIn'), href: '/transactions/cash-in', note: t('teller.cashInNote') },
+  { label: t('nav.cashOut'), href: '/transactions/cash-out', note: t('teller.cashOutNote') },
+  { label: t('nav.transfer'), href: '/transactions/transfer', note: t('teller.transferNote') },
+  { label: t('nav.exchange'), href: '/transactions/exchange', note: t('teller.exchangeNote') },
+])
 const locked = computed(() => props.float?.status !== 'ACTIVE')
 
 function authHeaders(): Record<string, string> {
@@ -31,28 +33,33 @@ function authHeaders(): Record<string, string> {
 </script>
 
 <template>
-  <EmployeeLayout :float="float">
+  <BankLayout role="teller">
+    <div v-if="locked" class="mb-5 rounded-field bg-brand-soft px-4 py-3 text-sm font-semibold text-brand-deep">
+      {{ t('transaction.floatLocked') }}
+      <Link href="/teller/float" :headers="authHeaders()" class="underline underline-offset-2">{{ t('dashboard.goToFloats') }}</Link>
+    </div>
+
     <div class="grid gap-6 lg:grid-cols-3">
       <section class="rounded-counter border border-paper-edge bg-white lg:col-span-2">
         <header class="flex items-center justify-between border-b border-paper-edge px-5 py-4">
           <div>
-            <h1 class="font-display text-lg font-semibold">Your till</h1>
-            <p class="text-xs text-ink-700/65">Float #{{ float?.id ?? '-' }}</p>
+            <h1 class="font-display text-lg font-semibold">{{ t('teller.till') }}</h1>
+            <p class="text-xs text-ink-700/65">{{ t('teller.floatNumber') }} #{{ float?.id ?? '-' }}</p>
           </div>
           <StateChip :status="float?.status ?? 'CLOSED'" />
         </header>
 
         <div class="grid grid-cols-2 divide-x divide-paper-edge border-b border-paper-edge sm:grid-cols-3">
           <div class="px-5 py-4">
-            <p class="field-label">Issued</p>
+            <p class="field-label">{{ t('teller.issued') }}</p>
             <MoneyText :value="float?.issued_amount ?? 0" class="mt-1 block text-xl font-semibold" />
           </div>
           <div class="px-5 py-4">
-            <p class="field-label">On hand now</p>
+            <p class="field-label">{{ t('teller.onHandNow') }}</p>
             <MoneyText :value="float?.current_balance ?? 0" class="mt-1 block text-xl font-semibold" />
           </div>
           <div class="px-5 py-4">
-            <p class="field-label">Paid out today</p>
+            <p class="field-label">{{ t('teller.paidOutToday') }}</p>
             <MoneyText
               :value="Number(float?.issued_amount ?? 0) - Number(float?.current_balance ?? 0)"
               class="mt-1 block text-xl font-semibold text-debit" />
@@ -71,13 +78,13 @@ function authHeaders(): Record<string, string> {
       </section>
 
       <section class="rounded-counter border border-paper-edge bg-white p-5">
-        <h2 class="font-display text-lg font-semibold">Today</h2>
-        <p class="text-xs text-ink-700/65">{{ today.count }} transactions entered</p>
+        <h2 class="font-display text-lg font-semibold">{{ t('teller.today') }}</h2>
+        <p class="text-xs text-ink-700/65">{{ today.count }} {{ t('teller.transactionsEntered') }}</p>
         <dl class="mt-4 space-y-2.5 text-sm">
-          <div class="flex justify-between"><dt class="text-ink-700">Cash In</dt><dd><MoneyText :value="today.cash_in" /></dd></div>
-          <div class="flex justify-between"><dt class="text-ink-700">Cash Out</dt><dd><MoneyText :value="today.cash_out" /></dd></div>
-          <div class="flex justify-between"><dt class="text-ink-700">Transfer</dt><dd><MoneyText :value="today.transfer" /></dd></div>
-          <div class="flex justify-between"><dt class="text-ink-700">Exchange</dt><dd><MoneyText :value="today.exchange" /></dd></div>
+          <div class="flex justify-between"><dt class="text-ink-700">{{ t('nav.cashIn') }}</dt><dd><MoneyText :value="today.cash_in" /></dd></div>
+          <div class="flex justify-between"><dt class="text-ink-700">{{ t('nav.cashOut') }}</dt><dd><MoneyText :value="today.cash_out" /></dd></div>
+          <div class="flex justify-between"><dt class="text-ink-700">{{ t('nav.transfer') }}</dt><dd><MoneyText :value="today.transfer" /></dd></div>
+          <div class="flex justify-between"><dt class="text-ink-700">{{ t('nav.exchange') }}</dt><dd><MoneyText :value="today.exchange" /></dd></div>
         </dl>
       </section>
     </div>
@@ -94,18 +101,18 @@ function authHeaders(): Record<string, string> {
     </div>
 
     <section class="mt-6 rounded-counter border border-paper-edge bg-white">
-      <h2 class="border-b border-paper-edge px-5 py-3 font-display font-semibold">Recent entries</h2>
+      <h2 class="border-b border-paper-edge px-5 py-3 font-display font-semibold">{{ t('teller.recentEntries') }}</h2>
       <p v-if="!recent.length" class="px-5 py-10 text-center text-sm text-ink-700/60">
-        Nothing entered yet. Your first transaction of the day appears here.
+        {{ t('teller.noRecentEntries') }}
       </p>
       <table v-else class="w-full text-sm">
         <thead>
           <tr class="border-b border-paper-edge text-left">
-            <th class="field-label px-5 py-2">Ref</th>
-            <th class="field-label px-5 py-2">Type</th>
-            <th class="field-label px-5 py-2 text-right">Amount</th>
-            <th class="field-label px-5 py-2 text-right">Fee</th>
-            <th class="field-label px-5 py-2 text-right">Status</th>
+            <th class="field-label px-5 py-2">{{ t('teller.ref') }}</th>
+            <th class="field-label px-5 py-2">{{ t('teller.type') }}</th>
+            <th class="field-label px-5 py-2 text-right">{{ t('teller.amount') }}</th>
+            <th class="field-label px-5 py-2 text-right">{{ t('teller.fee') }}</th>
+            <th class="field-label px-5 py-2 text-right">{{ t('teller.status') }}</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-paper-edge">
@@ -119,5 +126,5 @@ function authHeaders(): Record<string, string> {
         </tbody>
       </table>
     </section>
-  </EmployeeLayout>
+  </BankLayout>
 </template>

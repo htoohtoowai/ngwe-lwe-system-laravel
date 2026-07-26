@@ -24,20 +24,20 @@ class NgweLweAuthTest extends TestCase
     public function test_username_login_returns_token_and_safe_user_payload(): void
     {
         User::factory()->create([
-            'username' => 'owner',
+            'username' => 'admin',
             'full_name' => 'Owner Name',
-            'role' => 'owner',
+            'role' => 'admin',
             'is_active' => true,
             'password' => Hash::make('admin123'),
         ]);
 
         $this->postJson('/api/auth/login', [
-            'username' => 'owner',
+            'username' => 'admin',
             'password' => 'admin123',
         ])
             ->assertOk()
-            ->assertJsonPath('user.username', 'owner')
-            ->assertJsonPath('user.role', 'owner')
+            ->assertJsonPath('user.username', 'admin')
+            ->assertJsonPath('user.role', 'admin')
             ->assertJsonMissingPath('user.password')
             ->assertJsonStructure(['token', 'user']);
     }
@@ -45,30 +45,30 @@ class NgweLweAuthTest extends TestCase
     public function test_inactive_user_cannot_login(): void
     {
         User::factory()->create([
-            'username' => 'employee',
+            'username' => 'teller',
             'is_active' => false,
-            'password' => Hash::make('employee123'),
+            'password' => Hash::make('teller123'),
         ]);
 
         $this->postJson('/api/auth/login', [
-            'username' => 'employee',
-            'password' => 'employee123',
+            'username' => 'teller',
+            'password' => 'teller123',
         ])->assertUnauthorized();
     }
 
     public function test_role_middleware_rejects_wrong_role(): void
     {
         $user = User::factory()->create([
-            'username' => 'employee',
-            'role' => 'employee',
+            'username' => 'teller',
+            'role' => 'teller',
             'is_active' => true,
-            'password' => Hash::make('employee123'),
+            'password' => Hash::make('teller123'),
         ]);
 
         $token = app(NgweLweTokenService::class)->create($user);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->getJson('/api/owner/status')
+            ->getJson('/api/admin/status')
             ->assertForbidden();
     }
 }

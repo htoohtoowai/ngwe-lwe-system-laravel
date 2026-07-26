@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Support\Money;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class TransferRequest extends FormRequest
 {
@@ -20,7 +21,8 @@ class TransferRequest extends FormRequest
             'amount' => ['required', 'numeric', 'gt:0'],
             'customer_fee' => ['sometimes', 'numeric', 'min:0'],
             'additional_fee_amount' => ['sometimes', 'numeric', 'min:0'],
-            'fee_account_id' => ['sometimes', 'nullable', 'integer', 'exists:accounts,id'],
+            'fee_payment_method' => ['sometimes', Rule::in(['cash', 'account'])],
+            'fee_account_id' => ['nullable', 'integer', 'exists:accounts,id', 'required_if:fee_payment_method,account'],
             'screenshot_path' => ['sometimes', 'nullable', 'string', 'max:512'],
             'note' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'denominations' => ['sometimes', 'nullable', 'array'],

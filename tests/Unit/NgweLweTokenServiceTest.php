@@ -20,9 +20,9 @@ class NgweLweTokenServiceTest extends TestCase
     public function test_token_contains_python_compatible_user_payload(): void
     {
         $user = new User([
-            'username' => 'owner',
+            'username' => 'admin',
             'full_name' => 'Owner Name',
-            'role' => 'owner',
+            'role' => 'admin',
             'is_active' => true,
             'auth_version' => 3,
         ]);
@@ -31,8 +31,8 @@ class NgweLweTokenServiceTest extends TestCase
         $payload = (new NgweLweTokenService)->decode((new NgweLweTokenService)->create($user));
 
         $this->assertSame(7, $payload['user_id']);
-        $this->assertSame('owner', $payload['username']);
-        $this->assertSame('owner', $payload['role']);
+        $this->assertSame('admin', $payload['username']);
+        $this->assertSame('admin', $payload['role']);
         $this->assertSame(3, $payload['auth_version']);
         $this->assertGreaterThan(time(), $payload['exp']);
     }
@@ -50,7 +50,7 @@ class NgweLweTokenServiceTest extends TestCase
 
         config()->set('ngwe_lwe.auth.token_ttl_seconds', -1);
 
-        $user = new User(['username' => 'owner', 'role' => 'owner']);
+        $user = new User(['username' => 'admin', 'role' => 'admin']);
         $user->id = 1;
 
         (new NgweLweTokenService)->decode((new NgweLweTokenService)->create($user));

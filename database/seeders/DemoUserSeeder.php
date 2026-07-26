@@ -13,10 +13,10 @@ class DemoUserSeeder extends Seeder
 
     private const DEMO_USERS = [
         [
-            'username' => 'owner',
-            'email' => 'owner@ngwe-lwe.local',
-            'full_name' => 'Demo Owner',
-            'role' => 'owner',
+            'username' => 'admin',
+            'email' => 'admin@ngwe-lwe.local',
+            'full_name' => 'Demo Admin',
+            'role' => 'admin',
             'pin' => '1111',
         ],
         [
@@ -27,10 +27,10 @@ class DemoUserSeeder extends Seeder
             'pin' => '2222',
         ],
         [
-            'username' => 'employee',
-            'email' => 'employee@ngwe-lwe.local',
-            'full_name' => 'Demo Employee',
-            'role' => 'employee',
+            'username' => 'teller',
+            'email' => 'teller@ngwe-lwe.local',
+            'full_name' => 'Demo Teller',
+            'role' => 'teller',
             'pin' => '3333',
         ],
     ];

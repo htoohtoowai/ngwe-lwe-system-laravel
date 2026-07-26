@@ -19,7 +19,7 @@ class BroadcastPing implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return $this->roleChannels(['owner']);
+        return $this->roleChannels(['admin']);
     }
 
     public function broadcastAs(): string

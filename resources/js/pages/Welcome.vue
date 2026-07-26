@@ -13,10 +13,12 @@ import {
 import type { RealtimeEventName, RealtimePayload } from '../lib/echo';
 import type {
     Account,
+    ActivityLog,
     ApiCollection,
     ApiItem,
     CashFloat,
     Company,
+    CommissionTier,
     DailyReconciliation,
     DailySummaryReport,
     DenominationMap,
@@ -48,14 +50,17 @@ type ConsoleIcon =
 type ConsolePage =
     | 'dashboard'
     | 'transactions'
+    | 'activity-logs'
     | 'users'
     | 'reports'
     | 'setup'
+    | 'commission-tiers'
+    | 'server-connection'
     | 'accounts'
     | 'vault'
     | 'cash-floats'
     | 'cashier'
-    | 'employee'
+    | 'teller'
     | 'cash-in'
     | 'cash-out'
     | 'transfer'
@@ -102,8 +107,8 @@ const transactionModes: Array<{ id: TransactionMode; label: string }> = [
 const transactionPageIds: TransactionMode[] = transactionModes.map(
     (mode) => mode.id,
 );
-const employeeTransactionChildren: ConsoleMenuChild[] = transactionModes;
-const employeeFloatChildren: ConsoleMenuChild[] = [
+const tellerTransactionChildren: ConsoleMenuChild[] = transactionModes;
+const tellerFloatChildren: ConsoleMenuChild[] = [
     { id: 'float-receipt', label: 'Float Receipt' },
 ];
 const menuIconPaths: Record<ConsoleIcon, string[]> = {
@@ -156,7 +161,7 @@ const menuIconPaths: Record<ConsoleIcon, string[]> = {
 const token = ref(readStoredToken());
 const session = ref<SessionUser | null>(null);
 const page = usePage<{ device?: DeviceContext }>();
-const previewRole = ref<Role>('owner');
+const previewRole = ref<Role>('admin');
 const notice = ref<Notice | null>(null);
 const loading = ref(false);
 const workspaceLoading = ref(false);
@@ -175,19 +180,33 @@ const transactions = ref<Transaction[]>([]);
 const cashFloats = ref<CashFloat[]>([]);
 const inventory = ref<VaultInventory | null>(null);
 const vaultLog = ref<VaultTransaction[]>([]);
+const activityLogs = ref<ActivityLog[]>([]);
+const commissionTiers = ref<CommissionTier[]>([]);
+const commissionTierServiceTypeId = ref('');
+const activityLogDate = ref(todayDate());
+const activityLogEntity = ref('');
+const activityLogAction = ref('');
+const systemStatus = ref<{ name: string; domain: string; status: string } | null>(null);
+const webOrigin = ref('');
 const dailySummary = ref<DailySummaryReport | null>(null);
 const reconciliationLogs = ref<DailyReconciliation[]>([]);
 const latestRate = ref<ExchangeRate | null>(null);
+const cashInReview = ref<Transaction | null>(null);
 
 const pinForm = ref({
     pin: '',
+});
+const passwordForm = ref({
+    current_password: '',
+    password: '',
+    password_confirmation: '',
 });
 const userForm = ref({
     id: '',
     username: '',
     email: '',
     full_name: '',
-    role: 'employee' as Role,
+    role: 'teller' as Role,
     password: '',
     pin: '',
     is_active: true,
@@ -219,6 +238,21 @@ const rateForm = ref({
     base_amount: '1',
     buy_rate: '',
     sell_rate: '',
+});
+const tierForm = ref({
+    id: '',
+    service_type_id: '',
+    amount_from: '',
+    amount_to: '',
+    fee_amount_type: 'FIXED',
+    fee_amount_deposit: '0',
+    fee_amount_withdraw: '0',
+    comm_type: 'FIXED',
+    comm_deposit: '0',
+    comm_withdraw: '0',
+    additional_fee_type: 'FIXED',
+    additional_fee_deposit_amount: '0',
+    additional_fee_withdraw_amount: '0',
 });
 const adjustForm = ref({
     account_id: '',
@@ -301,10 +335,38 @@ const pendingCashIns = computed(() =>
         (transaction) => transaction.status === 'PENDING_CASHIER_CONFIRM',
     ),
 );
+const cashInReviewRows = computed(() => {
+    const transaction = cashInReview.value;
+
+    return {
+        received: denominationRows(transaction?.received_denominations),
+        change: denominationRows(transaction?.change_denominations),
+        handoff: denominationRows(transaction?.handoff_denominations),
+    };
+});
+const cashInReviewHandoffTotal = computed(() =>
+    denominationTotal(cashInReviewRows.value.handoff),
+);
+const cashInReviewExpectedHandoff = computed(() => {
+    const transaction = cashInReview.value;
+
+    if (!transaction) {
+        return 0;
+    }
+
+    const fee = transaction.fee_payment_method === 'cash'
+        ? Number(transaction.customer_fee ?? 0)
+        : 0;
+
+    return Number(transaction.amount ?? 0) + fee;
+});
+const cashInReviewIsBalanced = computed(() =>
+    cashInReviewHandoffTotal.value === cashInReviewExpectedHandoff.value,
+);
 const activeFloatCount = computed(
     () => cashFloats.value.filter((float) => float.status === 'ACTIVE').length,
 );
-const employeeFloatBalance = computed(() =>
+const tellerFloatBalance = computed(() =>
     cashFloats.value
         .filter((float) => float.status === 'ACTIVE')
         .reduce((sum, float) => sum + Number(float.current_balance ?? 0), 0),
@@ -351,7 +413,7 @@ const workspaceState = computed(() =>
     session.value ? 'Live API session' : 'Secure console',
 );
 const vaultTotal = computed(() => inventory.value?.main_vault_total ?? 0);
-const employeeCashTotal = computed(
+const tellerCashTotal = computed(
     () => inventory.value?.total_employee_cash ?? 0,
 );
 const grandPhysicalTotal = computed(
@@ -371,6 +433,12 @@ const menuSections = computed<ConsoleMenuSection[]>(() => {
             badge: transactions.value.length,
         },
         {
+            id: 'activity-logs',
+            label: 'Activity Logs',
+            icon: 'activity',
+            badge: activityLogs.value.length,
+        },
+        {
             id: 'cash-floats',
             label: 'Cash Floats',
             icon: 'coins',
@@ -387,7 +455,7 @@ const menuSections = computed<ConsoleMenuSection[]>(() => {
         },
     ];
 
-    if (activeRole.value === 'owner') {
+    if (activeRole.value === 'admin') {
         roleItems.push(
             {
                 id: 'users',
@@ -408,6 +476,12 @@ const menuSections = computed<ConsoleMenuSection[]>(() => {
                 badge: companies.value.length,
             },
             {
+                id: 'commission-tiers',
+                label: 'Commission Tiers',
+                icon: 'settings',
+                badge: commissionTiers.value.length,
+            },
+            {
                 id: 'accounts',
                 label: 'Accounts',
                 icon: 'wallet',
@@ -418,6 +492,11 @@ const menuSections = computed<ConsoleMenuSection[]>(() => {
                 label: 'Vault Ops',
                 icon: 'vault',
                 badge: vaultLog.value.length,
+            },
+            {
+                id: 'server-connection',
+                label: 'Server Connection',
+                icon: 'activity',
             },
         );
     }
@@ -431,20 +510,20 @@ const menuSections = computed<ConsoleMenuSection[]>(() => {
         });
     }
 
-    if (activeRole.value === 'employee') {
+    if (activeRole.value === 'teller') {
         roleItems.push(
             {
-                id: 'employee',
+                id: 'teller',
                 label: 'Transaction Entry',
                 icon: 'edit',
-                children: employeeTransactionChildren,
+                children: tellerTransactionChildren,
             },
             {
                 id: 'float-receipt',
                 label: 'Float',
                 icon: 'coins',
                 badge: pendingReceiptFloats.value.length,
-                children: employeeFloatChildren,
+                children: tellerFloatChildren,
             },
         );
     }
@@ -513,21 +592,21 @@ const currentPageLabel = computed(() => {
 });
 const ownerPageActive = computed(
     () =>
-        activeRole.value === 'owner' &&
-        ['users', 'reports', 'setup', 'accounts', 'vault'].includes(
+        activeRole.value === 'admin' &&
+        ['users', 'reports', 'setup', 'commission-tiers', 'activity-logs', 'accounts', 'vault', 'server-connection'].includes(
             activePage.value,
         ),
 );
 const cashierPageActive = computed(
     () => activeRole.value === 'cashier' && activePage.value === 'cashier',
 );
-const employeePageActive = computed(
+const tellerPageActive = computed(
     () =>
-        activeRole.value === 'employee' &&
+        activeRole.value === 'teller' &&
         transactionPageIds.includes(activePage.value as TransactionMode),
 );
 const floatReceiptPageActive = computed(
-    () => activeRole.value === 'employee' && activePage.value === 'float-receipt',
+    () => activeRole.value === 'teller' && activePage.value === 'float-receipt',
 );
 
 watch(activePage, (page) => {
@@ -537,9 +616,9 @@ watch(activePage, (page) => {
 });
 
 watch(activeRole, () => {
-    if (activeRole.value === 'employee' && activePage.value === 'dashboard') {
+    if (activeRole.value === 'teller' && activePage.value === 'dashboard') {
         activePage.value = 'cash-in';
-        menuGroupsOpen.value.employee = true;
+        menuGroupsOpen.value.teller = true;
 
         return;
     }
@@ -549,7 +628,13 @@ watch(activeRole, () => {
     }
 });
 
+watch(cashInReview, (review) => {
+    document.body.style.overflow = review ? 'hidden' : '';
+});
+
 onMounted(() => {
+    webOrigin.value = window.location.origin;
+
     if (token.value) {
         void restoreSession();
 
@@ -561,6 +646,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     disconnectRealtime();
+    document.body.style.overflow = '';
 });
 
 async function restoreSession(): Promise<void> {
@@ -611,6 +697,25 @@ async function setPin(): Promise<void> {
         pinForm.value.pin = '';
         userMenuOpen.value = false;
         setNotice('ok', 'PIN updated.');
+    });
+}
+
+async function changePassword(): Promise<void> {
+    await runAction(async () => {
+        await apiRequest('/api/auth/password', {
+            method: 'POST',
+            token: token.value,
+            body: { ...passwordForm.value },
+        });
+        passwordForm.value = {
+            current_password: '',
+            password: '',
+            password_confirmation: '',
+        };
+        userMenuOpen.value = false;
+        clearSession();
+        setNotice('ok', 'Password updated. Please sign in again.');
+        redirectToLogin();
     });
 }
 
@@ -681,10 +786,12 @@ async function refreshWorkspace(): Promise<void> {
         inventory.value = inventoryResponse.data;
         latestRate.value = rateResponse.data;
 
-        if (activeRole.value === 'owner') {
+        if (activeRole.value === 'admin') {
             const [
                 userResponse,
-                logResponse,
+                vaultLogResponse,
+                activityLogResponse,
+                systemStatusResponse,
                 summaryResponse,
                 reconciliationResponse,
             ] = await Promise.all([
@@ -695,6 +802,18 @@ async function refreshWorkspace(): Promise<void> {
                 apiRequest<ApiCollection<VaultTransaction>>('/api/vault/log', {
                     token: token.value,
                     query: { per_page: 12 },
+                }),
+                apiRequest<ApiCollection<ActivityLog>>('/api/activity-logs', {
+                    token: token.value,
+                    query: {
+                        date: activityLogDate.value,
+                        entity_type: activityLogEntity.value || undefined,
+                        action: activityLogAction.value || undefined,
+                        per_page: 200,
+                    },
+                }),
+                apiRequest<{ name: string; domain: string; status: string }>('/api/system/status', {
+                    token: token.value,
                 }),
                 apiRequest<ApiItem<DailySummaryReport>>(
                     '/api/reports/daily-summary',
@@ -712,12 +831,27 @@ async function refreshWorkspace(): Promise<void> {
                 ),
             ]);
             users.value = userResponse.data;
-            vaultLog.value = logResponse.data;
+            vaultLog.value = vaultLogResponse.data;
+            activityLogs.value = activityLogResponse.data;
+            systemStatus.value = systemStatusResponse;
+
+            if (serviceTypes.value.length > 0) {
+                commissionTierServiceTypeId.value = commissionTierServiceTypeId.value || String(serviceTypes.value[0].id);
+                const tierResponse = await apiRequest<ApiCollection<CommissionTier>>('/api/commission-tiers', {
+                    token: token.value,
+                    query: { service_type_id: commissionTierServiceTypeId.value },
+                });
+                commissionTiers.value = tierResponse.data;
+            }
+
             dailySummary.value = summaryResponse.data;
             reconciliationLogs.value = reconciliationResponse.data;
         } else {
             users.value = [];
             vaultLog.value = [];
+            activityLogs.value = [];
+            commissionTiers.value = [];
+            systemStatus.value = null;
             dailySummary.value = null;
             reconciliationLogs.value = [];
         }
@@ -793,6 +927,119 @@ async function refreshDailyReport(): Promise<void> {
         dailySummary.value = summaryResponse.data;
         reconciliationLogs.value = reconciliationResponse.data;
         setNotice('ok', 'Daily report refreshed.');
+    });
+}
+
+async function refreshActivityLogs(): Promise<void> {
+    await runAction(async () => {
+        const response = await apiRequest<ApiCollection<ActivityLog>>('/api/activity-logs', {
+            token: token.value,
+            query: {
+                date: activityLogDate.value,
+                entity_type: activityLogEntity.value || undefined,
+                action: activityLogAction.value || undefined,
+                per_page: 200,
+            },
+        });
+        activityLogs.value = response.data;
+        setNotice('ok', 'Activity logs refreshed.');
+    });
+}
+
+async function loadCommissionTiers(): Promise<void> {
+    if (!commissionTierServiceTypeId.value) {
+        commissionTiers.value = [];
+        resetTierForm();
+
+        return;
+    }
+
+    const serviceTypeId = requiredNumber(commissionTierServiceTypeId.value, 'Service type');
+    tierForm.value.service_type_id = commissionTierServiceTypeId.value;
+    tierForm.value.id = '';
+    const response = await apiRequest<ApiCollection<CommissionTier>>('/api/commission-tiers', {
+        token: token.value,
+        query: { service_type_id: serviceTypeId },
+    });
+    commissionTiers.value = response.data;
+}
+
+function selectTierForEdit(tier: CommissionTier): void {
+    tierForm.value = {
+        id: String(tier.id),
+        service_type_id: String(tier.service_type_id),
+        amount_from: String(tier.amount_from),
+        amount_to: String(tier.amount_to),
+        fee_amount_type: tier.fee_amount_type,
+        fee_amount_deposit: String(tier.fee_amount_deposit),
+        fee_amount_withdraw: String(tier.fee_amount_withdraw),
+        comm_type: tier.comm_type,
+        comm_deposit: String(tier.comm_deposit),
+        comm_withdraw: String(tier.comm_withdraw),
+        additional_fee_type: tier.additional_fee_type,
+        additional_fee_deposit_amount: String(tier.additional_fee_deposit_amount),
+        additional_fee_withdraw_amount: String(tier.additional_fee_withdraw_amount),
+    };
+    commissionTierServiceTypeId.value = String(tier.service_type_id);
+}
+
+function resetTierForm(): void {
+    tierForm.value = {
+        id: '',
+        service_type_id: commissionTierServiceTypeId.value,
+        amount_from: '',
+        amount_to: '',
+        fee_amount_type: 'FIXED',
+        fee_amount_deposit: '0',
+        fee_amount_withdraw: '0',
+        comm_type: 'FIXED',
+        comm_deposit: '0',
+        comm_withdraw: '0',
+        additional_fee_type: 'FIXED',
+        additional_fee_deposit_amount: '0',
+        additional_fee_withdraw_amount: '0',
+    };
+}
+
+function tierPayload(): Record<string, unknown> {
+    return {
+        service_type_id: requiredNumber(tierForm.value.service_type_id || commissionTierServiceTypeId.value, 'Service type'),
+        amount_from: requiredNumber(tierForm.value.amount_from, 'Amount from'),
+        amount_to: requiredNumber(tierForm.value.amount_to, 'Amount to'),
+        fee_amount_type: tierForm.value.fee_amount_type,
+        fee_amount_deposit: optionalNumber(tierForm.value.fee_amount_deposit) ?? 0,
+        fee_amount_withdraw: optionalNumber(tierForm.value.fee_amount_withdraw) ?? 0,
+        comm_type: tierForm.value.comm_type,
+        comm_deposit: optionalNumber(tierForm.value.comm_deposit) ?? 0,
+        comm_withdraw: optionalNumber(tierForm.value.comm_withdraw) ?? 0,
+        additional_fee_type: tierForm.value.additional_fee_type,
+        additional_fee_deposit_amount: optionalNumber(tierForm.value.additional_fee_deposit_amount) ?? 0,
+        additional_fee_withdraw_amount: optionalNumber(tierForm.value.additional_fee_withdraw_amount) ?? 0,
+    };
+}
+
+async function saveCommissionTier(): Promise<void> {
+    await runAction(async () => {
+        const id = tierForm.value.id;
+        await apiRequest(id ? `/api/commission-tiers/${id}` : '/api/commission-tiers', {
+            method: id ? 'PATCH' : 'POST',
+            token: token.value,
+            body: tierPayload(),
+        });
+        resetTierForm();
+        await loadCommissionTiers();
+        setNotice('ok', id ? 'Commission tier updated.' : 'Commission tier created.');
+    });
+}
+
+async function deleteCommissionTier(tierId: number): Promise<void> {
+    await runAction(async () => {
+        await apiRequest(`/api/commission-tiers/${tierId}`, {
+            method: 'DELETE',
+            token: token.value,
+        });
+        await loadCommissionTiers();
+        setNotice('ok', 'Commission tier deleted.');
     });
 }
 
@@ -926,7 +1173,7 @@ async function issueFloat(): Promise<void> {
             body: {
                 employee_id: requiredNumber(
                     floatIssueForm.value.employee_id,
-                    'Employee',
+                    'Teller',
                 ),
                 denominations: parseDenominations(
                     floatIssueForm.value.denominations,
@@ -1017,12 +1264,38 @@ async function submitTransaction(): Promise<void> {
     });
 }
 
+function denominationRows(map: DenominationMap | null | undefined): Array<{ denomination: number; quantity: number; total: number }> {
+    return Object.entries(map ?? {})
+        .map(([denomination, quantity]) => ({
+            denomination: Number(denomination),
+            quantity: Number(quantity),
+            total: Number(denomination) * Number(quantity),
+        }))
+        .filter((row) => row.denomination > 0 && row.quantity > 0)
+        .sort((a, b) => b.denomination - a.denomination);
+}
+
+function denominationTotal(rows: Array<{ total: number }>): number {
+    return rows.reduce((sum, row) => sum + row.total, 0);
+}
+
+function openCashInReview(transaction: Transaction): void {
+    cashInReview.value = transaction;
+}
+
+function closeCashInReview(): void {
+    if (!loading.value) {
+        cashInReview.value = null;
+    }
+}
+
 async function confirmCashIn(transactionId: number): Promise<void> {
     await runAction(async () => {
         await apiRequest(`/api/transactions/${transactionId}/confirm-cash-in`, {
             method: 'POST',
             token: token.value,
         });
+        cashInReview.value = null;
         await refreshWorkspace();
         setNotice('ok', 'Cash-in confirmed.');
     });
@@ -1183,7 +1456,7 @@ function connectRealtime(): void {
         handlers,
     );
 
-    if (session.value.role === 'employee') {
+    if (session.value.role === 'teller') {
         unsubscribeUser = subscribeToUserChannel(
             echo,
             session.value.id,
@@ -1299,7 +1572,7 @@ function resetUserForm(): void {
         username: '',
         email: '',
         full_name: '',
-        role: 'employee',
+        role: 'teller',
         password: '',
         pin: '',
         is_active: true,
@@ -1372,7 +1645,7 @@ function formatDate(value: string | null): string {
 }
 
 function roleLabel(role: Role): string {
-    return role.charAt(0).toUpperCase() + role.slice(1);
+    return { admin: 'Admin', cashier: 'Cashier', teller: 'Teller' }[role];
 }
 
 function messageFromError(error: unknown): string {
@@ -1404,6 +1677,9 @@ function clearWorkspace(): void {
     cashFloats.value = [];
     inventory.value = null;
     vaultLog.value = [];
+    activityLogs.value = [];
+    commissionTiers.value = [];
+    systemStatus.value = null;
     dailySummary.value = null;
     reconciliationLogs.value = [];
     latestRate.value = null;
@@ -1427,8 +1703,8 @@ function canOpenPage(page: ConsolePage): boolean {
 }
 
 function selectPage(page: ConsolePage): void {
-    if (page === 'employee') {
-        menuGroupsOpen.value.employee = true;
+    if (page === 'teller') {
+        menuGroupsOpen.value.teller = true;
         activePage.value = 'cash-in';
 
         return;
@@ -1577,6 +1853,21 @@ function redirectToLogin(): void {
                                 >
                                     Save PIN
                                 </button>
+                            </form>
+                            <form class="user-menu-pin" @submit.prevent="changePassword">
+                                <label>
+                                    Current password
+                                    <input v-model="passwordForm.current_password" type="password" autocomplete="current-password" required />
+                                </label>
+                                <label>
+                                    New password
+                                    <input v-model="passwordForm.password" type="password" autocomplete="new-password" minlength="8" required />
+                                </label>
+                                <label>
+                                    Confirm password
+                                    <input v-model="passwordForm.password_confirmation" type="password" autocomplete="new-password" minlength="8" required />
+                                </label>
+                                <button type="submit" class="compact-button" :disabled="loading">Update password</button>
                             </form>
                             <button
                                 type="button"
@@ -1742,7 +2033,7 @@ function redirectToLogin(): void {
                         <strong>{{ realtimeStatus }}</strong>
                     </div>
                     <button
-                        v-if="activeRole === 'owner'"
+                        v-if="activeRole === 'admin'"
                         type="button"
                         class="secondary-button"
                         :disabled="loading || !session"
@@ -1772,8 +2063,8 @@ function redirectToLogin(): void {
                         <small>MMK</small>
                     </article>
                     <article class="metric">
-                        <span>Employee Cash</span>
-                        <strong>{{ formatMoney(employeeCashTotal) }}</strong>
+                        <span>Teller Cash</span>
+                        <strong>{{ formatMoney(tellerCashTotal) }}</strong>
                         <small>MMK</small>
                     </article>
                     <article class="metric">
@@ -1841,6 +2132,71 @@ function redirectToLogin(): void {
                     </p>
                 </section>
 
+                <section
+                    v-if="activePage === 'activity-logs' && activeRole === 'admin'"
+                    class="panel data-panel"
+                >
+                    <div class="panel-heading">
+                        <span>Activity Logs</span>
+                        <strong>{{ activityLogs.length }}</strong>
+                    </div>
+                    <form class="form-grid three" @submit.prevent="refreshActivityLogs">
+                        <label>
+                            Date
+                            <input v-model="activityLogDate" type="date" />
+                        </label>
+                        <label>
+                            Entity
+                            <select v-model="activityLogEntity">
+                                <option value="">All entities</option>
+                                <option value="accounts">Accounts</option>
+                                <option value="transactions">Transactions</option>
+                                <option value="users">Users</option>
+                                <option value="companies">Companies</option>
+                                <option value="service_types">Service types</option>
+                                <option value="commission_tiers">Commission tiers</option>
+                            </select>
+                        </label>
+                        <label>
+                            Action contains
+                            <input v-model="activityLogAction" placeholder="transaction_created" />
+                        </label>
+                        <button type="submit" class="primary-button" :disabled="loading">Load logs</button>
+                    </form>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th>ID</th><th>User</th><th>Action</th><th>Entity</th><th>Details</th><th>Created</th></tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="log in activityLogs" :key="log.id">
+                                    <td>#{{ log.id }}</td>
+                                    <td>{{ log.user?.full_name || log.user?.username || log.user_id }}</td>
+                                    <td>{{ log.action }}</td>
+                                    <td>{{ log.entity_type }} #{{ log.entity_id ?? '-' }}</td>
+                                    <td>{{ typeof log.details === 'string' ? log.details : JSON.stringify(log.details || {}) }}</td>
+                                    <td>{{ formatDate(log.created_at) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p v-if="activityLogs.length === 0" class="empty-line">No activity logs for this filter.</p>
+                </section>
+
+                <section v-if="activePage === 'server-connection' && activeRole === 'admin'" class="panel data-panel">
+                    <div class="panel-heading">
+                        <span>Server Connection</span>
+                        <strong>{{ systemStatus?.status || 'unknown' }}</strong>
+                    </div>
+                    <dl class="summary-list">
+                        <div><dt>System</dt><dd>{{ systemStatus?.name || 'Ngwe Lwe System' }}</dd></div>
+                        <div><dt>Domain</dt><dd>{{ systemStatus?.domain || 'money-transfer' }}</dd></div>
+                        <div><dt>Web endpoint</dt><dd>{{ webOrigin || '-' }}</dd></div>
+                        <div><dt>Realtime</dt><dd>{{ realtimeStatus }}</dd></div>
+                    </dl>
+                    <button type="button" class="secondary-button" :disabled="workspaceLoading" @click="refreshWorkspace">Check connection</button>
+                </section>
+
                 <section v-if="ownerPageActive" class="role-grid">
                     <section
                         v-if="activePage === 'users'"
@@ -1893,9 +2249,9 @@ function redirectToLogin(): void {
                             <label>
                                 Role
                                 <select v-model="userForm.role">
-                                    <option value="owner">Owner</option>
+                                    <option value="admin">Admin</option>
                                     <option value="cashier">Cashier</option>
-                                    <option value="employee">Employee</option>
+                                    <option value="teller">Teller</option>
                                 </select>
                             </label>
                             <label>
@@ -2257,6 +2613,61 @@ function redirectToLogin(): void {
                         </form>
                     </section>
 
+                    <section v-if="activePage === 'commission-tiers'" class="panel">
+                        <div class="panel-heading">
+                            <span>Commission Tiers</span>
+                            <strong>{{ commissionTiers.length }}</strong>
+                        </div>
+                        <form class="form-grid three" @submit.prevent="saveCommissionTier">
+                            <label>
+                                Service type
+                                <select v-model="commissionTierServiceTypeId" @change="loadCommissionTiers">
+                                    <option value=""></option>
+                                    <option v-for="serviceType in serviceTypes" :key="serviceType.id" :value="serviceType.id">
+                                        {{ serviceType.company?.name || 'Company' }} / {{ serviceType.name }}
+                                    </option>
+                                </select>
+                            </label>
+                            <label>From <input v-model="tierForm.amount_from" inputmode="decimal" /></label>
+                            <label>To <input v-model="tierForm.amount_to" inputmode="decimal" /></label>
+                            <label>Fee type
+                                <select v-model="tierForm.fee_amount_type"><option>FIXED</option><option>PERCENTAGE</option></select>
+                            </label>
+                            <label>Cash In fee <input v-model="tierForm.fee_amount_deposit" inputmode="decimal" /></label>
+                            <label>Cash Out fee <input v-model="tierForm.fee_amount_withdraw" inputmode="decimal" /></label>
+                            <label>Commission type
+                                <select v-model="tierForm.comm_type"><option>FIXED</option><option>PERCENTAGE</option></select>
+                            </label>
+                            <label>Cash In commission <input v-model="tierForm.comm_deposit" inputmode="decimal" /></label>
+                            <label>Cash Out commission <input v-model="tierForm.comm_withdraw" inputmode="decimal" /></label>
+                            <label>Additional fee type
+                                <select v-model="tierForm.additional_fee_type"><option>FIXED</option><option>PERCENTAGE</option></select>
+                            </label>
+                            <label>Cash In additional <input v-model="tierForm.additional_fee_deposit_amount" inputmode="decimal" /></label>
+                            <label>Cash Out additional <input v-model="tierForm.additional_fee_withdraw_amount" inputmode="decimal" /></label>
+                            <div class="button-cell">
+                                <button type="submit" class="primary-button" :disabled="loading || !commissionTierServiceTypeId">{{ tierForm.id ? 'Update tier' : 'Create tier' }}</button>
+                                <button type="button" class="ghost-button" :disabled="loading" @click="resetTierForm">Clear</button>
+                            </div>
+                        </form>
+                        <div class="table-wrap">
+                            <table>
+                                <thead><tr><th>Range</th><th>Cash In fee</th><th>Cash Out fee</th><th>Cash In comm.</th><th>Cash Out comm.</th><th>Action</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="tier in commissionTiers" :key="tier.id">
+                                        <td>{{ formatMoney(tier.amount_from) }} – {{ formatMoney(tier.amount_to) }}</td>
+                                        <td>{{ formatMoney(tier.fee_amount_deposit) }} {{ tier.fee_amount_type === 'PERCENTAGE' ? '%' : 'MMK' }}</td>
+                                        <td>{{ formatMoney(tier.fee_amount_withdraw) }} {{ tier.fee_amount_type === 'PERCENTAGE' ? '%' : 'MMK' }}</td>
+                                        <td>{{ formatMoney(tier.comm_deposit) }} {{ tier.comm_type === 'PERCENTAGE' ? '%' : 'MMK' }}</td>
+                                        <td>{{ formatMoney(tier.comm_withdraw) }} {{ tier.comm_type === 'PERCENTAGE' ? '%' : 'MMK' }}</td>
+                                        <td class="button-cell"><button type="button" class="ghost-button" @click="selectTierForEdit(tier)">Edit</button><button type="button" class="ghost-button danger" @click="deleteCommissionTier(tier.id)">Delete</button></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p v-if="commissionTiers.length === 0" class="empty-line">No commission tiers for this service type.</p>
+                    </section>
+
                     <section v-if="activePage === 'accounts'" class="panel">
                         <div class="panel-heading">
                             <span>Accounts</span>
@@ -2320,7 +2731,7 @@ function redirectToLogin(): void {
 
                     <section v-if="activePage === 'vault'" class="panel">
                         <div class="panel-heading">
-                            <span>Owner Operations</span>
+                            <span>Admin Operations</span>
                             <strong>Vault</strong>
                         </div>
                         <form
@@ -2469,13 +2880,9 @@ function redirectToLogin(): void {
                                             <button
                                                 type="button"
                                                 class="compact-button"
-                                                @click="
-                                                    confirmCashIn(
-                                                        transaction.id,
-                                                    )
-                                                "
+                                                @click="openCashInReview(transaction)"
                                             >
-                                                Confirm
+                                                Review & confirm
                                             </button>
                                             <button
                                                 type="button"
@@ -2503,7 +2910,7 @@ function redirectToLogin(): void {
                             @submit.prevent="issueFloat"
                         >
                             <label>
-                                Employee ID
+                                Teller ID
                                 <input
                                     v-model="floatIssueForm.employee_id"
                                     inputmode="numeric"
@@ -2575,14 +2982,14 @@ function redirectToLogin(): void {
                 </section>
 
                 <section
-                    v-if="employeePageActive"
-                    class="role-grid employee-grid"
+                    v-if="tellerPageActive"
+                    class="role-grid teller-grid"
                 >
                     <section class="panel entry-title-panel bank-hero">
                         <div class="bank-hero-balance">
                             <span>Available Float Balance</span>
                             <strong>
-                                {{ formatMoney(employeeFloatBalance) }}
+                                {{ formatMoney(tellerFloatBalance) }}
                                 <small>MMK</small>
                             </strong>
                             <p>{{ activeFloatCount }} active floats</p>
@@ -2814,7 +3221,7 @@ function redirectToLogin(): void {
                             >
                         </div>
                         <p class="panel-note">
-                            Activate a received employee float after checking
+                            Activate a received teller float after checking
                             denominations and PIN.
                         </p>
                         <form
@@ -2869,7 +3276,7 @@ function redirectToLogin(): void {
                             <thead>
                                 <tr>
                                     <th>ID</th>
-                                    <th>Employee</th>
+                                        <th>Teller</th>
                                     <th>Status</th>
                                     <th>Total</th>
                                     <th>Balance</th>
@@ -2934,6 +3341,137 @@ function redirectToLogin(): void {
                 </section>
             </section>
         </main>
+
+        <div
+            v-if="cashInReview"
+            class="cash-in-review-backdrop"
+            role="presentation"
+            @click.self="closeCashInReview"
+        >
+            <section
+                class="cash-in-review-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="cash-in-review-title"
+            >
+                <header class="cash-in-review-header">
+                    <div>
+                        <span class="cash-in-review-eyebrow">Cash In review</span>
+                        <h2 id="cash-in-review-title">
+                            Verify denomination before confirmation
+                        </h2>
+                        <p>
+                            Check the physical notes handed over by the Teller, then confirm the Cash In.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="cash-in-review-close"
+                        aria-label="Close denomination review"
+                        :disabled="loading"
+                        @click="closeCashInReview"
+                    >
+                        ×
+                    </button>
+                </header>
+
+                <div class="cash-in-review-summary">
+                    <div>
+                        <span>Reference</span>
+                        <strong>#{{ cashInReview.id }}</strong>
+                    </div>
+                    <div>
+                        <span>Cash In amount</span>
+                        <strong>{{ formatMoney(cashInReview.amount) }} MMK</strong>
+                    </div>
+                    <div>
+                        <span>Expected handoff</span>
+                        <strong>{{ formatMoney(cashInReviewExpectedHandoff) }} MMK</strong>
+                    </div>
+                </div>
+
+                <div class="cash-in-review-columns">
+                    <section class="cash-in-review-card">
+                        <div class="cash-in-review-card-heading">
+                            <div>
+                                <span class="cash-in-review-step">01</span>
+                                <h3>Customer cash received</h3>
+                            </div>
+                            <strong>{{ formatMoney(denominationTotal(cashInReviewRows.received)) }} MMK</strong>
+                        </div>
+                        <div class="cash-in-review-denoms">
+                            <div v-for="row in cashInReviewRows.received" :key="`received-${row.denomination}`">
+                                <span>{{ formatMoney(row.denomination) }} × {{ row.quantity }}</span>
+                                <strong>{{ formatMoney(row.total) }}</strong>
+                            </div>
+                            <p v-if="cashInReviewRows.received.length === 0">No denomination recorded.</p>
+                        </div>
+                    </section>
+
+                    <section class="cash-in-review-card cash-in-review-card-primary">
+                        <div class="cash-in-review-card-heading">
+                            <div>
+                                <span class="cash-in-review-step">02</span>
+                                <h3>Cashier handoff</h3>
+                            </div>
+                            <strong>{{ formatMoney(cashInReviewHandoffTotal) }} MMK</strong>
+                        </div>
+                        <div class="cash-in-review-denoms">
+                            <div v-for="row in cashInReviewRows.handoff" :key="`handoff-${row.denomination}`">
+                                <span>{{ formatMoney(row.denomination) }} × {{ row.quantity }}</span>
+                                <strong>{{ formatMoney(row.total) }}</strong>
+                            </div>
+                            <p v-if="cashInReviewRows.handoff.length === 0">No denomination recorded.</p>
+                        </div>
+                    </section>
+                </div>
+
+                <section v-if="cashInReviewRows.change.length" class="cash-in-review-card cash-in-review-change">
+                    <div class="cash-in-review-card-heading">
+                        <div>
+                            <span class="cash-in-review-step">03</span>
+                            <h3>Change from Teller vault</h3>
+                        </div>
+                        <strong>{{ formatMoney(denominationTotal(cashInReviewRows.change)) }} MMK</strong>
+                    </div>
+                    <div class="cash-in-review-denoms cash-in-review-denoms-inline">
+                        <div v-for="row in cashInReviewRows.change" :key="`change-${row.denomination}`">
+                            <span>{{ formatMoney(row.denomination) }} × {{ row.quantity }}</span>
+                            <strong>{{ formatMoney(row.total) }}</strong>
+                        </div>
+                    </div>
+                </section>
+
+                <div
+                    class="cash-in-review-status"
+                    :class="cashInReviewIsBalanced ? 'is-balanced' : 'is-warning'"
+                >
+                    <strong>{{ cashInReviewIsBalanced ? 'Denomination balanced' : 'Review required' }}</strong>
+                    <span>
+                        Handoff {{ formatMoney(cashInReviewHandoffTotal) }} / {{ formatMoney(cashInReviewExpectedHandoff) }} MMK
+                    </span>
+                </div>
+
+                <footer class="cash-in-review-actions">
+                    <button
+                        type="button"
+                        class="ghost-button"
+                        :disabled="loading"
+                        @click="closeCashInReview"
+                    >
+                        Back
+                    </button>
+                    <button
+                        type="button"
+                        class="primary-button"
+                        :disabled="loading || !cashInReviewIsBalanced"
+                        @click="confirmCashIn(cashInReview.id)"
+                    >
+                        {{ loading ? 'Confirming…' : 'Confirm Cash In' }}
+                    </button>
+                </footer>
+            </section>
+        </div>
 
         <div v-if="workspaceLoading" class="loading-bar" aria-hidden="true" />
     </div>
