@@ -187,7 +187,7 @@ class TransactionEntryController extends Controller
     }
 
     /**
-     * @return array<int, array{id:int,company:string,company_id:int|null,service:string,service_type_id:int|null,name:string,number:string|null,balance:string}>
+     * @return array<int, array{id:int,company:string,company_id:int|null,company_logo_url:string|null,service:string,service_type_id:int|null,name:string,number:string|null,balance:string}>
      */
     private function accountProps($accounts = null): array
     {
@@ -196,6 +196,7 @@ class TransactionEntryController extends Controller
                 'id' => $account->id,
                 'company' => $account->serviceType?->company?->name ?? 'Account',
                 'company_id' => $account->serviceType?->company_id,
+                'company_logo_url' => $this->companyLogoUrl($account->serviceType?->company?->logo_path),
                 'service' => $account->serviceType?->name ?? 'Account',
                 'service_type_id' => $account->service_type_id,
                 'name' => $account->account_name,
@@ -207,7 +208,7 @@ class TransactionEntryController extends Controller
     }
 
     /**
-     * @return array<int, array{id:int,company_id:int|null,company:string,name:string,operation:string}>
+     * @return array<int, array{id:int,company_id:int|null,company:string,company_logo_url:string|null,name:string,operation:string}>
      */
     private function serviceTypeProps(): array
     {
@@ -220,11 +221,17 @@ class TransactionEntryController extends Controller
                 'id' => $serviceType->id,
                 'company_id' => $serviceType->company_id,
                 'company' => $serviceType->company?->name ?? 'Account',
+                'company_logo_url' => $this->companyLogoUrl($serviceType->company?->logo_path),
                 'name' => $serviceType->name,
                 'operation' => $serviceType->operation,
             ])
             ->values()
             ->all();
+    }
+
+    private function companyLogoUrl(?string $path): ?string
+    {
+        return $path ? asset('storage/'.$path) : null;
     }
 
     private function selectedFloat(Request $request): ?CashFloatAssignment

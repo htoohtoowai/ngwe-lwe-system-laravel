@@ -85,6 +85,7 @@ class DatabaseSeeder extends Seeder
             $this->call(DemoUserSeeder::class);
         }
 
+        $this->call(MyanmarMasterDataSeeder::class);
         $this->seedSetupData();
 
         $admin = User::query()->where('username', 'admin')->first();

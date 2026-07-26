@@ -26,6 +26,7 @@ const props = withDefaults(
             id: number;
             company: string;
             company_id?: number | null;
+            company_logo_url?: string | null;
             service?: string;
             service_type_id?: number | null;
             name: string;
@@ -36,6 +37,7 @@ const props = withDefaults(
             id: number;
             company_id?: number | null;
             company: string;
+            company_logo_url?: string | null;
             name: string;
             operation: string;
         }[];
@@ -99,13 +101,26 @@ const cashInServiceTypes = computed(() =>
             ['WST', 'Pay_To_Pay', 'P2P'].includes(serviceType.name),
     ),
 );
-const companies = computed(() =>
-    Array.from(
-        new Set(
-            cashInServiceTypes.value.map((serviceType) => serviceType.company),
-        ),
-    ).filter(Boolean),
-);
+const companies = computed(() => {
+    const unique = new Map<
+        string,
+        { id: number | null; name: string; logoUrl: string | null }
+    >();
+
+    for (const serviceType of cashInServiceTypes.value) {
+        if (!serviceType.company || unique.has(serviceType.company)) {
+            continue;
+        }
+
+        unique.set(serviceType.company, {
+            id: serviceType.company_id ?? null,
+            name: serviceType.company,
+            logoUrl: serviceType.company_logo_url ?? null,
+        });
+    }
+
+    return Array.from(unique.values());
+});
 const cashInServiceOptions = computed(() =>
     cashInServiceTypes.value.filter(
         (serviceType) =>
@@ -237,8 +252,8 @@ const ready = computed(
 watch(
     companies,
     (values) => {
-        if (!values.includes(selectedCompany.value)) {
-            selectedCompany.value = values[0] ?? '';
+        if (!values.some((company) => company.name === selectedCompany.value)) {
+            selectedCompany.value = values[0]?.name ?? '';
         }
     },
     { immediate: true },
@@ -475,32 +490,44 @@ function submit() {
                         >
                             <button
                                 v-for="company in companies"
-                                :key="company"
+                                :key="company.id ?? company.name"
                                 type="button"
                                 role="radio"
-                                :aria-checked="selectedCompany === company"
+                                :aria-checked="selectedCompany === company.name"
                                 class="group flex min-h-16 items-center gap-2 rounded-xl border px-3 py-2 text-left transition"
                                 :class="
-                                    selectedCompany === company
+                                    selectedCompany === company.name
                                         ? 'border-brand bg-brand-soft text-brand shadow-sm ring-2 ring-brand/15'
                                         : 'border-line bg-mist/40 text-ink hover:border-brand/40 hover:bg-brand-soft/40'
                                 "
-                                @click="selectedCompany = company"
+                                @click="selectedCompany = company.name"
                             >
                                 <span
-                                    class="grid size-9 shrink-0 place-items-center rounded-xl text-sm font-black"
+                                    class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl text-sm font-black"
                                     :class="
-                                        selectedCompany === company
+                                        selectedCompany === company.name
                                             ? 'bg-brand text-white'
                                             : 'bg-white text-brand shadow-sm'
                                     "
                                 >
-                                    {{ company.slice(0, 1).toUpperCase() }}
+                                    <img
+                                        v-if="company.logoUrl"
+                                        :src="company.logoUrl"
+                                        :alt="`${company.name} logo`"
+                                        class="size-full object-contain p-1"
+                                    />
+                                    <span v-else>
+                                        {{
+                                            company.name
+                                                .slice(0, 1)
+                                                .toUpperCase()
+                                        }}
+                                    </span>
                                 </span>
                                 <span class="min-w-0">
                                     <span
                                         class="block truncate text-xs font-black"
-                                        >{{ company }}</span
+                                        >{{ company.name }}</span
                                     >
                                     <span
                                         class="mt-0.5 block text-[10px] text-slate"
@@ -508,7 +535,8 @@ function submit() {
                                         {{
                                             props.accounts.filter(
                                                 (account) =>
-                                                    account.company === company,
+                                                    account.company ===
+                                                    company.name,
                                             ).length
                                         }}
                                         {{ t('transaction.accounts') }}
