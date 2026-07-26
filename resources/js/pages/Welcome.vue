@@ -186,7 +186,11 @@ const commissionTierServiceTypeId = ref('');
 const activityLogDate = ref(todayDate());
 const activityLogEntity = ref('');
 const activityLogAction = ref('');
-const systemStatus = ref<{ name: string; domain: string; status: string } | null>(null);
+const systemStatus = ref<{
+    name: string;
+    domain: string;
+    status: string;
+} | null>(null);
 const webOrigin = ref('');
 const dailySummary = ref<DailySummaryReport | null>(null);
 const reconciliationLogs = ref<DailyReconciliation[]>([]);
@@ -276,6 +280,7 @@ const floatActivateForm = ref({
 });
 const floatInitiateReturnForm = ref({
     float_id: '',
+    pin: '',
     return_denominations: '{"10000": 1}',
 });
 const transactionMode = ref<TransactionMode>('cash-in');
@@ -324,9 +329,7 @@ const activeUserName = computed(
 );
 const userInitials = computed(() => {
     const parts = activeUserName.value.trim().split(/\s+/).slice(0, 2);
-    const initials = parts
-        .map((part) => part[0]?.toUpperCase() ?? '')
-        .join('');
+    const initials = parts.map((part) => part[0]?.toUpperCase() ?? '').join('');
 
     return initials || 'NL';
 });
@@ -354,14 +357,15 @@ const cashInReviewExpectedHandoff = computed(() => {
         return 0;
     }
 
-    const fee = transaction.fee_payment_method === 'cash'
-        ? Number(transaction.customer_fee ?? 0)
-        : 0;
+    const fee =
+        transaction.fee_payment_method === 'cash'
+            ? Number(transaction.customer_fee ?? 0)
+            : 0;
 
     return Number(transaction.amount ?? 0) + fee;
 });
-const cashInReviewIsBalanced = computed(() =>
-    cashInReviewHandoffTotal.value === cashInReviewExpectedHandoff.value,
+const cashInReviewIsBalanced = computed(
+    () => cashInReviewHandoffTotal.value === cashInReviewExpectedHandoff.value,
 );
 const activeFloatCount = computed(
     () => cashFloats.value.filter((float) => float.status === 'ACTIVE').length,
@@ -593,9 +597,16 @@ const currentPageLabel = computed(() => {
 const ownerPageActive = computed(
     () =>
         activeRole.value === 'admin' &&
-        ['users', 'reports', 'setup', 'commission-tiers', 'activity-logs', 'accounts', 'vault', 'server-connection'].includes(
-            activePage.value,
-        ),
+        [
+            'users',
+            'reports',
+            'setup',
+            'commission-tiers',
+            'activity-logs',
+            'accounts',
+            'vault',
+            'server-connection',
+        ].includes(activePage.value),
 );
 const cashierPageActive = computed(
     () => activeRole.value === 'cashier' && activePage.value === 'cashier',
@@ -812,9 +823,12 @@ async function refreshWorkspace(): Promise<void> {
                         per_page: 200,
                     },
                 }),
-                apiRequest<{ name: string; domain: string; status: string }>('/api/system/status', {
-                    token: token.value,
-                }),
+                apiRequest<{ name: string; domain: string; status: string }>(
+                    '/api/system/status',
+                    {
+                        token: token.value,
+                    },
+                ),
                 apiRequest<ApiItem<DailySummaryReport>>(
                     '/api/reports/daily-summary',
                     {
@@ -836,10 +850,16 @@ async function refreshWorkspace(): Promise<void> {
             systemStatus.value = systemStatusResponse;
 
             if (serviceTypes.value.length > 0) {
-                commissionTierServiceTypeId.value = commissionTierServiceTypeId.value || String(serviceTypes.value[0].id);
-                const tierResponse = await apiRequest<ApiCollection<CommissionTier>>('/api/commission-tiers', {
+                commissionTierServiceTypeId.value =
+                    commissionTierServiceTypeId.value ||
+                    String(serviceTypes.value[0].id);
+                const tierResponse = await apiRequest<
+                    ApiCollection<CommissionTier>
+                >('/api/commission-tiers', {
                     token: token.value,
-                    query: { service_type_id: commissionTierServiceTypeId.value },
+                    query: {
+                        service_type_id: commissionTierServiceTypeId.value,
+                    },
                 });
                 commissionTiers.value = tierResponse.data;
             }
@@ -932,15 +952,18 @@ async function refreshDailyReport(): Promise<void> {
 
 async function refreshActivityLogs(): Promise<void> {
     await runAction(async () => {
-        const response = await apiRequest<ApiCollection<ActivityLog>>('/api/activity-logs', {
-            token: token.value,
-            query: {
-                date: activityLogDate.value,
-                entity_type: activityLogEntity.value || undefined,
-                action: activityLogAction.value || undefined,
-                per_page: 200,
+        const response = await apiRequest<ApiCollection<ActivityLog>>(
+            '/api/activity-logs',
+            {
+                token: token.value,
+                query: {
+                    date: activityLogDate.value,
+                    entity_type: activityLogEntity.value || undefined,
+                    action: activityLogAction.value || undefined,
+                    per_page: 200,
+                },
             },
-        });
+        );
         activityLogs.value = response.data;
         setNotice('ok', 'Activity logs refreshed.');
     });
@@ -954,13 +977,19 @@ async function loadCommissionTiers(): Promise<void> {
         return;
     }
 
-    const serviceTypeId = requiredNumber(commissionTierServiceTypeId.value, 'Service type');
+    const serviceTypeId = requiredNumber(
+        commissionTierServiceTypeId.value,
+        'Service type',
+    );
     tierForm.value.service_type_id = commissionTierServiceTypeId.value;
     tierForm.value.id = '';
-    const response = await apiRequest<ApiCollection<CommissionTier>>('/api/commission-tiers', {
-        token: token.value,
-        query: { service_type_id: serviceTypeId },
-    });
+    const response = await apiRequest<ApiCollection<CommissionTier>>(
+        '/api/commission-tiers',
+        {
+            token: token.value,
+            query: { service_type_id: serviceTypeId },
+        },
+    );
     commissionTiers.value = response.data;
 }
 
@@ -977,8 +1006,12 @@ function selectTierForEdit(tier: CommissionTier): void {
         comm_deposit: String(tier.comm_deposit),
         comm_withdraw: String(tier.comm_withdraw),
         additional_fee_type: tier.additional_fee_type,
-        additional_fee_deposit_amount: String(tier.additional_fee_deposit_amount),
-        additional_fee_withdraw_amount: String(tier.additional_fee_withdraw_amount),
+        additional_fee_deposit_amount: String(
+            tier.additional_fee_deposit_amount,
+        ),
+        additional_fee_withdraw_amount: String(
+            tier.additional_fee_withdraw_amount,
+        ),
     };
     commissionTierServiceTypeId.value = String(tier.service_type_id);
 }
@@ -1003,32 +1036,45 @@ function resetTierForm(): void {
 
 function tierPayload(): Record<string, unknown> {
     return {
-        service_type_id: requiredNumber(tierForm.value.service_type_id || commissionTierServiceTypeId.value, 'Service type'),
+        service_type_id: requiredNumber(
+            tierForm.value.service_type_id || commissionTierServiceTypeId.value,
+            'Service type',
+        ),
         amount_from: requiredNumber(tierForm.value.amount_from, 'Amount from'),
         amount_to: requiredNumber(tierForm.value.amount_to, 'Amount to'),
         fee_amount_type: tierForm.value.fee_amount_type,
-        fee_amount_deposit: optionalNumber(tierForm.value.fee_amount_deposit) ?? 0,
-        fee_amount_withdraw: optionalNumber(tierForm.value.fee_amount_withdraw) ?? 0,
+        fee_amount_deposit:
+            optionalNumber(tierForm.value.fee_amount_deposit) ?? 0,
+        fee_amount_withdraw:
+            optionalNumber(tierForm.value.fee_amount_withdraw) ?? 0,
         comm_type: tierForm.value.comm_type,
         comm_deposit: optionalNumber(tierForm.value.comm_deposit) ?? 0,
         comm_withdraw: optionalNumber(tierForm.value.comm_withdraw) ?? 0,
         additional_fee_type: tierForm.value.additional_fee_type,
-        additional_fee_deposit_amount: optionalNumber(tierForm.value.additional_fee_deposit_amount) ?? 0,
-        additional_fee_withdraw_amount: optionalNumber(tierForm.value.additional_fee_withdraw_amount) ?? 0,
+        additional_fee_deposit_amount:
+            optionalNumber(tierForm.value.additional_fee_deposit_amount) ?? 0,
+        additional_fee_withdraw_amount:
+            optionalNumber(tierForm.value.additional_fee_withdraw_amount) ?? 0,
     };
 }
 
 async function saveCommissionTier(): Promise<void> {
     await runAction(async () => {
         const id = tierForm.value.id;
-        await apiRequest(id ? `/api/commission-tiers/${id}` : '/api/commission-tiers', {
-            method: id ? 'PATCH' : 'POST',
-            token: token.value,
-            body: tierPayload(),
-        });
+        await apiRequest(
+            id ? `/api/commission-tiers/${id}` : '/api/commission-tiers',
+            {
+                method: id ? 'PATCH' : 'POST',
+                token: token.value,
+                body: tierPayload(),
+            },
+        );
         resetTierForm();
         await loadCommissionTiers();
-        setNotice('ok', id ? 'Commission tier updated.' : 'Commission tier created.');
+        setNotice(
+            'ok',
+            id ? 'Commission tier updated.' : 'Commission tier created.',
+        );
     });
 }
 
@@ -1240,12 +1286,14 @@ async function initiateFloatReturn(): Promise<void> {
             method: 'POST',
             token: token.value,
             body: {
+                pin: floatInitiateReturnForm.value.pin,
                 return_denominations: parseDenominations(
                     floatInitiateReturnForm.value.return_denominations,
                     true,
                 ),
             },
         });
+        floatInitiateReturnForm.value.pin = '';
         await refreshWorkspace();
         setNotice('ok', 'Return initiated.');
     });
@@ -1264,7 +1312,9 @@ async function submitTransaction(): Promise<void> {
     });
 }
 
-function denominationRows(map: DenominationMap | null | undefined): Array<{ denomination: number; quantity: number; total: number }> {
+function denominationRows(
+    map: DenominationMap | null | undefined,
+): Array<{ denomination: number; quantity: number; total: number }> {
     return Object.entries(map ?? {})
         .map(([denomination, quantity]) => ({
             denomination: Number(denomination),
@@ -1289,11 +1339,23 @@ function closeCashInReview(): void {
     }
 }
 
+function requireCashierPin(): string {
+    const pin = window.prompt('Cashier PIN')?.trim() ?? '';
+
+    if (!pin) {
+        throw new Error('Cashier PIN is required.');
+    }
+
+    return pin;
+}
+
 async function confirmCashIn(transactionId: number): Promise<void> {
     await runAction(async () => {
+        const pin = requireCashierPin();
         await apiRequest(`/api/transactions/${transactionId}/confirm-cash-in`, {
             method: 'POST',
             token: token.value,
+            body: { pin },
         });
         cashInReview.value = null;
         await refreshWorkspace();
@@ -1303,10 +1365,11 @@ async function confirmCashIn(transactionId: number): Promise<void> {
 
 async function cancelCashIn(transactionId: number): Promise<void> {
     await runAction(async () => {
+        const pin = requireCashierPin();
         await apiRequest(`/api/transactions/${transactionId}/cancel-cash-in`, {
             method: 'POST',
             token: token.value,
-            body: { note: 'Cancelled from console' },
+            body: { pin, note: 'Cancelled from console' },
         });
         await refreshWorkspace();
         setNotice('ok', 'Cash-in cancelled.');
@@ -1695,9 +1758,10 @@ function todayDate(): string {
 
 function canOpenPage(page: ConsolePage): boolean {
     return menuSections.value.some((section) =>
-        section.items.some((item) =>
-            item.id === page ||
-            item.children?.some((child) => child.id === page),
+        section.items.some(
+            (item) =>
+                item.id === page ||
+                item.children?.some((child) => child.id === page),
         ),
     );
 }
@@ -1854,20 +1918,48 @@ function redirectToLogin(): void {
                                     Save PIN
                                 </button>
                             </form>
-                            <form class="user-menu-pin" @submit.prevent="changePassword">
+                            <form
+                                class="user-menu-pin"
+                                @submit.prevent="changePassword"
+                            >
                                 <label>
                                     Current password
-                                    <input v-model="passwordForm.current_password" type="password" autocomplete="current-password" required />
+                                    <input
+                                        v-model="passwordForm.current_password"
+                                        type="password"
+                                        autocomplete="current-password"
+                                        required
+                                    />
                                 </label>
                                 <label>
                                     New password
-                                    <input v-model="passwordForm.password" type="password" autocomplete="new-password" minlength="8" required />
+                                    <input
+                                        v-model="passwordForm.password"
+                                        type="password"
+                                        autocomplete="new-password"
+                                        minlength="8"
+                                        required
+                                    />
                                 </label>
                                 <label>
                                     Confirm password
-                                    <input v-model="passwordForm.password_confirmation" type="password" autocomplete="new-password" minlength="8" required />
+                                    <input
+                                        v-model="
+                                            passwordForm.password_confirmation
+                                        "
+                                        type="password"
+                                        autocomplete="new-password"
+                                        minlength="8"
+                                        required
+                                    />
                                 </label>
-                                <button type="submit" class="compact-button" :disabled="loading">Update password</button>
+                                <button
+                                    type="submit"
+                                    class="compact-button"
+                                    :disabled="loading"
+                                >
+                                    Update password
+                                </button>
                             </form>
                             <button
                                 type="button"
@@ -1899,10 +1991,7 @@ function redirectToLogin(): void {
                         class="drawer-menu-section"
                     >
                         <p>{{ section.label }}</p>
-                        <template
-                            v-for="item in section.items"
-                            :key="item.id"
-                        >
+                        <template v-for="item in section.items" :key="item.id">
                             <button
                                 v-if="!item.children"
                                 type="button"
@@ -1989,8 +2078,12 @@ function redirectToLogin(): void {
                                         v-for="child in item.children"
                                         :key="child.id"
                                         type="button"
-                                        :class="{ active: activePage === child.id }"
-                                        @click="openSubMenuPage(item.id, child.id)"
+                                        :class="{
+                                            active: activePage === child.id,
+                                        }"
+                                        @click="
+                                            openSubMenuPage(item.id, child.id)
+                                        "
                                     >
                                         <span
                                             class="drawer-menu-dot"
@@ -2133,14 +2226,19 @@ function redirectToLogin(): void {
                 </section>
 
                 <section
-                    v-if="activePage === 'activity-logs' && activeRole === 'admin'"
+                    v-if="
+                        activePage === 'activity-logs' && activeRole === 'admin'
+                    "
                     class="panel data-panel"
                 >
                     <div class="panel-heading">
                         <span>Activity Logs</span>
                         <strong>{{ activityLogs.length }}</strong>
                     </div>
-                    <form class="form-grid three" @submit.prevent="refreshActivityLogs">
+                    <form
+                        class="form-grid three"
+                        @submit.prevent="refreshActivityLogs"
+                    >
                         <label>
                             Date
                             <input v-model="activityLogDate" type="date" />
@@ -2150,51 +2248,122 @@ function redirectToLogin(): void {
                             <select v-model="activityLogEntity">
                                 <option value="">All entities</option>
                                 <option value="accounts">Accounts</option>
-                                <option value="transactions">Transactions</option>
+                                <option value="transactions">
+                                    Transactions
+                                </option>
                                 <option value="users">Users</option>
                                 <option value="companies">Companies</option>
-                                <option value="service_types">Service types</option>
-                                <option value="commission_tiers">Commission tiers</option>
+                                <option value="service_types">
+                                    Service types
+                                </option>
+                                <option value="commission_tiers">
+                                    Commission tiers
+                                </option>
                             </select>
                         </label>
                         <label>
                             Action contains
-                            <input v-model="activityLogAction" placeholder="transaction_created" />
+                            <input
+                                v-model="activityLogAction"
+                                placeholder="transaction_created"
+                            />
                         </label>
-                        <button type="submit" class="primary-button" :disabled="loading">Load logs</button>
+                        <button
+                            type="submit"
+                            class="primary-button"
+                            :disabled="loading"
+                        >
+                            Load logs
+                        </button>
                     </form>
                     <div class="table-wrap">
                         <table>
                             <thead>
-                                <tr><th>ID</th><th>User</th><th>Action</th><th>Entity</th><th>Details</th><th>Created</th></tr>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>User</th>
+                                    <th>Action</th>
+                                    <th>Entity</th>
+                                    <th>Details</th>
+                                    <th>Created</th>
+                                </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="log in activityLogs" :key="log.id">
                                     <td>#{{ log.id }}</td>
-                                    <td>{{ log.user?.full_name || log.user?.username || log.user_id }}</td>
+                                    <td>
+                                        {{
+                                            log.user?.full_name ||
+                                            log.user?.username ||
+                                            log.user_id
+                                        }}
+                                    </td>
                                     <td>{{ log.action }}</td>
-                                    <td>{{ log.entity_type }} #{{ log.entity_id ?? '-' }}</td>
-                                    <td>{{ typeof log.details === 'string' ? log.details : JSON.stringify(log.details || {}) }}</td>
+                                    <td>
+                                        {{ log.entity_type }} #{{
+                                            log.entity_id ?? '-'
+                                        }}
+                                    </td>
+                                    <td>
+                                        {{
+                                            typeof log.details === 'string'
+                                                ? log.details
+                                                : JSON.stringify(
+                                                      log.details || {},
+                                                  )
+                                        }}
+                                    </td>
                                     <td>{{ formatDate(log.created_at) }}</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
-                    <p v-if="activityLogs.length === 0" class="empty-line">No activity logs for this filter.</p>
+                    <p v-if="activityLogs.length === 0" class="empty-line">
+                        No activity logs for this filter.
+                    </p>
                 </section>
 
-                <section v-if="activePage === 'server-connection' && activeRole === 'admin'" class="panel data-panel">
+                <section
+                    v-if="
+                        activePage === 'server-connection' &&
+                        activeRole === 'admin'
+                    "
+                    class="panel data-panel"
+                >
                     <div class="panel-heading">
                         <span>Server Connection</span>
                         <strong>{{ systemStatus?.status || 'unknown' }}</strong>
                     </div>
                     <dl class="summary-list">
-                        <div><dt>System</dt><dd>{{ systemStatus?.name || 'Ngwe Lwe System' }}</dd></div>
-                        <div><dt>Domain</dt><dd>{{ systemStatus?.domain || 'money-transfer' }}</dd></div>
-                        <div><dt>Web endpoint</dt><dd>{{ webOrigin || '-' }}</dd></div>
-                        <div><dt>Realtime</dt><dd>{{ realtimeStatus }}</dd></div>
+                        <div>
+                            <dt>System</dt>
+                            <dd>
+                                {{ systemStatus?.name || 'Ngwe Lwe System' }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Domain</dt>
+                            <dd>
+                                {{ systemStatus?.domain || 'money-transfer' }}
+                            </dd>
+                        </div>
+                        <div>
+                            <dt>Web endpoint</dt>
+                            <dd>{{ webOrigin || '-' }}</dd>
+                        </div>
+                        <div>
+                            <dt>Realtime</dt>
+                            <dd>{{ realtimeStatus }}</dd>
+                        </div>
                     </dl>
-                    <button type="button" class="secondary-button" :disabled="workspaceLoading" @click="refreshWorkspace">Check connection</button>
+                    <button
+                        type="button"
+                        class="secondary-button"
+                        :disabled="workspaceLoading"
+                        @click="refreshWorkspace"
+                    >
+                        Check connection
+                    </button>
                 </section>
 
                 <section v-if="ownerPageActive" class="role-grid">
@@ -2613,59 +2782,229 @@ function redirectToLogin(): void {
                         </form>
                     </section>
 
-                    <section v-if="activePage === 'commission-tiers'" class="panel">
+                    <section
+                        v-if="activePage === 'commission-tiers'"
+                        class="panel"
+                    >
                         <div class="panel-heading">
                             <span>Commission Tiers</span>
                             <strong>{{ commissionTiers.length }}</strong>
                         </div>
-                        <form class="form-grid three" @submit.prevent="saveCommissionTier">
+                        <form
+                            class="form-grid three"
+                            @submit.prevent="saveCommissionTier"
+                        >
                             <label>
                                 Service type
-                                <select v-model="commissionTierServiceTypeId" @change="loadCommissionTiers">
+                                <select
+                                    v-model="commissionTierServiceTypeId"
+                                    @change="loadCommissionTiers"
+                                >
                                     <option value=""></option>
-                                    <option v-for="serviceType in serviceTypes" :key="serviceType.id" :value="serviceType.id">
-                                        {{ serviceType.company?.name || 'Company' }} / {{ serviceType.name }}
+                                    <option
+                                        v-for="serviceType in serviceTypes"
+                                        :key="serviceType.id"
+                                        :value="serviceType.id"
+                                    >
+                                        {{
+                                            serviceType.company?.name ||
+                                            'Company'
+                                        }}
+                                        / {{ serviceType.name }}
                                     </option>
                                 </select>
                             </label>
-                            <label>From <input v-model="tierForm.amount_from" inputmode="decimal" /></label>
-                            <label>To <input v-model="tierForm.amount_to" inputmode="decimal" /></label>
-                            <label>Fee type
-                                <select v-model="tierForm.fee_amount_type"><option>FIXED</option><option>PERCENTAGE</option></select>
+                            <label
+                                >From
+                                <input
+                                    v-model="tierForm.amount_from"
+                                    inputmode="decimal"
+                            /></label>
+                            <label
+                                >To
+                                <input
+                                    v-model="tierForm.amount_to"
+                                    inputmode="decimal"
+                            /></label>
+                            <label
+                                >Fee type
+                                <select v-model="tierForm.fee_amount_type">
+                                    <option>FIXED</option>
+                                    <option>PERCENTAGE</option>
+                                </select>
                             </label>
-                            <label>Cash In fee <input v-model="tierForm.fee_amount_deposit" inputmode="decimal" /></label>
-                            <label>Cash Out fee <input v-model="tierForm.fee_amount_withdraw" inputmode="decimal" /></label>
-                            <label>Commission type
-                                <select v-model="tierForm.comm_type"><option>FIXED</option><option>PERCENTAGE</option></select>
+                            <label
+                                >Cash In fee
+                                <input
+                                    v-model="tierForm.fee_amount_deposit"
+                                    inputmode="decimal"
+                            /></label>
+                            <label
+                                >Cash Out fee
+                                <input
+                                    v-model="tierForm.fee_amount_withdraw"
+                                    inputmode="decimal"
+                            /></label>
+                            <label
+                                >Commission type
+                                <select v-model="tierForm.comm_type">
+                                    <option>FIXED</option>
+                                    <option>PERCENTAGE</option>
+                                </select>
                             </label>
-                            <label>Cash In commission <input v-model="tierForm.comm_deposit" inputmode="decimal" /></label>
-                            <label>Cash Out commission <input v-model="tierForm.comm_withdraw" inputmode="decimal" /></label>
-                            <label>Additional fee type
-                                <select v-model="tierForm.additional_fee_type"><option>FIXED</option><option>PERCENTAGE</option></select>
+                            <label
+                                >Cash In commission
+                                <input
+                                    v-model="tierForm.comm_deposit"
+                                    inputmode="decimal"
+                            /></label>
+                            <label
+                                >Cash Out commission
+                                <input
+                                    v-model="tierForm.comm_withdraw"
+                                    inputmode="decimal"
+                            /></label>
+                            <label
+                                >Additional fee type
+                                <select v-model="tierForm.additional_fee_type">
+                                    <option>FIXED</option>
+                                    <option>PERCENTAGE</option>
+                                </select>
                             </label>
-                            <label>Cash In additional <input v-model="tierForm.additional_fee_deposit_amount" inputmode="decimal" /></label>
-                            <label>Cash Out additional <input v-model="tierForm.additional_fee_withdraw_amount" inputmode="decimal" /></label>
+                            <label
+                                >Cash In additional
+                                <input
+                                    v-model="
+                                        tierForm.additional_fee_deposit_amount
+                                    "
+                                    inputmode="decimal"
+                            /></label>
+                            <label
+                                >Cash Out additional
+                                <input
+                                    v-model="
+                                        tierForm.additional_fee_withdraw_amount
+                                    "
+                                    inputmode="decimal"
+                            /></label>
                             <div class="button-cell">
-                                <button type="submit" class="primary-button" :disabled="loading || !commissionTierServiceTypeId">{{ tierForm.id ? 'Update tier' : 'Create tier' }}</button>
-                                <button type="button" class="ghost-button" :disabled="loading" @click="resetTierForm">Clear</button>
+                                <button
+                                    type="submit"
+                                    class="primary-button"
+                                    :disabled="
+                                        loading || !commissionTierServiceTypeId
+                                    "
+                                >
+                                    {{
+                                        tierForm.id
+                                            ? 'Update tier'
+                                            : 'Create tier'
+                                    }}
+                                </button>
+                                <button
+                                    type="button"
+                                    class="ghost-button"
+                                    :disabled="loading"
+                                    @click="resetTierForm"
+                                >
+                                    Clear
+                                </button>
                             </div>
                         </form>
                         <div class="table-wrap">
                             <table>
-                                <thead><tr><th>Range</th><th>Cash In fee</th><th>Cash Out fee</th><th>Cash In comm.</th><th>Cash Out comm.</th><th>Action</th></tr></thead>
+                                <thead>
+                                    <tr>
+                                        <th>Range</th>
+                                        <th>Cash In fee</th>
+                                        <th>Cash Out fee</th>
+                                        <th>Cash In comm.</th>
+                                        <th>Cash Out comm.</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
                                 <tbody>
-                                    <tr v-for="tier in commissionTiers" :key="tier.id">
-                                        <td>{{ formatMoney(tier.amount_from) }} – {{ formatMoney(tier.amount_to) }}</td>
-                                        <td>{{ formatMoney(tier.fee_amount_deposit) }} {{ tier.fee_amount_type === 'PERCENTAGE' ? '%' : 'MMK' }}</td>
-                                        <td>{{ formatMoney(tier.fee_amount_withdraw) }} {{ tier.fee_amount_type === 'PERCENTAGE' ? '%' : 'MMK' }}</td>
-                                        <td>{{ formatMoney(tier.comm_deposit) }} {{ tier.comm_type === 'PERCENTAGE' ? '%' : 'MMK' }}</td>
-                                        <td>{{ formatMoney(tier.comm_withdraw) }} {{ tier.comm_type === 'PERCENTAGE' ? '%' : 'MMK' }}</td>
-                                        <td class="button-cell"><button type="button" class="ghost-button" @click="selectTierForEdit(tier)">Edit</button><button type="button" class="ghost-button danger" @click="deleteCommissionTier(tier.id)">Delete</button></td>
+                                    <tr
+                                        v-for="tier in commissionTiers"
+                                        :key="tier.id"
+                                    >
+                                        <td>
+                                            {{ formatMoney(tier.amount_from) }}
+                                            – {{ formatMoney(tier.amount_to) }}
+                                        </td>
+                                        <td>
+                                            {{
+                                                formatMoney(
+                                                    tier.fee_amount_deposit,
+                                                )
+                                            }}
+                                            {{
+                                                tier.fee_amount_type ===
+                                                'PERCENTAGE'
+                                                    ? '%'
+                                                    : 'MMK'
+                                            }}
+                                        </td>
+                                        <td>
+                                            {{
+                                                formatMoney(
+                                                    tier.fee_amount_withdraw,
+                                                )
+                                            }}
+                                            {{
+                                                tier.fee_amount_type ===
+                                                'PERCENTAGE'
+                                                    ? '%'
+                                                    : 'MMK'
+                                            }}
+                                        </td>
+                                        <td>
+                                            {{ formatMoney(tier.comm_deposit) }}
+                                            {{
+                                                tier.comm_type === 'PERCENTAGE'
+                                                    ? '%'
+                                                    : 'MMK'
+                                            }}
+                                        </td>
+                                        <td>
+                                            {{
+                                                formatMoney(tier.comm_withdraw)
+                                            }}
+                                            {{
+                                                tier.comm_type === 'PERCENTAGE'
+                                                    ? '%'
+                                                    : 'MMK'
+                                            }}
+                                        </td>
+                                        <td class="button-cell">
+                                            <button
+                                                type="button"
+                                                class="ghost-button"
+                                                @click="selectTierForEdit(tier)"
+                                            >
+                                                Edit</button
+                                            ><button
+                                                type="button"
+                                                class="ghost-button danger"
+                                                @click="
+                                                    deleteCommissionTier(
+                                                        tier.id,
+                                                    )
+                                                "
+                                            >
+                                                Delete
+                                            </button>
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
-                        <p v-if="commissionTiers.length === 0" class="empty-line">No commission tiers for this service type.</p>
+                        <p
+                            v-if="commissionTiers.length === 0"
+                            class="empty-line"
+                        >
+                            No commission tiers for this service type.
+                        </p>
                     </section>
 
                     <section v-if="activePage === 'accounts'" class="panel">
@@ -2880,7 +3219,11 @@ function redirectToLogin(): void {
                                             <button
                                                 type="button"
                                                 class="compact-button"
-                                                @click="openCashInReview(transaction)"
+                                                @click="
+                                                    openCashInReview(
+                                                        transaction,
+                                                    )
+                                                "
                                             >
                                                 Review & confirm
                                             </button>
@@ -2981,10 +3324,7 @@ function redirectToLogin(): void {
                     </section>
                 </section>
 
-                <section
-                    v-if="tellerPageActive"
-                    class="role-grid teller-grid"
-                >
+                <section v-if="tellerPageActive" class="role-grid teller-grid">
                     <section class="panel entry-title-panel bank-hero">
                         <div class="bank-hero-balance">
                             <span>Available Float Balance</span>
@@ -3166,6 +3506,14 @@ function redirectToLogin(): void {
                                     inputmode="numeric"
                                 />
                             </label>
+                            <label>
+                                PIN
+                                <input
+                                    v-model="floatInitiateReturnForm.pin"
+                                    inputmode="numeric"
+                                    type="password"
+                                />
+                            </label>
                             <label class="wide-field">
                                 Return Denominations
                                 <textarea
@@ -3276,7 +3624,7 @@ function redirectToLogin(): void {
                             <thead>
                                 <tr>
                                     <th>ID</th>
-                                        <th>Teller</th>
+                                    <th>Teller</th>
                                     <th>Status</th>
                                     <th>Total</th>
                                     <th>Balance</th>
@@ -3356,12 +3704,15 @@ function redirectToLogin(): void {
             >
                 <header class="cash-in-review-header">
                     <div>
-                        <span class="cash-in-review-eyebrow">Cash In review</span>
+                        <span class="cash-in-review-eyebrow"
+                            >Cash In review</span
+                        >
                         <h2 id="cash-in-review-title">
                             Verify denomination before confirmation
                         </h2>
                         <p>
-                            Check the physical notes handed over by the Teller, then confirm the Cash In.
+                            Check the physical notes handed over by the Teller,
+                            then confirm the Cash In.
                         </p>
                     </div>
                     <button
@@ -3382,11 +3733,18 @@ function redirectToLogin(): void {
                     </div>
                     <div>
                         <span>Cash In amount</span>
-                        <strong>{{ formatMoney(cashInReview.amount) }} MMK</strong>
+                        <strong
+                            >{{ formatMoney(cashInReview.amount) }} MMK</strong
+                        >
                     </div>
                     <div>
                         <span>Expected handoff</span>
-                        <strong>{{ formatMoney(cashInReviewExpectedHandoff) }} MMK</strong>
+                        <strong
+                            >{{
+                                formatMoney(cashInReviewExpectedHandoff)
+                            }}
+                            MMK</strong
+                        >
                     </div>
                 </div>
 
@@ -3397,46 +3755,96 @@ function redirectToLogin(): void {
                                 <span class="cash-in-review-step">01</span>
                                 <h3>Customer cash received</h3>
                             </div>
-                            <strong>{{ formatMoney(denominationTotal(cashInReviewRows.received)) }} MMK</strong>
+                            <strong
+                                >{{
+                                    formatMoney(
+                                        denominationTotal(
+                                            cashInReviewRows.received,
+                                        ),
+                                    )
+                                }}
+                                MMK</strong
+                            >
                         </div>
                         <div class="cash-in-review-denoms">
-                            <div v-for="row in cashInReviewRows.received" :key="`received-${row.denomination}`">
-                                <span>{{ formatMoney(row.denomination) }} × {{ row.quantity }}</span>
+                            <div
+                                v-for="row in cashInReviewRows.received"
+                                :key="`received-${row.denomination}`"
+                            >
+                                <span
+                                    >{{ formatMoney(row.denomination) }} ×
+                                    {{ row.quantity }}</span
+                                >
                                 <strong>{{ formatMoney(row.total) }}</strong>
                             </div>
-                            <p v-if="cashInReviewRows.received.length === 0">No denomination recorded.</p>
+                            <p v-if="cashInReviewRows.received.length === 0">
+                                No denomination recorded.
+                            </p>
                         </div>
                     </section>
 
-                    <section class="cash-in-review-card cash-in-review-card-primary">
+                    <section
+                        class="cash-in-review-card cash-in-review-card-primary"
+                    >
                         <div class="cash-in-review-card-heading">
                             <div>
                                 <span class="cash-in-review-step">02</span>
                                 <h3>Cashier handoff</h3>
                             </div>
-                            <strong>{{ formatMoney(cashInReviewHandoffTotal) }} MMK</strong>
+                            <strong
+                                >{{
+                                    formatMoney(cashInReviewHandoffTotal)
+                                }}
+                                MMK</strong
+                            >
                         </div>
                         <div class="cash-in-review-denoms">
-                            <div v-for="row in cashInReviewRows.handoff" :key="`handoff-${row.denomination}`">
-                                <span>{{ formatMoney(row.denomination) }} × {{ row.quantity }}</span>
+                            <div
+                                v-for="row in cashInReviewRows.handoff"
+                                :key="`handoff-${row.denomination}`"
+                            >
+                                <span
+                                    >{{ formatMoney(row.denomination) }} ×
+                                    {{ row.quantity }}</span
+                                >
                                 <strong>{{ formatMoney(row.total) }}</strong>
                             </div>
-                            <p v-if="cashInReviewRows.handoff.length === 0">No denomination recorded.</p>
+                            <p v-if="cashInReviewRows.handoff.length === 0">
+                                No denomination recorded.
+                            </p>
                         </div>
                     </section>
                 </div>
 
-                <section v-if="cashInReviewRows.change.length" class="cash-in-review-card cash-in-review-change">
+                <section
+                    v-if="cashInReviewRows.change.length"
+                    class="cash-in-review-card cash-in-review-change"
+                >
                     <div class="cash-in-review-card-heading">
                         <div>
                             <span class="cash-in-review-step">03</span>
                             <h3>Change from Teller vault</h3>
                         </div>
-                        <strong>{{ formatMoney(denominationTotal(cashInReviewRows.change)) }} MMK</strong>
+                        <strong
+                            >{{
+                                formatMoney(
+                                    denominationTotal(cashInReviewRows.change),
+                                )
+                            }}
+                            MMK</strong
+                        >
                     </div>
-                    <div class="cash-in-review-denoms cash-in-review-denoms-inline">
-                        <div v-for="row in cashInReviewRows.change" :key="`change-${row.denomination}`">
-                            <span>{{ formatMoney(row.denomination) }} × {{ row.quantity }}</span>
+                    <div
+                        class="cash-in-review-denoms cash-in-review-denoms-inline"
+                    >
+                        <div
+                            v-for="row in cashInReviewRows.change"
+                            :key="`change-${row.denomination}`"
+                        >
+                            <span
+                                >{{ formatMoney(row.denomination) }} ×
+                                {{ row.quantity }}</span
+                            >
                             <strong>{{ formatMoney(row.total) }}</strong>
                         </div>
                     </div>
@@ -3444,11 +3852,18 @@ function redirectToLogin(): void {
 
                 <div
                     class="cash-in-review-status"
-                    :class="cashInReviewIsBalanced ? 'is-balanced' : 'is-warning'"
+                    :class="
+                        cashInReviewIsBalanced ? 'is-balanced' : 'is-warning'
+                    "
                 >
-                    <strong>{{ cashInReviewIsBalanced ? 'Denomination balanced' : 'Review required' }}</strong>
+                    <strong>{{
+                        cashInReviewIsBalanced
+                            ? 'Denomination balanced'
+                            : 'Review required'
+                    }}</strong>
                     <span>
-                        Handoff {{ formatMoney(cashInReviewHandoffTotal) }} / {{ formatMoney(cashInReviewExpectedHandoff) }} MMK
+                        Handoff {{ formatMoney(cashInReviewHandoffTotal) }} /
+                        {{ formatMoney(cashInReviewExpectedHandoff) }} MMK
                     </span>
                 </div>
 

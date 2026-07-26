@@ -2,6 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Account;
+use App\Models\Company;
+use App\Models\ServiceType;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Services\NgweLweTokenService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -69,6 +73,47 @@ class CashierOperationsPageTest extends TestCase
             );
     }
 
+    public function test_cashier_notifications_include_review_settlement_details(): void
+    {
+        [, $cashierToken] = $this->userWithToken('cashier');
+        [$teller] = $this->userWithToken('teller');
+        $account = $this->account();
+
+        $transaction = Transaction::query()->create([
+            'transaction_type' => 'cash_in',
+            'account_id' => $account->id,
+            'customer_name' => 'Aung',
+            'customer_phone' => '09',
+            'amount' => 5_000,
+            'customer_fee' => 0,
+            'commission_amount' => 0,
+            'additional_fee_amount' => 0,
+            'balance_change' => -5_000,
+            'currency' => 'MMK',
+            'fee_payment_method' => 'cash',
+            'created_by' => $teller->id,
+            'status' => 'PENDING_CASHIER_CONFIRM',
+            'vault_impact' => 'none',
+            'received_denominations' => [5_000 => 1],
+            'handoff_denominations' => [5_000 => 1],
+            'change_denominations' => [],
+            'change_given' => 0,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->get('/cashier')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('cashier/Operations')
+                ->has('pendingCashIns', 1)
+                ->where('pendingCashIns.0.id', $transaction->id)
+                ->where('pendingCashIns.0.creator_role', 'teller')
+                ->where('pendingCashIns.0.settlement_amount', '5000.00')
+                ->where('pendingCashIns.0.customer_fee', '0.00')
+                ->where('pendingCashIns.0.fee_payment_method', 'cash')
+            );
+    }
+
     public function test_non_cashier_roles_cannot_open_cashier_operations_pages(): void
     {
         foreach (['admin', 'teller'] as $role) {
@@ -94,5 +139,27 @@ class CashierOperationsPageTest extends TestCase
         ]);
 
         return [$user, app(NgweLweTokenService::class)->create($user)];
+    }
+
+    private function account(): Account
+    {
+        $company = Company::query()->create([
+            'name' => 'Wave-'.uniqid('', true),
+            'category' => 'Pay',
+        ]);
+        $serviceType = ServiceType::query()->create([
+            'company_id' => $company->id,
+            'name' => 'WST',
+            'operation' => 'CashIn',
+            'is_active' => true,
+        ]);
+
+        return Account::query()->create([
+            'service_type_id' => $serviceType->id,
+            'account_name' => 'Wave Main',
+            'phone_number' => '0900000000',
+            'balance' => 50_000,
+            'is_active' => true,
+        ]);
     }
 }

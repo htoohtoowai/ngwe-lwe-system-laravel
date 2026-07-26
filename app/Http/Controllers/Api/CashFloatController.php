@@ -7,6 +7,7 @@ use App\Http\Requests\ActivateCashFloatRequest;
 use App\Http\Requests\ConfirmFloatReturnRequest;
 use App\Http\Requests\InitiateFloatReturnRequest;
 use App\Http\Requests\IssueCashFloatRequest;
+use App\Http\Requests\RejectCashFloatRequest;
 use App\Http\Resources\CashFloatResource;
 use App\Models\CashFloatAssignment;
 use App\Repositories\CashFloatRepository;
@@ -120,6 +121,28 @@ class CashFloatController extends Controller
         return new CashFloatResource($activated);
     }
 
+    public function reject(RejectCashFloatRequest $request, CashFloatAssignment $float): CashFloatResource|JsonResponse
+    {
+        if ($float->employee_id !== $request->user()->id) {
+            return response()->json(['message' => "Float #{$float->id} does not belong to this Teller."], 403);
+        }
+
+        try {
+            $rejected = $this->service->rejectReceipt(
+                $request->user(),
+                $float,
+                $request->validated()['pin'],
+                $request->validated()['note'] ?? null,
+            );
+        } catch (InvalidArgumentException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 409);
+        }
+
+        return new CashFloatResource($rejected);
+    }
+
     public function initiateReturn(InitiateFloatReturnRequest $request, CashFloatAssignment $float): CashFloatResource|JsonResponse
     {
         try {
@@ -127,6 +150,7 @@ class CashFloatController extends Controller
                 $request->user(),
                 $float,
                 $request->validated()['return_denominations'],
+                $request->validated()['pin'],
             );
         } catch (InvalidArgumentException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
@@ -145,6 +169,7 @@ class CashFloatController extends Controller
                 $float,
                 $request->validated()['closing_total'],
                 $request->validated()['pin'],
+                $request->validated()['return_denominations'] ?? null,
             );
         } catch (InvalidArgumentException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);

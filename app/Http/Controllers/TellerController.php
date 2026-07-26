@@ -102,8 +102,20 @@ class TellerController extends Controller
 
     public function floatPage(Request $request): Response
     {
+        return $this->floatResponse($request, 'current');
+    }
+
+    public function floatHistory(Request $request): Response
+    {
+        return $this->floatResponse($request, 'history');
+    }
+
+    private function floatResponse(Request $request, string $view): Response
+    {
         return Inertia::render('teller/Float', [
+            'view' => $view,
             'float' => $this->floatProp($request),
+            'floats' => $this->floatRows($request),
             'notes' => $this->notes(),
             'issued' => $this->issued($request),
             'onHand' => $this->onHand($request),
@@ -213,6 +225,43 @@ class TellerController extends Controller
             'issued_amount' => $float->total_amount,
             'total_amount' => $float->total_amount,
         ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function floatRows(Request $request): array
+    {
+        $user = $request->user();
+
+        if ($user === null) {
+            return [];
+        }
+
+        return $this->floats->list($user->id)
+            ->take(50)
+            ->map(fn (CashFloatAssignment $float): array => [
+                'id' => $float->id,
+                'status' => $float->status,
+                'current_balance' => $float->current_balance ?? '0.00',
+                'issued_amount' => $float->total_amount,
+                'total_amount' => $float->total_amount,
+                'closing_total' => $float->closing_total,
+                'issued_by_name' => $float->issuer?->full_name,
+                'created_at' => $float->created_at?->toISOString(),
+                'received_at' => $float->received_at?->toISOString(),
+                'closed_at' => $float->closed_at?->toISOString(),
+                'note' => $float->note,
+                'denominations' => $float->denominations
+                    ->map(fn ($row): array => [
+                        'denomination' => (int) $row->denomination,
+                        'quantity' => (int) $row->quantity,
+                    ])
+                    ->values()
+                    ->all(),
+            ])
+            ->values()
+            ->all();
     }
 
     /**

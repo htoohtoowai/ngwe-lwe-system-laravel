@@ -170,10 +170,13 @@ class TransactionController extends Controller
 
     public function confirmCashIn(Request $request, Transaction $transaction): TransactionResource|JsonResponse
     {
+        $data = $request->validate(
+            ['pin' => ['required', 'string', 'regex:/^[0-9]{4,8}$/']],
+            ['pin.regex' => 'PIN must be 4-8 digits.'],
+        );
+
         try {
-            if ($request->filled('pin')) {
-                $this->pinVerifier->verify($request->user(), $request->input('pin'));
-            }
+            $this->pinVerifier->verify($request->user(), $data['pin']);
             $updated = $this->transactions->confirmPendingCashIn($transaction, $request->user());
         } catch (InvalidArgumentException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
@@ -187,9 +190,7 @@ class TransactionController extends Controller
     public function cancelCashIn(CancelCashInRequest $request, Transaction $transaction): TransactionResource|JsonResponse
     {
         try {
-            if ($request->filled('pin')) {
-                $this->pinVerifier->verify($request->user(), $request->validated()['pin']);
-            }
+            $this->pinVerifier->verify($request->user(), $request->validated()['pin']);
             $updated = $this->transactions->cancelPendingCashIn(
                 $transaction,
                 $request->user(),

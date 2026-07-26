@@ -62,6 +62,7 @@ type NavIcon =
 type NavChild = {
     label: string;
     href: string;
+    exactOnly?: boolean;
 };
 type NavItem = {
     label: string;
@@ -153,6 +154,17 @@ const NAV: NavItem[] = [
         icon: 'floats',
         roles: ['teller'],
         section: 'Banking',
+        children: [
+            {
+                label: 'Current',
+                href: '/teller/float',
+                exactOnly: true,
+            },
+            {
+                label: 'History',
+                href: '/teller/float/history',
+            },
+        ],
     },
     {
         label: 'Cash In',
@@ -161,6 +173,17 @@ const NAV: NavItem[] = [
         icon: 'cashIn',
         roles: ['teller'],
         section: 'Banking',
+        children: [
+            {
+                label: 'Entry',
+                href: '/transactions/cash-in',
+                exactOnly: true,
+            },
+            {
+                label: 'History',
+                href: '/transactions/cash-in/history',
+            },
+        ],
     },
     {
         label: 'Cash Out',
@@ -169,6 +192,17 @@ const NAV: NavItem[] = [
         icon: 'cashOut',
         roles: ['teller'],
         section: 'Banking',
+        children: [
+            {
+                label: 'Entry',
+                href: '/transactions/cash-out',
+                exactOnly: true,
+            },
+            {
+                label: 'History',
+                href: '/transactions/cash-out/history',
+            },
+        ],
     },
     {
         label: 'Transfer',
@@ -177,6 +211,17 @@ const NAV: NavItem[] = [
         icon: 'transfer',
         roles: ['teller'],
         section: 'Banking',
+        children: [
+            {
+                label: 'Entry',
+                href: '/transactions/transfer',
+                exactOnly: true,
+            },
+            {
+                label: 'History',
+                href: '/transactions/transfer/history',
+            },
+        ],
     },
     {
         label: 'Exchange',
@@ -185,6 +230,17 @@ const NAV: NavItem[] = [
         icon: 'exchange',
         roles: ['teller'],
         section: 'Banking',
+        children: [
+            {
+                label: 'Entry',
+                href: '/transactions/exchange',
+                exactOnly: true,
+            },
+            {
+                label: 'History',
+                href: '/transactions/exchange/history',
+            },
+        ],
     },
     {
         label: 'Overview',
@@ -435,6 +491,15 @@ function authHeaders(): Record<string, string> {
 }
 const isTransactionRecordsPath = (path: string) =>
     path === '/admin/transactions' || /^\/admin\/transactions\/\d+$/.test(path);
+const isChildActive = (child: NavChild) => {
+    const resolved = hrefFor(child.href);
+
+    if (child.exactOnly) {
+        return currentPath.value === resolved;
+    }
+
+    return isActive(child.href, true);
+};
 const isActive = (href: string, exact = false) => {
     const path = currentPath.value;
 
@@ -470,7 +535,7 @@ const isActive = (href: string, exact = false) => {
 };
 const isNavItemActive = (item: NavItem) =>
     isActive(item.href) ||
-    item.children?.some((child) => isActive(child.href, true)) === true;
+    item.children?.some((child) => isChildActive(child)) === true;
 
 onMounted(() => {
     sidebarCollapsed.value =
@@ -897,14 +962,14 @@ async function signOut() {
                                                 :href="hrefFor(child.href)"
                                                 :headers="authHeaders()"
                                                 :aria-current="
-                                                    isActive(child.href, true)
+                                                    isChildActive(child)
                                                         ? 'page'
                                                         : undefined
                                                 "
                                                 :title="navChildLabel(child)"
                                                 class="group/child flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-black transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
                                                 :class="
-                                                    isActive(child.href, true)
+                                                    isChildActive(child)
                                                         ? 'bg-white/10 text-white'
                                                         : 'text-white/50 hover:bg-white/10 hover:text-white'
                                                 "
@@ -912,10 +977,7 @@ async function signOut() {
                                                 <span
                                                     class="size-1.5 rounded-full transition"
                                                     :class="
-                                                        isActive(
-                                                            child.href,
-                                                            true,
-                                                        )
+                                                        isChildActive(child)
                                                             ? 'bg-brand'
                                                             : 'bg-white/25 group-hover/child:bg-white/70'
                                                     "
@@ -1054,19 +1116,13 @@ async function signOut() {
                                                     :headers="authHeaders()"
                                                     @click="drawer = false"
                                                     :aria-current="
-                                                        isActive(
-                                                            child.href,
-                                                            true,
-                                                        )
+                                                        isChildActive(child)
                                                             ? 'page'
                                                             : undefined
                                                     "
                                                     class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-black transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
                                                     :class="
-                                                        isActive(
-                                                            child.href,
-                                                            true,
-                                                        )
+                                                        isChildActive(child)
                                                             ? 'bg-white/10 text-white'
                                                             : 'text-white/50 hover:bg-white/10 hover:text-white'
                                                     "
@@ -1074,10 +1130,7 @@ async function signOut() {
                                                     <span
                                                         class="size-1.5 rounded-full"
                                                         :class="
-                                                            isActive(
-                                                                child.href,
-                                                                true,
-                                                            )
+                                                            isChildActive(child)
                                                                 ? 'bg-brand'
                                                                 : 'bg-white/25'
                                                         "

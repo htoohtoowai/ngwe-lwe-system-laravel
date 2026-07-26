@@ -123,11 +123,11 @@ class ReverbBroadcastTest extends TestCase
         Event::fake([BalanceUpdated::class, NewTransaction::class]);
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$confirmTxnId.'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$confirmTxnId.'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk();
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$cancelTxnId.'/cancel-cash-in')
+            ->postJson('/api/transactions/'.$cancelTxnId.'/cancel-cash-in', ['pin' => '9999'])
             ->assertOk();
 
         $this->withHeader('Authorization', 'Bearer '.$ownerToken)
@@ -169,6 +169,7 @@ class ReverbBroadcastTest extends TestCase
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/cash-floats/'.$floatId.'/initiate-return', [
+                'pin' => '1234',
                 'return_denominations' => [10_000 => 2],
             ])
             ->assertOk();
@@ -237,6 +238,7 @@ class ReverbBroadcastTest extends TestCase
             'role' => $role,
             'is_active' => true,
             'password' => Hash::make('password123'),
+            'pin_hash' => $role === 'cashier' ? Hash::make('9999') : null,
         ]);
 
         return [$user, app(NgweLweTokenService::class)->create($user)];

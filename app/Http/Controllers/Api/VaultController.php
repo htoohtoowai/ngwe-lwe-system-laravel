@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\VaultLogRequest;
 use App\Http\Requests\CashierVaultEntryRequest;
+use App\Http\Requests\VaultLogRequest;
 use App\Http\Resources\VaultTransactionResource;
 use App\Repositories\CashDenominationRepository;
 use App\Repositories\CashFloatRepository;

@@ -140,6 +140,7 @@ Route::middleware(['ngwe.auth', 'role:teller'])
     ->controller(TransactionEntryController::class)
     ->group(function (): void {
         Route::get('/cash-in', 'cashIn')->name('cash-in');
+        Route::get('/cash-in/history', 'cashInHistory')->name('cash-in.history');
         Route::post('/cash-in', 'cashInStore')->name('cash-in.store');
     });
 
@@ -150,8 +151,11 @@ Route::middleware(['ngwe.auth', 'role:teller'])
     ->group(function (): void {
         Route::redirect('/', '/transactions/transfer')->name('index');
         Route::get('/cash-out', 'cashOut')->name('cash-out');
+        Route::get('/cash-out/history', 'cashOutHistory')->name('cash-out.history');
         Route::get('/transfer', 'transfer')->name('transfer');
+        Route::get('/transfer/history', 'transferHistory')->name('transfer.history');
         Route::get('/exchange', 'exchange')->name('exchange');
+        Route::get('/exchange/history', 'exchangeHistory')->name('exchange.history');
     });
 
 Route::middleware(['ngwe.auth', 'role:teller'])
@@ -175,6 +179,7 @@ Route::middleware(['ngwe.auth', 'role:teller'])
         Route::redirect('/transfer', '/transactions/transfer')->name('transfer');
         Route::redirect('/exchange', '/transactions/exchange')->name('exchange');
         Route::get('/float', 'floatPage')->name('float');
+        Route::get('/float/history', 'floatHistory')->name('float.history');
         Route::post('/transactions/cash-out', 'cashOutStore')->name('transactions.cash-out');
         Route::post('/transactions/transfer', 'transferStore')->name('transactions.transfer');
         Route::post('/transactions/exchange', 'exchangeStore')->name('transactions.exchange');

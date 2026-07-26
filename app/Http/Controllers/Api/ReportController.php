@@ -7,8 +7,8 @@ use App\Http\Requests\DailyReportRequest;
 use App\Http\Resources\DailyReconciliationResource;
 use App\Services\DailyReportService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class ReportController extends Controller
 {

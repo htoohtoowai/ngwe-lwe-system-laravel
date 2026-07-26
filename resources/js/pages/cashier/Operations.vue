@@ -16,6 +16,11 @@ import type { RealtimeHandlers } from '@/lib/echo';
 import { startSmartPolling } from '@/lib/smart-polling';
 
 type Denoms = Record<number, number>;
+type DenomRow = {
+    denomination: number;
+    quantity: number;
+    total: number;
+};
 type Teller = { id: number; name: string };
 type FloatRow = {
     id: number;
@@ -56,6 +61,10 @@ type PendingCashIn = {
     amount: string;
     customer_name: string | null;
     teller: string;
+    creator_role?: 'admin' | 'cashier' | 'teller' | string | null;
+    settlement_amount?: string | null;
+    customer_fee?: string | null;
+    fee_payment_method?: string | null;
     received_denominations: Denoms;
     handoff_denominations: Denoms;
     change_denominations: Denoms;
@@ -127,6 +136,7 @@ const busy = ref(false);
 const error = ref('');
 const notice = ref('');
 const returnFloat = ref<FloatRow | null>(null);
+const returnCountedDenoms = ref<Denoms>({});
 const returnPinOpen = ref(false);
 const returnPinBusy = ref(false);
 const returnPinError = ref<string | null>(null);
@@ -134,6 +144,12 @@ const transactionSearch = ref('');
 const transactionType = ref('all');
 const transactionDateFrom = ref('');
 const transactionDateTo = ref('');
+const pendingReview = ref<PendingCashIn | null>(null);
+const pendingBusy = ref<number | null>(null);
+const pendingPinOpen = ref(false);
+const pendingPinBusy = ref(false);
+const pendingPinError = ref<string | null>(null);
+const pendingAction = ref<'confirm' | 'cancel'>('confirm');
 let unsubscribeRole: (() => void) | null = null;
 let unwatchEchoConnection: (() => void) | null = null;
 let stopRealtimeFallback: (() => void) | null = null;
@@ -185,6 +201,67 @@ const returnDenoms = computed(
     () => returnFloat.value?.return_denominations_json ?? {},
 );
 const returnTotal = computed(() => denominationTotal(returnDenoms.value));
+const returnCountedTotal = computed(() =>
+    denominationTotal(returnCountedDenoms.value),
+);
+const returnCountedMatches = computed(
+    () =>
+        returnFloat.value !== null &&
+        props.notes.every(
+            (note) =>
+                Number(returnCountedDenoms.value[note] ?? 0) ===
+                Number(returnDenoms.value[note] ?? 0),
+        ) &&
+        returnCountedTotal.value === returnTotal.value,
+);
+const pendingReviewRows = computed(() => ({
+    received: denominationRows(pendingReview.value?.received_denominations),
+    handoff: denominationRows(pendingReview.value?.handoff_denominations),
+    change: denominationRows(pendingReview.value?.change_denominations),
+}));
+const pendingReviewUsesHandoff = computed(
+    () => pendingReview.value?.creator_role === 'teller',
+);
+const pendingReviewSettlementRows = computed(() =>
+    pendingReviewUsesHandoff.value
+        ? pendingReviewRows.value.handoff
+        : pendingReviewRows.value.received,
+);
+const pendingReviewSettlementTotal = computed(() =>
+    denominationRowsTotal(pendingReviewSettlementRows.value),
+);
+const pendingReviewExpectedSettlement = computed(() => {
+    const transaction = pendingReview.value;
+
+    if (!transaction) {
+        return 0;
+    }
+
+    const settlement =
+        transaction.settlement_amount === null ||
+        transaction.settlement_amount === undefined
+            ? Number.NaN
+            : Number(transaction.settlement_amount);
+
+    if (Number.isFinite(settlement)) {
+        return settlement;
+    }
+
+    const fee =
+        transaction.fee_payment_method === 'cash'
+            ? Number(transaction.customer_fee ?? 0)
+            : 0;
+
+    return Number(transaction.amount ?? 0) + fee;
+});
+const pendingReviewBalanced = computed(
+    () =>
+        pendingReviewSettlementTotal.value ===
+        pendingReviewExpectedSettlement.value,
+);
+const pendingReviewSettlementLabel = computed(() =>
+    pendingReviewUsesHandoff.value ? 'Cashier handoff' : 'Main vault cash',
+);
 const filteredTransactions = computed(() => {
     const query = transactionSearch.value.trim().toLowerCase();
 
@@ -223,6 +300,21 @@ function denominationTotal(denoms: Denoms): number {
             sum + Number(denomination) * Number(quantity),
         0,
     );
+}
+
+function denominationRows(denoms: Denoms | null | undefined): DenomRow[] {
+    return Object.entries(denoms ?? {})
+        .map(([denomination, quantity]) => ({
+            denomination: Number(denomination),
+            quantity: Number(quantity),
+            total: Number(denomination) * Number(quantity),
+        }))
+        .filter((row) => row.denomination > 0 && row.quantity > 0)
+        .sort((left, right) => right.denomination - left.denomination);
+}
+
+function denominationRowsTotal(rows: DenomRow[]): number {
+    return rows.reduce((sum, row) => sum + row.total, 0);
 }
 
 function formatMoney(value: string | number): string {
@@ -389,8 +481,35 @@ async function issueFloat() {
 
 function openReturn(float: FloatRow) {
     returnFloat.value = float;
+    returnCountedDenoms.value = {};
+    returnPinOpen.value = false;
+    returnPinError.value = null;
+}
+
+function closeReturnReview() {
+    if (!returnPinBusy.value) {
+        returnPinOpen.value = false;
+        returnFloat.value = null;
+        returnCountedDenoms.value = {};
+    }
+}
+
+function requestReturnConfirmation() {
+    if (!returnCountedMatches.value) {
+        returnPinError.value =
+            'Count the returned notes exactly before confirming.';
+
+        return;
+    }
+
     returnPinError.value = null;
     returnPinOpen.value = true;
+}
+
+function closeReturnPin() {
+    if (!returnPinBusy.value) {
+        returnPinOpen.value = false;
+    }
 }
 
 async function confirmReturn(pin: string) {
@@ -407,11 +526,16 @@ async function confirmReturn(pin: string) {
             {
                 method: 'POST',
                 token: readStoredToken(),
-                body: { closing_total: returnTotal.value, pin },
+                body: {
+                    closing_total: returnCountedTotal.value,
+                    pin,
+                    return_denominations: returnCountedDenoms.value,
+                },
             },
         );
         returnPinOpen.value = false;
         returnFloat.value = null;
+        returnCountedDenoms.value = {};
         notice.value =
             'Teller float return confirmed and added back to the main vault.';
         reload();
@@ -419,6 +543,78 @@ async function confirmReturn(pin: string) {
         returnPinError.value = firstError(exception);
     } finally {
         returnPinBusy.value = false;
+    }
+}
+
+function openCashInReview(entry: PendingCashIn) {
+    pendingReview.value = entry;
+    pendingPinError.value = null;
+}
+
+function closeCashInReview() {
+    if (pendingBusy.value === null && !pendingPinBusy.value) {
+        pendingPinOpen.value = false;
+        pendingReview.value = null;
+    }
+}
+
+function requestCashInReview(action: 'confirm' | 'cancel') {
+    if (action === 'confirm' && !pendingReviewBalanced.value) {
+        return;
+    }
+
+    pendingAction.value = action;
+    pendingPinError.value = null;
+    pendingPinOpen.value = true;
+}
+
+function closePendingPin() {
+    if (!pendingPinBusy.value) {
+        pendingPinOpen.value = false;
+    }
+}
+
+async function confirmPendingCashIn(pin: string) {
+    if (!pendingReview.value) {
+        return;
+    }
+
+    const entry = pendingReview.value;
+    pendingBusy.value = entry.id;
+    pendingPinBusy.value = true;
+    pendingPinError.value = null;
+
+    try {
+        await apiRequest(
+            '/api/transactions/' +
+                entry.id +
+                '/' +
+                pendingAction.value +
+                '-cash-in',
+            {
+                method: 'POST',
+                token: readStoredToken(),
+                body:
+                    pendingAction.value === 'confirm'
+                        ? { pin }
+                        : {
+                              pin,
+                              note: 'Cancelled by cashier during review.',
+                          },
+            },
+        );
+        pendingPinOpen.value = false;
+        pendingReview.value = null;
+        notice.value =
+            pendingAction.value === 'confirm'
+                ? 'Cash In confirmed and posted to the main vault.'
+                : 'Cash In cancelled and Teller float/account state reversed.';
+        reload();
+    } catch (exception) {
+        pendingPinError.value = firstError(exception);
+    } finally {
+        pendingPinBusy.value = false;
+        pendingBusy.value = null;
     }
 }
 
@@ -583,12 +779,18 @@ function statusLabel(status: string): string {
                                 {{ formatDate(entry.created_at) }}
                             </td>
                             <td class="px-4 py-3 sm:px-6">
-                                <Link
-                                    href="/dashboard"
-                                    :headers="authHeaders()"
-                                    class="rounded-pill bg-ink px-3 py-2 text-xs font-bold whitespace-nowrap text-white hover:bg-brand"
-                                    >Open review</Link
+                                <button
+                                    type="button"
+                                    :disabled="pendingBusy === entry.id"
+                                    class="rounded-pill bg-ink px-3 py-2 text-xs font-bold whitespace-nowrap text-white hover:bg-brand disabled:opacity-40"
+                                    @click="openCashInReview(entry)"
                                 >
+                                    {{
+                                        pendingBusy === entry.id
+                                            ? 'Reviewing...'
+                                            : 'Open review'
+                                    }}
+                                </button>
                             </td>
                         </tr>
                     </tbody>
@@ -979,6 +1181,393 @@ function statusLabel(status: string): string {
         </section>
 
         <div
+            v-if="returnFloat"
+            class="fixed inset-0 z-50 grid place-items-center bg-ink/55 p-3 sm:p-6"
+            @click.self="closeReturnReview"
+        >
+            <section
+                class="max-h-[calc(100vh-1.5rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-line bg-card shadow-2xl sm:max-h-[calc(100vh-3rem)]"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="return-review-title"
+            >
+                <header
+                    class="flex items-start justify-between gap-4 border-b border-line px-5 py-4 sm:px-6"
+                >
+                    <div>
+                        <p
+                            class="text-xs font-black tracking-wide text-balance uppercase"
+                        >
+                            Teller return
+                        </p>
+                        <h2
+                            id="return-review-title"
+                            class="mt-1 text-lg font-black"
+                        >
+                            Verify Float #{{ returnFloat.id }}
+                        </h2>
+                        <p class="mt-1 text-xs text-slate">
+                            Count the cash handed back by the Teller, then
+                            confirm with your Cashier PIN.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="rounded-pill border border-line px-3 py-2 text-xs font-bold text-slate hover:bg-mist disabled:opacity-40"
+                        :disabled="returnPinBusy"
+                        @click="closeReturnReview"
+                    >
+                        Close
+                    </button>
+                </header>
+
+                <div
+                    class="grid gap-2 border-b border-line bg-mist/45 p-4 sm:grid-cols-3 sm:px-6"
+                >
+                    <div
+                        class="rounded-xl border border-line bg-card px-3 py-2.5"
+                    >
+                        <p
+                            class="text-[10px] font-bold tracking-wide text-slate uppercase"
+                        >
+                            Teller
+                        </p>
+                        <p class="mt-1 font-bold">
+                            {{ returnFloat.employee_name }}
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-xl border border-line bg-card px-3 py-2.5"
+                    >
+                        <p
+                            class="text-[10px] font-bold tracking-wide text-slate uppercase"
+                        >
+                            Teller handback
+                        </p>
+                        <p class="money mt-1 font-black">
+                            {{ formatMoney(returnTotal) }} MMK
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-xl border border-line bg-card px-3 py-2.5"
+                    >
+                        <p
+                            class="text-[10px] font-bold tracking-wide text-slate uppercase"
+                        >
+                            Cashier counted
+                        </p>
+                        <p class="money mt-1 font-black">
+                            {{ formatMoney(returnCountedTotal) }} MMK
+                        </p>
+                    </div>
+                </div>
+
+                <div class="grid gap-4 p-4 sm:p-6">
+                    <DenomDrawer
+                        v-model="returnCountedDenoms"
+                        :notes="notes"
+                        :target="returnTotal"
+                        :expected="returnDenoms"
+                        label="Cashier counted return"
+                        id-prefix="return-confirm-denomination"
+                    />
+
+                    <div
+                        class="flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-xs"
+                        :class="
+                            returnCountedMatches
+                                ? 'border-balance/25 bg-balance/5 text-balance'
+                                : 'border-brand/25 bg-brand-soft text-brand'
+                        "
+                    >
+                        <strong>
+                            {{
+                                returnCountedMatches
+                                    ? 'Return count matched'
+                                    : 'Return count mismatch'
+                            }}
+                        </strong>
+                        <span class="money">
+                            {{ formatMoney(returnCountedTotal) }} /
+                            {{ formatMoney(returnTotal) }} MMK
+                        </span>
+                    </div>
+                </div>
+
+                <footer
+                    class="flex justify-end gap-2 border-t border-line px-5 py-4 sm:px-6"
+                >
+                    <button
+                        type="button"
+                        class="rounded-pill border border-line px-4 py-2 text-xs font-bold text-slate transition hover:bg-mist disabled:opacity-40"
+                        :disabled="returnPinBusy"
+                        @click="closeReturnReview"
+                    >
+                        Back
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-pill bg-ink px-4 py-2 text-xs font-bold text-white transition hover:bg-brand disabled:cursor-not-allowed disabled:opacity-40"
+                        :disabled="returnPinBusy || !returnCountedMatches"
+                        @click="requestReturnConfirmation"
+                    >
+                        Confirm with PIN
+                    </button>
+                </footer>
+            </section>
+        </div>
+
+        <div
+            v-if="pendingReview"
+            class="fixed inset-0 z-50 grid place-items-center bg-ink/55 p-3 sm:p-6"
+            @click.self="closeCashInReview"
+        >
+            <section
+                class="max-h-[calc(100vh-1.5rem)] w-full max-w-4xl overflow-y-auto rounded-2xl border border-line bg-card shadow-2xl sm:max-h-[calc(100vh-3rem)]"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="cash-in-review-title"
+            >
+                <header
+                    class="flex items-start justify-between gap-4 border-b border-line px-5 py-4 sm:px-6"
+                >
+                    <div>
+                        <p
+                            class="text-xs font-black tracking-wide text-brand uppercase"
+                        >
+                            Teller Cash In
+                        </p>
+                        <h2
+                            id="cash-in-review-title"
+                            class="mt-1 text-lg font-black"
+                        >
+                            Review handoff #{{ pendingReview.id }}
+                        </h2>
+                        <p class="mt-1 text-xs text-slate">
+                            Count the physical handoff before confirming into
+                            the main vault.
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="rounded-pill border border-line px-3 py-2 text-xs font-bold text-slate hover:bg-mist disabled:opacity-40"
+                        :disabled="pendingBusy !== null"
+                        @click="closeCashInReview"
+                    >
+                        Close
+                    </button>
+                </header>
+
+                <div
+                    class="grid gap-2 border-b border-line bg-mist/45 p-4 sm:grid-cols-3 sm:px-6"
+                >
+                    <div
+                        class="rounded-xl border border-line bg-card px-3 py-2.5"
+                    >
+                        <p
+                            class="text-[10px] font-bold tracking-wide text-slate uppercase"
+                        >
+                            Reference
+                        </p>
+                        <p class="mt-1 font-bold">#{{ pendingReview.id }}</p>
+                    </div>
+                    <div
+                        class="rounded-xl border border-line bg-card px-3 py-2.5"
+                    >
+                        <p
+                            class="text-[10px] font-bold tracking-wide text-slate uppercase"
+                        >
+                            Cash In
+                        </p>
+                        <p class="money mt-1 font-black">
+                            {{ formatMoney(pendingReview.amount) }} MMK
+                        </p>
+                    </div>
+                    <div
+                        class="rounded-xl border border-line bg-card px-3 py-2.5"
+                    >
+                        <p
+                            class="text-[10px] font-bold tracking-wide text-slate uppercase"
+                        >
+                            Expected settlement
+                        </p>
+                        <p class="money mt-1 font-black">
+                            {{ formatMoney(pendingReviewExpectedSettlement) }}
+                            MMK
+                        </p>
+                    </div>
+                </div>
+
+                <div class="grid gap-3 p-4 sm:grid-cols-2 sm:p-6">
+                    <section
+                        class="overflow-hidden rounded-xl border border-line bg-card"
+                    >
+                        <header
+                            class="flex items-center justify-between gap-3 border-b border-line bg-mist/40 px-4 py-3"
+                        >
+                            <h3 class="text-sm font-bold">Customer received</h3>
+                            <strong class="money text-sm">
+                                {{
+                                    formatMoney(
+                                        denominationRowsTotal(
+                                            pendingReviewRows.received,
+                                        ),
+                                    )
+                                }}
+                                MMK
+                            </strong>
+                        </header>
+                        <div class="grid gap-1.5 p-3">
+                            <div
+                                v-for="row in pendingReviewRows.received"
+                                :key="`cash-in-review-received-${row.denomination}`"
+                                class="flex items-center justify-between rounded-lg bg-mist/60 px-3 py-2 text-xs"
+                            >
+                                <span class="money font-semibold">
+                                    {{ formatMoney(row.denomination) }} x
+                                    {{ row.quantity }}
+                                </span>
+                                <strong class="money">{{
+                                    formatMoney(row.total)
+                                }}</strong>
+                            </div>
+                            <p
+                                v-if="!pendingReviewRows.received.length"
+                                class="px-2 py-3 text-xs text-slate"
+                            >
+                                No denomination breakdown.
+                            </p>
+                        </div>
+                    </section>
+
+                    <section
+                        class="overflow-hidden rounded-xl border border-balance/30 bg-card ring-2 ring-balance/5"
+                    >
+                        <header
+                            class="flex items-center justify-between gap-3 border-b border-balance/15 bg-balance/5 px-4 py-3"
+                        >
+                            <h3 class="text-sm font-bold">
+                                {{ pendingReviewSettlementLabel }}
+                            </h3>
+                            <strong class="money text-sm">
+                                {{ formatMoney(pendingReviewSettlementTotal) }}
+                                MMK
+                            </strong>
+                        </header>
+                        <div class="grid gap-1.5 p-3">
+                            <div
+                                v-for="row in pendingReviewSettlementRows"
+                                :key="`cash-in-review-settlement-${row.denomination}`"
+                                class="flex items-center justify-between rounded-lg bg-mist/60 px-3 py-2 text-xs"
+                            >
+                                <span class="money font-semibold">
+                                    {{ formatMoney(row.denomination) }} x
+                                    {{ row.quantity }}
+                                </span>
+                                <strong class="money">{{
+                                    formatMoney(row.total)
+                                }}</strong>
+                            </div>
+                            <p
+                                v-if="!pendingReviewSettlementRows.length"
+                                class="px-2 py-3 text-xs text-slate"
+                            >
+                                No denomination breakdown.
+                            </p>
+                        </div>
+                    </section>
+
+                    <section
+                        v-if="pendingReviewRows.change.length"
+                        class="overflow-hidden rounded-xl border border-held/30 bg-card sm:col-span-2"
+                    >
+                        <header
+                            class="flex items-center justify-between gap-3 border-b border-held/15 bg-held/5 px-4 py-3"
+                        >
+                            <h3 class="text-sm font-bold">Change given</h3>
+                            <strong class="money text-sm text-held">
+                                {{
+                                    formatMoney(
+                                        denominationRowsTotal(
+                                            pendingReviewRows.change,
+                                        ),
+                                    )
+                                }}
+                                MMK
+                            </strong>
+                        </header>
+                        <div class="grid gap-1.5 p-3 sm:grid-cols-3">
+                            <div
+                                v-for="row in pendingReviewRows.change"
+                                :key="`cash-in-review-change-${row.denomination}`"
+                                class="flex items-center justify-between rounded-lg bg-held/5 px-3 py-2 text-xs"
+                            >
+                                <span class="money font-semibold">
+                                    {{ formatMoney(row.denomination) }} x
+                                    {{ row.quantity }}
+                                </span>
+                                <strong class="money">{{
+                                    formatMoney(row.total)
+                                }}</strong>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <div
+                    class="mx-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-xs sm:mx-6"
+                    :class="
+                        pendingReviewBalanced
+                            ? 'border-balance/25 bg-balance/5 text-balance'
+                            : 'border-brand/25 bg-brand-soft text-brand'
+                    "
+                >
+                    <strong>
+                        {{
+                            pendingReviewBalanced
+                                ? 'Denomination balanced'
+                                : 'Denomination mismatch'
+                        }}
+                    </strong>
+                    <span class="money">
+                        {{ pendingReviewSettlementLabel }}
+                        {{ formatMoney(pendingReviewSettlementTotal) }} /
+                        {{ formatMoney(pendingReviewExpectedSettlement) }} MMK
+                    </span>
+                </div>
+
+                <footer class="flex justify-end gap-2 px-4 py-4 sm:px-6">
+                    <button
+                        type="button"
+                        class="rounded-pill border border-line px-4 py-2 text-xs font-bold text-slate transition hover:bg-mist disabled:opacity-40"
+                        :disabled="pendingBusy !== null"
+                        @click="closeCashInReview"
+                    >
+                        Back
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-pill border border-brand px-4 py-2 text-xs font-bold text-brand transition hover:bg-brand-soft disabled:opacity-40"
+                        :disabled="pendingBusy !== null"
+                        @click="requestCashInReview('cancel')"
+                    >
+                        Reject Cash In
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-pill bg-ink px-4 py-2 text-xs font-bold text-white transition hover:bg-brand disabled:cursor-not-allowed disabled:opacity-40"
+                        :disabled="
+                            pendingBusy !== null || !pendingReviewBalanced
+                        "
+                        @click="requestCashInReview('confirm')"
+                    >
+                        Confirm Cash In
+                    </button>
+                </footer>
+            </section>
+        </div>
+
+        <div
             v-if="vaultEntryOpen"
             class="fixed inset-0 z-40 grid place-items-center bg-ink/55 p-4"
             @click.self="vaultEntryOpen = false"
@@ -1052,12 +1641,30 @@ function statusLabel(status: string): string {
         </div>
 
         <PinSeal
+            :open="pendingPinOpen"
+            :title="
+                pendingAction === 'confirm'
+                    ? 'Confirm Cash In'
+                    : 'Reject Cash In'
+            "
+            :detail="
+                pendingAction === 'confirm'
+                    ? 'Enter your Cashier PIN to post the handoff into the main vault.'
+                    : 'Enter your Cashier PIN to reverse this pending Cash In.'
+            "
+            :busy="pendingPinBusy"
+            :error="pendingPinError"
+            @close="closePendingPin"
+            @confirm="confirmPendingCashIn"
+        />
+
+        <PinSeal
             :open="returnPinOpen"
             title="Confirm Teller return"
-            detail="Enter your Cashier PIN to add the returned denominations back to the main vault."
+            detail="Enter your Cashier PIN after the returned denominations match the Teller handback."
             :busy="returnPinBusy"
             :error="returnPinError"
-            @close="returnPinOpen = false"
+            @close="closeReturnPin"
             @confirm="confirmReturn"
         />
     </BankLayout>

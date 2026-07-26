@@ -117,7 +117,7 @@ class CashInRoleFlowTest extends TestCase
             );
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk()
             ->assertJsonPath('data.status', 'COMPLETED')
             ->assertJsonPath('data.confirmed_by', $cashier->id);
@@ -133,6 +133,7 @@ class CashInRoleFlowTest extends TestCase
             'role' => $role,
             'is_active' => true,
             'password' => Hash::make('password123'),
+            'pin_hash' => $role === 'cashier' ? Hash::make('9999') : null,
         ]);
 
         return [$user, app(NgweLweTokenService::class)->create($user)];

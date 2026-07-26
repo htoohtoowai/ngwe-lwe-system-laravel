@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\CashFloatAssignment;
 use App\Models\CashFloatDenomination;
 use App\Models\User;
+use App\Models\VaultTransaction;
 use App\Repositories\CashDenominationRepository;
 use App\Services\CashFloatService;
 use App\Services\NgweLweTokenService;
@@ -109,6 +110,24 @@ class CashFloatLifecycleTest extends TestCase
         $this->assertSame(1, ActivityLog::query()->where('action', 'float_activated')->count());
     }
 
+    public function test_employee_can_activate_float_with_denominations_alias_and_pin(): void
+    {
+        [$cashier] = $this->userWithToken('cashier');
+        $employee = $this->activeEmployee();
+        $this->setPin($employee, '1234');
+        $employeeToken = app(NgweLweTokenService::class)->create($employee);
+        $float = $this->issueFloat($cashier, $employee, [10_000 => 1, 5_000 => 2]);
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '1234',
+                'denominations' => [10_000 => 1, 5_000 => 2],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'ACTIVE')
+            ->assertJsonPath('data.current_balance', '20000.00');
+    }
+
     public function test_employee_cannot_activate_someone_else_float(): void
     {
         [$cashier] = $this->userWithToken('cashier');
@@ -122,6 +141,84 @@ class CashFloatLifecycleTest extends TestCase
             ->postJson('/api/cash-floats/'.$float->id.'/activate', [
                 'pin' => '5678',
                 'verified_denominations' => [10_000 => 1],
+            ])
+            ->assertStatus(403);
+
+        $this->assertSame('PENDING_RECEIPT', $float->fresh()->status);
+    }
+
+    public function test_employee_can_reject_pending_float_with_pin_and_vault_is_restocked(): void
+    {
+        [$cashier] = $this->userWithToken('cashier');
+        $employee = $this->activeEmployee();
+        $this->setPin($employee, '1234');
+        $employeeToken = app(NgweLweTokenService::class)->create($employee);
+        $vault = app(CashDenominationRepository::class);
+
+        $this->seedVaultBalance([10_000 => 4, 5_000 => 2], $cashier);
+        $float = app(CashFloatService::class)->issue(
+            $cashier,
+            $employee->id,
+            [10_000 => 2, 5_000 => 1],
+            'Morning float',
+        );
+
+        $afterIssue = $vault->getVaultBalance();
+        $this->assertSame(2, $afterIssue[10_000]);
+        $this->assertSame(1, $afterIssue[5_000]);
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/reject', [
+                'pin' => '1234',
+                'note' => 'Count mismatch before receipt',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'CLOSED')
+            ->assertJsonPath('data.current_balance', '0.00')
+            ->assertJsonPath('data.closing_total', '25000.00');
+
+        $afterReject = $vault->getVaultBalance();
+        $this->assertSame(4, $afterReject[10_000]);
+        $this->assertSame(2, $afterReject[5_000]);
+        $this->assertSame(1, ActivityLog::query()->where('action', 'float_receipt_rejected')->count());
+        $this->assertSame(2, VaultTransaction::query()->where('txn_type', 'float_reject')->count());
+    }
+
+    public function test_employee_reject_pending_float_requires_correct_pin(): void
+    {
+        [$cashier] = $this->userWithToken('cashier');
+        $employee = $this->activeEmployee();
+        $this->setPin($employee, '1234');
+        $employeeToken = app(NgweLweTokenService::class)->create($employee);
+        $vault = app(CashDenominationRepository::class);
+
+        $this->seedVaultBalance([10_000 => 3], $cashier);
+        $float = app(CashFloatService::class)->issue($cashier, $employee->id, [10_000 => 2]);
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/reject', [
+                'pin' => '0000',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Incorrect PIN.');
+
+        $this->assertSame('PENDING_RECEIPT', $float->fresh()->status);
+        $afterIssue = $vault->getVaultBalance();
+        $this->assertSame(1, $afterIssue[10_000]);
+    }
+
+    public function test_employee_cannot_reject_someone_else_float(): void
+    {
+        [$cashier] = $this->userWithToken('cashier');
+        $employeeA = $this->activeEmployee('emp_a');
+        $employeeB = $this->activeEmployee('emp_b');
+        $this->setPin($employeeB, '5678');
+        $tokenB = app(NgweLweTokenService::class)->create($employeeB);
+        $float = $this->issueFloat($cashier, $employeeA, [10_000 => 1]);
+
+        $this->withHeader('Authorization', 'Bearer '.$tokenB)
+            ->postJson('/api/cash-floats/'.$float->id.'/reject', [
+                'pin' => '5678',
             ])
             ->assertStatus(403);
 
@@ -170,9 +267,9 @@ class CashFloatLifecycleTest extends TestCase
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/cash-floats/'.$float->id.'/initiate-return', [
+                'pin' => '1234',
                 'return_denominations' => [
-                    10_000 => 3,
-                    5_000 => 2,
+                    10_000 => 5,
                 ],
             ])
             ->assertOk()
@@ -180,12 +277,13 @@ class CashFloatLifecycleTest extends TestCase
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
             ->postJson('/api/cash-floats/'.$float->id.'/confirm-return', [
-                'closing_total' => 40000,
+                'closing_total' => 50000,
                 'pin' => '9999',
+                'return_denominations' => [10_000 => 5],
             ])
             ->assertOk()
             ->assertJsonPath('data.status', 'CLOSED')
-            ->assertJsonPath('data.closing_total', '40000.00')
+            ->assertJsonPath('data.closing_total', '50000.00')
             ->assertJsonPath('data.current_balance', '0.00');
 
         foreach (['float_issued', 'float_activated', 'float_return_initiated', 'float_return_confirmed'] as $action) {
@@ -197,14 +295,170 @@ class CashFloatLifecycleTest extends TestCase
     {
         [$cashier] = $this->userWithToken('cashier');
         $employee = $this->activeEmployee();
+        $this->setPin($employee, '1234');
         $employeeToken = app(NgweLweTokenService::class)->create($employee);
         $float = $this->issueFloat($cashier, $employee, [10_000 => 1]);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/cash-floats/'.$float->id.'/initiate-return', [
+                'pin' => '1234',
                 'return_denominations' => [10_000 => 1],
             ])
             ->assertStatus(409);
+    }
+
+    public function test_initiate_return_requires_employee_pin(): void
+    {
+        [$cashier] = $this->userWithToken('cashier');
+        $employee = $this->activeEmployee();
+        $this->setPin($employee, '1234');
+        $employeeToken = app(NgweLweTokenService::class)->create($employee);
+        $float = $this->issueFloat($cashier, $employee, [10_000 => 2]);
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '1234',
+                'verified_denominations' => [10_000 => 2],
+            ])
+            ->assertOk();
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/initiate-return', [
+                'return_denominations' => [10_000 => 2],
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('pin');
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/initiate-return', [
+                'pin' => '0000',
+                'return_denominations' => [10_000 => 2],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Incorrect PIN.');
+
+        $this->assertSame('ACTIVE', $float->fresh()->status);
+    }
+
+    public function test_initiate_return_rejects_partial_return_total(): void
+    {
+        [$cashier] = $this->userWithToken('cashier');
+        $employee = $this->activeEmployee();
+        $this->setPin($employee, '1234');
+        $employeeToken = app(NgweLweTokenService::class)->create($employee);
+        $float = $this->issueFloat($cashier, $employee, [10_000 => 3]);
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '1234',
+                'verified_denominations' => [10_000 => 3],
+            ])
+            ->assertOk();
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/initiate-return', [
+                'pin' => '1234',
+                'return_denominations' => [10_000 => 2],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Return total 20000 does not match float balance 30000.00.');
+
+        $this->assertSame('ACTIVE', $float->fresh()->status);
+    }
+
+    public function test_initiate_return_rejects_denomination_mix_that_does_not_match_float_stock(): void
+    {
+        [$cashier] = $this->userWithToken('cashier');
+        $employee = $this->activeEmployee();
+        $this->setPin($employee, '1234');
+        $employeeToken = app(NgweLweTokenService::class)->create($employee);
+        $float = $this->issueFloat($cashier, $employee, [10_000 => 1, 5_000 => 2]);
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '1234',
+                'verified_denominations' => [10_000 => 1, 5_000 => 2],
+            ])
+            ->assertOk();
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/initiate-return', [
+                'pin' => '1234',
+                'return_denominations' => [20_000 => 1],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Return denomination 5000 MMK must match float stock. System on hand: 2, Teller counted: 0.');
+
+        $this->assertSame('ACTIVE', $float->fresh()->status);
+    }
+
+    public function test_confirm_return_rejects_closing_total_that_does_not_match_return_denominations(): void
+    {
+        [$cashier, $cashierToken] = $this->userWithToken('cashier');
+        $this->setPin($cashier, '9999');
+        $employee = $this->activeEmployee();
+        $this->setPin($employee, '1234');
+        $employeeToken = app(NgweLweTokenService::class)->create($employee);
+        $float = $this->issueFloat($cashier, $employee, [10_000 => 3]);
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '1234',
+                'verified_denominations' => [10_000 => 3],
+            ])
+            ->assertOk();
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/initiate-return', [
+                'pin' => '1234',
+                'return_denominations' => [10_000 => 3],
+            ])
+            ->assertOk();
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/confirm-return', [
+                'closing_total' => 20_000,
+                'pin' => '9999',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'closing_total 20000.00 does not match return denomination total 30000.');
+
+        $this->assertSame('PENDING_RECONCILIATION', $float->fresh()->status);
+    }
+
+    public function test_confirm_return_rejects_cashier_count_that_does_not_match_teller_handback(): void
+    {
+        [$cashier, $cashierToken] = $this->userWithToken('cashier');
+        $this->setPin($cashier, '9999');
+        $employee = $this->activeEmployee();
+        $this->setPin($employee, '1234');
+        $employeeToken = app(NgweLweTokenService::class)->create($employee);
+        $float = $this->issueFloat($cashier, $employee, [10_000 => 1, 5_000 => 2]);
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/activate', [
+                'pin' => '1234',
+                'verified_denominations' => [10_000 => 1, 5_000 => 2],
+            ])
+            ->assertOk();
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/initiate-return', [
+                'pin' => '1234',
+                'return_denominations' => [10_000 => 1, 5_000 => 2],
+            ])
+            ->assertOk();
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/cash-floats/'.$float->id.'/confirm-return', [
+                'closing_total' => 20_000,
+                'pin' => '9999',
+                'return_denominations' => [10_000 => 2],
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Cashier counted return denomination 5000 MMK must match Teller handback. Teller reported: 2, Cashier counted: 0.');
+
+        $this->assertSame('PENDING_RECONCILIATION', $float->fresh()->status);
     }
 
     public function test_employee_list_only_shows_own_floats(): void

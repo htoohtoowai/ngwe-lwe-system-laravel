@@ -41,23 +41,46 @@ class TransactionEntryController extends Controller
 
     public function cashIn(Request $request): Response
     {
-        return Inertia::render('transactions/CashIn', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN));
+        return Inertia::render('transactions/CashIn', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'cash_in'));
+    }
+
+    public function cashInHistory(Request $request): Response
+    {
+        return Inertia::render('transactions/CashIn', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'cash_in', 'history'));
     }
 
     public function cashOut(Request $request): Response
     {
-        return Inertia::render('transactions/CashOut', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT));
+        return Inertia::render('transactions/CashOut', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, 'cash_out'));
+    }
+
+    public function cashOutHistory(Request $request): Response
+    {
+        return Inertia::render('transactions/CashOut', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, 'cash_out', 'history'));
     }
 
     public function transfer(Request $request): Response
     {
-        return Inertia::render('transactions/Transfer', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN));
+        return Inertia::render('transactions/Transfer', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'transfer'));
+    }
+
+    public function transferHistory(Request $request): Response
+    {
+        return Inertia::render('transactions/Transfer', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'transfer', 'history'));
     }
 
     public function exchange(Request $request): Response
     {
         return Inertia::render('transactions/Exchange', [
-            ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN),
+            ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'exchange'),
+            'rate' => $this->rate(),
+        ]);
+    }
+
+    public function exchangeHistory(Request $request): Response
+    {
+        return Inertia::render('transactions/Exchange', [
+            ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'exchange', 'history'),
             'rate' => $this->rate(),
         ]);
     }
@@ -94,13 +117,14 @@ class TransactionEntryController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function props(Request $request, string $feeMode): array
+    private function props(Request $request, string $feeMode, string $transactionType, string $view = 'entry'): array
     {
         $user = $request->user();
         $float = $user?->role === 'teller' ? $this->selectedFloat($request) : null;
 
         return [
             'role' => $user?->role,
+            'view' => $view,
             'announcement' => 'Use the review step before confirming a transaction.',
             'notificationCount' => $this->pendingCashIns(),
             'float' => $float ? $this->floatProp($float) : null,
@@ -118,6 +142,7 @@ class TransactionEntryController extends Controller
             'fee' => $this->fee($request, $feeMode),
             'requiresDenominations' => $user?->role === 'teller',
             'completed' => $this->pullCompleted($request),
+            'history' => $this->history($request, $transactionType),
         ];
     }
 
@@ -305,5 +330,42 @@ class TransactionEntryController extends Controller
         $company = $account->serviceType?->company?->name;
 
         return trim(($company ? "{$company} - " : '').$account->account_name);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function history(Request $request, string $transactionType): array
+    {
+        $user = $request->user();
+
+        if ($user === null) {
+            return [];
+        }
+
+        return Transaction::query()
+            ->where('created_by', $user->id)
+            ->where('transaction_type', $transactionType)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit(100)
+            ->get()
+            ->map(fn (Transaction $transaction): array => [
+                'id' => $transaction->id,
+                'transaction_type' => $transaction->transaction_type,
+                'amount' => Money::normalize($transaction->amount ?? 0),
+                'fee_amount' => Money::normalize($transaction->customer_fee ?? 0),
+                'currency' => $transaction->currency,
+                'exchange_rate' => $transaction->exchange_rate,
+                'status' => $transaction->status,
+                'created_at' => $transaction->created_at?->toDateTimeString(),
+                'account_label' => $this->accountLabel($transaction->account_id),
+                'to_account_label' => $this->accountLabel($transaction->to_account_id),
+                'customer_name' => $transaction->customer_name,
+                'customer_phone' => $transaction->customer_phone,
+                'note' => $transaction->note,
+            ])
+            ->values()
+            ->all();
     }
 }

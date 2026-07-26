@@ -63,23 +63,23 @@ class VaultTransactionAuditTest extends TestCase
             performedBy: $employee->id,
         );
 
-        $service->initiateReturn($employee, $float->fresh(), [10_000 => 1, 5_000 => 1]);
+        $service->initiateReturn($employee, $float->fresh(), [10_000 => 2, 5_000 => 3], '1234');
 
         $this->assertVaultRows(
             txnType: 'return_initiate',
             floatId: $float->id,
             transactionId: null,
-            denominations: [10_000 => 1, 5_000 => 1],
+            denominations: [10_000 => 2, 5_000 => 3],
             performedBy: $employee->id,
         );
 
-        $service->confirmReturn($cashier, $float->fresh(), 15_000, '9999');
+        $service->confirmReturn($cashier, $float->fresh(), 35_000, '9999');
 
         $this->assertVaultRows(
             txnType: 'return_confirm',
             floatId: $float->id,
             transactionId: null,
-            denominations: [10_000 => 1, 5_000 => 1],
+            denominations: [10_000 => 2, 5_000 => 3],
             performedBy: $cashier->id,
             verifiedBy: $cashier->id,
         );

@@ -13,6 +13,7 @@ class VaultTransactionRepository
     public const TYPES = [
         'float_issue',
         'float_receipt',
+        'float_reject',
         'cash_in',
         'cash_in_received',
         'cash_in_handoff',

@@ -236,7 +236,7 @@ class TransactionEndpointsTest extends TestCase
             ->json('data.id');
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk()
             ->assertJsonPath('data.status', 'COMPLETED')
             ->assertJsonPath('data.vault_impact', 'main_vault_increase')
@@ -245,6 +245,68 @@ class TransactionEndpointsTest extends TestCase
 
         // Balance stays debited (already applied at creation).
         $this->assertSame('45000.00', $account->fresh()->balance);
+    }
+
+    public function test_cashier_confirm_pending_cash_in_requires_pin(): void
+    {
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
+        [, $cashierToken] = $this->userWithToken('cashier');
+        [$account, $serviceType] = $this->accountWithBalance(50_000);
+        $this->fixedTier($serviceType->id);
+
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 5_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
+            ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('pin');
+
+        $this->assertSame(
+            'PENDING_CASHIER_CONFIRM',
+            Transaction::query()->findOrFail($txnId)->status,
+        );
+    }
+
+    public function test_cashier_confirm_pending_cash_in_rejects_wrong_pin(): void
+    {
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
+        [, $cashierToken] = $this->userWithToken('cashier');
+        [$account, $serviceType] = $this->accountWithBalance(50_000);
+        $this->fixedTier($serviceType->id);
+
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 5_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
+            ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in', [
+                'pin' => '0000',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Incorrect PIN.');
+
+        $this->assertSame(
+            'PENDING_CASHIER_CONFIRM',
+            Transaction::query()->findOrFail($txnId)->status,
+        );
     }
 
     public function test_reference_cashier_approve_and_payment_endpoints_are_supported(): void
@@ -339,7 +401,7 @@ class TransactionEndpointsTest extends TestCase
         $this->assertSame(0, app(CashDenominationRepository::class)->getVaultBalance()[5_000]);
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk()
             ->assertJsonPath('data.confirmed_by', $cashier->id);
 
@@ -367,13 +429,49 @@ class TransactionEndpointsTest extends TestCase
         $this->assertSame('45000.00', $account->fresh()->balance);
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', ['note' => 'customer left'])
+            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', [
+                'pin' => '9999',
+                'note' => 'customer left',
+            ])
             ->assertOk()
             ->assertJsonPath('data.status', 'CANCELLED')
             ->assertJsonPath('data.vault_impact', 'none')
             ->assertJsonPath('data.note', 'customer left');
 
         $this->assertSame('50000.00', $account->fresh()->balance);
+    }
+
+    public function test_cashier_cancel_pending_cash_in_requires_pin(): void
+    {
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
+        [, $cashierToken] = $this->userWithToken('cashier');
+        [$account, $serviceType] = $this->accountWithBalance(50_000);
+        $this->fixedTier($serviceType->id);
+
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 5_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
+            ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', [
+                'note' => 'customer left',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('pin');
+
+        $this->assertSame('45000.00', $account->fresh()->balance);
+        $this->assertSame(
+            'PENDING_CASHIER_CONFIRM',
+            Transaction::query()->findOrFail($txnId)->status,
+        );
     }
 
     public function test_cash_in_confirm_is_idempotent_safe(): void
@@ -395,11 +493,11 @@ class TransactionEndpointsTest extends TestCase
             ->json('data.id');
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk();
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in', ['pin' => '9999'])
             ->assertStatus(409);
     }
 
@@ -489,6 +587,7 @@ class TransactionEndpointsTest extends TestCase
             'role' => $role,
             'is_active' => true,
             'password' => Hash::make('password123'),
+            'pin_hash' => $role === 'cashier' ? Hash::make('9999') : null,
         ]);
 
         return [$user, app(NgweLweTokenService::class)->create($user)];

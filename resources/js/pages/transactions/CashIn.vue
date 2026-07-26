@@ -6,56 +6,66 @@ import BigAmountInput from '@/components/bank/BigAmountInput.vue';
 import DenomDrawer from '@/components/bank/DenomDrawer.vue';
 import FeePaymentSelector from '@/components/bank/FeePaymentSelector.vue';
 import type { FeePaymentMethod } from '@/components/bank/FeePaymentSelector.vue';
+import TransactionHistoryTable from '@/components/teller/TransactionHistoryTable.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
 import { readStoredToken } from '@/lib/auth-token';
 import { useLocale } from '@/lib/i18n';
+import type { TransactionHistoryRow } from '@/types/domain';
 
-const props = defineProps<{
-    role: 'admin' | 'cashier' | 'teller';
-    announcement?: string | null;
-    notificationCount?: number;
-    float: { status: string } | null;
-    notes: number[];
-    floatStock: Record<number, number>;
-    cashInStock?: Record<number, number>;
-    accounts: {
-        id: number;
-        company: string;
-        company_id?: number | null;
-        service?: string;
-        service_type_id?: number | null;
-        name: string;
-        number?: string;
-        balance: string;
-    }[];
-    serviceTypes: {
-        id: number;
-        company_id?: number | null;
-        company: string;
-        name: string;
-        operation: string;
-    }[];
-    feeAccounts: {
-        id: number;
-        company: string;
-        service?: string;
-        name: string;
-        number?: string;
-        balance: string;
-    }[];
-    fee: string;
-    requiresDenominations: boolean;
-    cashInRequiresDenominations: boolean;
-    completed?: {
-        id: number;
-        amount: string;
-        fee_amount: string;
-        status: string;
-        created_at: string;
-        from_label: string;
-        to_label: string;
-    } | null;
-}>();
+const props = withDefaults(
+    defineProps<{
+        role: 'admin' | 'cashier' | 'teller';
+        view?: 'entry' | 'history';
+        announcement?: string | null;
+        notificationCount?: number;
+        float: { status: string } | null;
+        notes: number[];
+        floatStock: Record<number, number>;
+        cashInStock?: Record<number, number>;
+        accounts: {
+            id: number;
+            company: string;
+            company_id?: number | null;
+            service?: string;
+            service_type_id?: number | null;
+            name: string;
+            number?: string;
+            balance: string;
+        }[];
+        serviceTypes: {
+            id: number;
+            company_id?: number | null;
+            company: string;
+            name: string;
+            operation: string;
+        }[];
+        feeAccounts: {
+            id: number;
+            company: string;
+            service?: string;
+            name: string;
+            number?: string;
+            balance: string;
+        }[];
+        fee: string;
+        requiresDenominations: boolean;
+        cashInRequiresDenominations: boolean;
+        completed?: {
+            id: number;
+            amount: string;
+            fee_amount: string;
+            status: string;
+            created_at: string;
+            from_label: string;
+            to_label: string;
+        } | null;
+        history?: TransactionHistoryRow[];
+    }>(),
+    {
+        view: 'entry',
+        history: () => [],
+    },
+);
 
 const step = ref<'form' | 'review'>('form');
 const accountId = ref<number | null>(null);
@@ -338,8 +348,14 @@ function submit() {
             {{ t('transaction.cashIn') }}
         </h1>
 
+        <TransactionHistoryTable
+            v-if="view === 'history'"
+            :rows="history"
+            :title="`${t('transaction.cashIn')} ${t('common.history', 'History')}`"
+        />
+
         <p
-            v-if="floatLocked"
+            v-if="view === 'entry' && floatLocked"
             class="mt-4 max-w-3xl rounded-field bg-brand-soft px-4 py-3 text-sm font-semibold text-brand-deep"
         >
             {{ t('transaction.floatLocked') }}
@@ -351,14 +367,14 @@ function submit() {
             >
         </p>
         <p
-            v-if="cashierLocked"
+            v-if="view === 'entry' && cashierLocked"
             class="mt-4 max-w-3xl rounded-field bg-brand-soft px-4 py-3 text-sm font-semibold text-brand-deep"
         >
             {{ t('transaction.cashierLocked') }}
         </p>
 
         <section
-            v-if="completed"
+            v-if="view === 'entry' && completed"
             class="mt-5 max-w-xl rounded-2xl border border-line bg-card p-7 shadow-sm sm:p-9"
         >
             <div class="text-center">
@@ -417,7 +433,7 @@ function submit() {
         </section>
 
         <section
-            v-else-if="step === 'form'"
+            v-else-if="view === 'entry' && step === 'form'"
             class="bank-form-shell mt-5 max-w-6xl"
             :class="
                 floatLocked || cashierLocked
@@ -880,7 +896,10 @@ function submit() {
             </div>
         </section>
 
-        <section v-else class="bank-form-shell mt-5 max-w-xl">
+        <section
+            v-else-if="view === 'entry'"
+            class="bank-form-shell mt-5 max-w-xl"
+        >
             <h2 class="text-base font-bold">
                 {{ t('transaction.reviewCashIn') }}
             </h2>

@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\SetPinRequest;
 use App\Http\Requests\ChangePasswordRequest;
+use App\Http\Requests\SetPinRequest;
 use App\Repositories\UserRepository;
 use App\Services\NgweLweTokenService;
 use Illuminate\Http\JsonResponse;

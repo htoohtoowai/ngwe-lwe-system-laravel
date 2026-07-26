@@ -135,7 +135,7 @@ class PinVerificationTest extends TestCase
         $service = app(CashFloatService::class);
         $float = $service->issue($cashier, $employee->id, [10_000 => 3]);
         $service->activate($employee, $float->fresh(), '1234', [10_000 => 3]);
-        $service->initiateReturn($employee, $float->fresh(), [10_000 => 3]);
+        $service->initiateReturn($employee, $float->fresh(), [10_000 => 3], '1234');
 
         // Wrong PIN
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)

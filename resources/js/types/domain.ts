@@ -84,6 +84,22 @@ export type Transaction = {
     vault_impact: string | null;
 };
 
+export type TransactionHistoryRow = {
+    id: number;
+    transaction_type: string;
+    amount: string;
+    fee_amount: string;
+    currency: string | null;
+    exchange_rate: string | null;
+    status: string;
+    created_at: string | null;
+    account_label: string | null;
+    to_account_label: string | null;
+    customer_name: string | null;
+    customer_phone: string | null;
+    note: string | null;
+};
+
 export type FloatDenomination = {
     denomination: number;
     quantity: number;

@@ -6,12 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\CommissionTierRequest;
 use App\Http\Resources\CommissionTierResource;
 use App\Models\CommissionTier;
-use App\Models\ServiceType;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 
 class CommissionTierController extends Controller
 {

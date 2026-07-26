@@ -4,7 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class CancelCashInRequest extends FormRequest
+class RejectCashFloatRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -15,14 +15,14 @@ class CancelCashInRequest extends FormRequest
     {
         return [
             'pin' => ['required', 'string', 'regex:/^[0-9]{4,8}$/'],
-            'note' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'note' => ['nullable', 'string', 'max:2000'],
         ];
     }
 
     public function messages(): array
     {
         return [
-            'pin.regex' => 'PIN must be 4–8 digits.',
+            'pin.regex' => 'PIN must be 4-8 digits.',
         ];
     }
 }

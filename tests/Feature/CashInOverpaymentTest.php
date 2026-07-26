@@ -57,7 +57,7 @@ class CashInOverpaymentTest extends TestCase
 
         [, $cashierToken] = $this->userWithToken('cashier');
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$response->json('data.id').'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$response->json('data.id').'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk();
 
         $this->assertSame(2, app(CashDenominationRepository::class)->getVaultBalance()[10_000]);
@@ -129,7 +129,7 @@ class CashInOverpaymentTest extends TestCase
 
         [, $cashierToken] = $this->userWithToken('cashier');
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$response->json('data.id').'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$response->json('data.id').'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk();
 
         $mainVault = app(CashDenominationRepository::class)->getVaultBalance();
@@ -263,7 +263,10 @@ class CashInOverpaymentTest extends TestCase
         $this->assertSame('50000.00', $activeFloat->current_balance);
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', ['note' => 'cash not received'])
+            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', [
+                'pin' => '9999',
+                'note' => 'cash not received',
+            ])
             ->assertOk()
             ->assertJsonPath('data.status', 'CANCELLED');
 
@@ -315,6 +318,7 @@ class CashInOverpaymentTest extends TestCase
             'role' => $role,
             'is_active' => true,
             'password' => Hash::make('password123'),
+            'pin_hash' => $role === 'cashier' ? Hash::make('9999') : null,
         ]);
     }
 

@@ -107,6 +107,7 @@ Route::middleware(['ngwe.auth', 'role:admin'])->group(function (): void {
 Route::middleware(['ngwe.auth', 'role:teller'])->group(function (): void {
     Route::post('/transactions/cash-in', [TransactionController::class, 'cashIn']);
     Route::post('/cash-floats/{float}/activate', [CashFloatController::class, 'activate']);
+    Route::post('/cash-floats/{float}/reject', [CashFloatController::class, 'reject']);
     Route::post('/cash-floats/{float}/initiate-return', [CashFloatController::class, 'initiateReturn']);
 });
 
@@ -131,6 +132,7 @@ Route::prefix('cashier')->middleware('ngwe.auth')->group(function (): void {
     Route::get('/floats/{float}/denominations', [CashFloatController::class, 'denominations']);
     Route::post('/floats', [CashFloatController::class, 'store'])->middleware('role:cashier');
     Route::post('/floats/{float}/receive', [CashFloatController::class, 'activate'])->middleware('role:teller');
+    Route::post('/floats/{float}/reject', [CashFloatController::class, 'reject'])->middleware('role:teller');
     Route::post('/floats/{float}/initiate-return', [CashFloatController::class, 'initiateReturn'])->middleware('role:teller');
     Route::post('/floats/{float}/confirm-return', [CashFloatController::class, 'confirmReturn'])->middleware('role:cashier');
     Route::post('/transactions/{transaction}/confirm-cash-in', [TransactionController::class, 'confirmCashIn'])->middleware('role:cashier');
