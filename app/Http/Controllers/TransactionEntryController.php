@@ -41,38 +41,38 @@ class TransactionEntryController extends Controller
 
     public function cashIn(Request $request): Response
     {
-        return Inertia::render('transactions/CashIn', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'cash_in'));
+        return Inertia::render('transactions/CashIn', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'cash_in'));
     }
 
     public function cashInHistory(Request $request): Response
     {
-        return Inertia::render('transactions/CashIn', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'cash_in', 'history'));
+        return Inertia::render('transactions/CashIn', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'cash_in', 'history'));
     }
 
     public function cashOut(Request $request): Response
     {
-        return Inertia::render('transactions/CashOut', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, 'cash_out'));
+        return Inertia::render('transactions/CashOut', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, TransactionFeeCalculator::COMMISSION_RECEIVE, 'cash_out'));
     }
 
     public function cashOutHistory(Request $request): Response
     {
-        return Inertia::render('transactions/CashOut', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, 'cash_out', 'history'));
+        return Inertia::render('transactions/CashOut', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, TransactionFeeCalculator::COMMISSION_RECEIVE, 'cash_out', 'history'));
     }
 
     public function transfer(Request $request): Response
     {
-        return Inertia::render('transactions/Transfer', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'transfer'));
+        return Inertia::render('transactions/Transfer', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'transfer'));
     }
 
     public function transferHistory(Request $request): Response
     {
-        return Inertia::render('transactions/Transfer', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'transfer', 'history'));
+        return Inertia::render('transactions/Transfer', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'transfer', 'history'));
     }
 
     public function exchange(Request $request): Response
     {
         return Inertia::render('transactions/Exchange', [
-            ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'exchange'),
+            ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'exchange'),
             'rate' => $this->rate(),
         ]);
     }
@@ -80,7 +80,7 @@ class TransactionEntryController extends Controller
     public function exchangeHistory(Request $request): Response
     {
         return Inertia::render('transactions/Exchange', [
-            ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'exchange', 'history'),
+            ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'exchange', 'history'),
             'rate' => $this->rate(),
         ]);
     }
@@ -117,7 +117,7 @@ class TransactionEntryController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function props(Request $request, string $feeMode, string $transactionType, string $view = 'entry'): array
+    private function props(Request $request, string $feeMode, string $commissionDirection, string $transactionType, string $view = 'entry'): array
     {
         $user = $request->user();
         $float = $user?->role === 'teller' ? $this->selectedFloat($request) : null;
@@ -140,6 +140,7 @@ class TransactionEntryController extends Controller
             'serviceTypes' => $this->serviceTypeProps(),
             'feeAccounts' => $this->accountProps($this->accounts->feeAccounts()),
             'fee' => $this->fee($request, $feeMode),
+            'commission' => $this->commission($request, $commissionDirection),
             'requiresDenominations' => $user?->role === 'teller',
             'completed' => $this->pullCompleted($request),
             'history' => $this->history($request, $transactionType),
@@ -272,6 +273,24 @@ class TransactionEntryController extends Controller
         }
 
         return $this->fees->resolveFees($account, $amount, $mode)['customer_fee'];
+    }
+
+    private function commission(Request $request, string $direction): string
+    {
+        $amount = $request->float('amount');
+        $accountId = $request->integer('account_id');
+
+        if ($amount <= 0 || $accountId <= 0) {
+            return '0.00';
+        }
+
+        $account = $this->accounts->find($accountId);
+
+        if ($account === null || ! $account->is_active) {
+            return '0.00';
+        }
+
+        return $this->fees->commission($account, $amount, $direction);
     }
 
     /**

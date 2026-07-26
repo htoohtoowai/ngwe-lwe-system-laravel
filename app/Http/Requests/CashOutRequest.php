@@ -28,21 +28,26 @@ class CashOutRequest extends FormRequest
             'note' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'denominations' => ['sometimes', 'nullable', 'array'],
             'denominations.*' => ['integer', 'min:0'],
+            'fee_denominations' => ['sometimes', 'nullable', 'array'],
+            'fee_denominations.*' => ['integer', 'min:0'],
         ];
     }
 
     public function withValidator($validator): void
     {
         $validator->after(function ($validator): void {
-            $denoms = $this->input('denominations');
-            if (! is_array($denoms) || $denoms === []) {
-                return;
-            }
-
             $supported = Money::supportedDenominations();
-            foreach ($denoms as $denom => $qty) {
-                if (! in_array((int) $denom, $supported, true)) {
-                    $validator->errors()->add('denominations', "Unsupported denomination: {$denom}");
+
+            foreach (['denominations', 'fee_denominations'] as $field) {
+                $denoms = $this->input($field);
+                if (! is_array($denoms) || $denoms === []) {
+                    continue;
+                }
+
+                foreach ($denoms as $denom => $qty) {
+                    if (! in_array((int) $denom, $supported, true)) {
+                        $validator->errors()->add($field, "Unsupported denomination: {$denom}");
+                    }
                 }
             }
         });

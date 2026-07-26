@@ -49,16 +49,43 @@ const balanced = computed(
 const mismatch = (n: number) =>
     props.expected !== null && qty(n) !== Number(props.expected?.[n] ?? 0);
 
+function capFor(n: number): number {
+    if (!props.enforceStock) {
+        return Infinity;
+    }
+
+    if (props.stock !== null) {
+        return Number(props.stock[n] ?? 0);
+    }
+
+    if (props.expected !== null) {
+        return Number(props.expected[n] ?? 0);
+    }
+
+    return Infinity;
+}
+
+function clampQuantity(n: number, next: number): number {
+    return Math.max(0, Math.min(Math.floor(next || 0), capFor(n)));
+}
+
 function set(n: number, next: number) {
     if (props.readonly) {
         return;
     }
 
-    const cap = props.enforceStock ? (props.stock?.[n] ?? Infinity) : Infinity;
     emit('update:modelValue', {
         ...props.modelValue,
-        [n]: Math.max(0, Math.min(Math.floor(next || 0), cap)),
+        [n]: clampQuantity(n, next),
     });
+}
+
+function setFromInput(n: number, event: Event) {
+    const input = event.target as HTMLInputElement;
+    const clamped = clampQuantity(n, Number(input.value));
+
+    input.value = String(clamped);
+    emit('update:modelValue', { ...props.modelValue, [n]: clamped });
 }
 
 function autoFill() {
@@ -70,10 +97,7 @@ function autoFill() {
     const next: Record<number, number> = {};
 
     for (const n of [...props.notes].sort((a, b) => b - a)) {
-        const stockCap = props.enforceStock
-            ? (props.stock?.[n] ?? Infinity)
-            : Infinity;
-        const take = Math.min(Math.floor(left / n), stockCap);
+        const take = Math.min(Math.floor(left / n), capFor(n));
         next[n] = take;
         left -= take * n;
     }
@@ -194,18 +218,13 @@ function autoFill() {
                         :id="`${props.idPrefix}-${n}`"
                         :value="qty(n)"
                         :readonly="readonly"
+                        :max="Number.isFinite(capFor(n)) ? capFor(n) : undefined"
+                        min="0"
                         inputmode="numeric"
                         autocomplete="off"
                         :aria-label="`${n.toLocaleString()} ${t('component.notesCounted')}`"
                         :aria-invalid="mismatch(n)"
-                        @input="
-                            set(
-                                n,
-                                Number(
-                                    ($event.target as HTMLInputElement).value,
-                                ),
-                            )
-                        "
+                        @input="setFromInput(n, $event)"
                         class="money h-9 w-12 rounded-field border border-line bg-mist px-1 text-center text-sm font-bold text-ink outline-none focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/25 sm:w-14"
                         :class="
                             mismatch(n) ? 'text-brand ring-2 ring-brand' : ''
@@ -214,10 +233,7 @@ function autoFill() {
                     <button
                         type="button"
                         :aria-label="`+ ${n.toLocaleString()}`"
-                        :disabled="
-                            readonly ||
-                            (enforceStock && qty(n) >= (stock?.[n] ?? Infinity))
-                        "
+                        :disabled="readonly || qty(n) >= capFor(n)"
                         @click="set(n, qty(n) + 1)"
                         class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
                     >

@@ -72,6 +72,25 @@ class TellerHistoryPagesTest extends TestCase
         }
     }
 
+    public function test_teller_transfer_and_exchange_entry_routes_render_distinct_pages(): void
+    {
+        [, $token] = $this->userWithToken('teller');
+        $this->accounts();
+
+        foreach ([
+            '/transactions/transfer' => 'transactions/Transfer',
+            '/transactions/exchange' => 'transactions/Exchange',
+        ] as $route => $component) {
+            $this->withHeader('Authorization', 'Bearer '.$token)
+                ->get($route)
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page
+                    ->component($component)
+                    ->where('view', 'entry')
+                );
+        }
+    }
+
     public function test_teller_float_history_page_shows_own_floats_only(): void
     {
         [$cashier] = $this->userWithToken('cashier');

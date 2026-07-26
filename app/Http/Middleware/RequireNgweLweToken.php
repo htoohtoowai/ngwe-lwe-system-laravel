@@ -17,7 +17,16 @@ class RequireNgweLweToken
     public function handle(Request $request, Closure $next): Response
     {
         try {
-            $user = $this->tokens->userFromBearer($request->header('Authorization'));
+            $authorization = $request->header('Authorization');
+
+            if ($authorization === null && ! $request->is('api/*')) {
+                $token = $request->cookie('ngwe_lwe_api_token');
+                $authorization = is_string($token) && $token !== ''
+                    ? 'Bearer '.rawurldecode($token)
+                    : null;
+            }
+
+            $user = $this->tokens->userFromBearer($authorization);
         } catch (AuthenticationException $e) {
             // API callers need the machine-readable auth error. Browser and
             // Inertia visits must receive a redirect so Inertia never tries
@@ -26,7 +35,9 @@ class RequireNgweLweToken
                 return response()->json(['message' => $e->getMessage()], 401);
             }
 
-            return redirect()->route('login');
+            return redirect()->route('login', [
+                'return' => $request->getRequestUri(),
+            ]);
         }
 
         $request->setUserResolver(fn () => $user);

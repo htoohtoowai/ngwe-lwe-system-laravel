@@ -85,7 +85,7 @@ const NAV: NavItem[] = [
     },
     {
         label: 'Teller entry notifications',
-        labelMm: 'Teller entry notifications',
+        labelMm: 'Teller စာရင်းသွင်း အသိပေးချက်များ',
         href: '/cashier',
         icon: 'transactions',
         roles: ['cashier'],
@@ -93,7 +93,7 @@ const NAV: NavItem[] = [
     },
     {
         label: 'Main vault denomination stock',
-        labelMm: 'Main vault denomination stock',
+        labelMm: 'ပင်မငွေတိုက် ငွေစက္ကူလက်ကျန်',
         href: '/cashier/main-vault-denomination-stock',
         icon: 'vault',
         roles: ['cashier'],
@@ -101,7 +101,7 @@ const NAV: NavItem[] = [
     },
     {
         label: 'Morning issue',
-        labelMm: 'Morning issue',
+        labelMm: 'မနက်ပိုင်းငွေထုတ်ပေးခြင်း',
         href: '/cashier/morning-issue',
         icon: 'floats',
         roles: ['cashier'],
@@ -109,7 +109,7 @@ const NAV: NavItem[] = [
     },
     {
         label: 'End-of-day',
-        labelMm: 'End-of-day',
+        labelMm: 'နေ့ကုန်စာရင်းပိတ်',
         href: '/cashier/end-of-day',
         icon: 'reconcile',
         roles: ['cashier'],
@@ -117,7 +117,7 @@ const NAV: NavItem[] = [
     },
     {
         label: 'Teller entry history',
-        labelMm: 'Teller entry history',
+        labelMm: 'Teller စာရင်းသွင်းမှတ်တမ်း',
         href: '/cashier/teller-entry-history',
         icon: 'reports',
         roles: ['cashier'],
@@ -125,7 +125,7 @@ const NAV: NavItem[] = [
     },
     {
         label: 'Main vault audit log',
-        labelMm: 'Main vault audit log',
+        labelMm: 'ပင်မငွေတိုက် စစ်ဆေးမှတ်တမ်း',
         href: '/cashier/main-vault-audit-log',
         icon: 'settings',
         roles: ['cashier'],
@@ -252,7 +252,7 @@ const NAV: NavItem[] = [
     },
     {
         label: 'Master Data',
-        labelMm: 'Master Data',
+        labelMm: 'အခြေခံဒေတာ',
         href: '/admin/companies',
         icon: 'settings',
         roles: ['admin'],

@@ -37,6 +37,7 @@ const props = withDefaults(
             balance: string;
         }[];
         fee: string;
+        commission: string;
         requiresDenominations: boolean;
         cashOutRequiresDenominations: boolean;
         completed?: {
@@ -61,6 +62,7 @@ const accountId = ref<number | null>(null);
 const amount = ref(0);
 const description = ref('');
 const denoms = ref<Record<number, number>>({});
+const feeDenoms = ref<Record<number, number>>({});
 const submitting = ref(false);
 const errors = ref<Record<string, string>>({});
 const feePaymentMethod = ref<FeePaymentMethod>('cash');
@@ -68,8 +70,12 @@ const feeAccountId = ref<number | null>(null);
 const { t } = useLocale();
 
 const feeNum = computed(() => Number(props.fee ?? 0));
+const commissionNum = computed(() => Number(props.commission ?? 0));
 const account = computed(() =>
     props.accounts.find((a) => a.id === accountId.value),
+);
+const selectedFeeAccount = computed(() =>
+    props.feeAccounts.find((a) => a.id === feeAccountId.value),
 );
 const denomTotal = computed(() =>
     props.notes.reduce(
@@ -77,7 +83,24 @@ const denomTotal = computed(() =>
         0,
     ),
 );
+const feeDenomTotal = computed(() =>
+    props.notes.reduce(
+        (sum, note) => sum + note * (feeDenoms.value[note] ?? 0),
+        0,
+    ),
+);
 const needsCashDenoms = computed(() => props.cashOutRequiresDenominations);
+const needsCashFeeDenoms = computed(
+    () =>
+        props.role === 'teller' &&
+        feePaymentMethod.value === 'cash' &&
+        feeNum.value > 0,
+);
+const accountCreditAmount = computed(() =>
+    feePaymentMethod.value === 'account'
+        ? amount.value + feeNum.value + commissionNum.value
+        : amount.value + commissionNum.value,
+);
 const cashStock = computed(() =>
     props.role === 'admin' ? (props.cashOutStock ?? {}) : props.floatStock,
 );
@@ -96,6 +119,7 @@ const ready = computed(
         accountId.value !== null &&
         amount.value > 0 &&
         (!needsCashDenoms.value || denomTotal.value === amount.value) &&
+        (!needsCashFeeDenoms.value || feeDenomTotal.value === feeNum.value) &&
         feePaymentValid.value &&
         !floatLocked.value &&
         !cashierLocked.value,
@@ -109,7 +133,7 @@ watch([amount, accountId], ([nextAmount, nextAccount]) => {
         feeTimer = setTimeout(
             () =>
                 router.reload({
-                    only: ['fee'],
+                    only: ['fee', 'commission'],
                     data: { amount: nextAmount, account_id: nextAccount },
                     headers: authHeaders(),
                 }),
@@ -141,6 +165,9 @@ function submit() {
                     ? feeAccountId.value
                     : null,
             ...(needsCashDenoms.value ? { denominations: denoms.value } : {}),
+            ...(needsCashFeeDenoms.value
+                ? { fee_denominations: feeDenoms.value }
+                : {}),
         },
         {
             headers: authHeaders(),
@@ -341,6 +368,20 @@ function submit() {
                 />
             </div>
 
+            <div v-if="needsCashFeeDenoms" class="mt-5">
+                <DenomDrawer
+                    v-model="feeDenoms"
+                    :notes="notes"
+                    :target="feeNum"
+                    :enforce-stock="false"
+                    :label="t('transaction.cashFeeReceivedNotes')"
+                    id-prefix="cash-out-fee-denomination"
+                />
+                <p class="mt-2 text-xs font-semibold text-slate">
+                    {{ t('transaction.cashFeeReceivedHint') }}
+                </p>
+            </div>
+
             <p
                 v-for="(msg, key) in errors"
                 :key="key"
@@ -400,6 +441,14 @@ function submit() {
                 </div>
                 <div class="flex justify-between py-3 text-sm">
                     <dt class="text-slate">
+                        {{ t('transaction.agentCommission') }}
+                    </dt>
+                    <dd class="money font-bold">
+                        +{{ mmk(commissionNum) }} MMK
+                    </dd>
+                </div>
+                <div class="flex justify-between py-3 text-sm">
+                    <dt class="text-slate">
                         {{ t('transaction.feePaymentMethod') }}
                     </dt>
                     <dd class="text-right font-bold">
@@ -410,20 +459,33 @@ function submit() {
                         }}<span
                             v-if="feePaymentMethod === 'account'"
                             class="block text-[11px] font-medium text-slate"
-                            >{{
-                                feeAccounts.find(
-                                    (item) => item.id === feeAccountId,
-                                )?.name
-                            }}</span
+                            >{{ selectedFeeAccount?.name }}</span
                         >
+                    </dd>
+                </div>
+                <div
+                    v-if="needsCashFeeDenoms"
+                    class="flex justify-between py-3 text-sm"
+                >
+                    <dt class="font-bold">
+                        {{ t('transaction.cashFeeReceivedNotes') }}
+                    </dt>
+                    <dd class="money font-bold text-balance">
+                        +{{ mmk(feeDenomTotal) }} MMK
                     </dd>
                 </div>
                 <div class="flex justify-between py-3 text-sm">
                     <dt class="font-bold">
                         {{ t('transaction.kpayBalanceIncreased') }}
+                        <span
+                            v-if="feePaymentMethod === 'account'"
+                            class="block text-[11px] font-medium text-slate"
+                        >
+                            {{ selectedFeeAccount?.name }}
+                        </span>
                     </dt>
                     <dd class="money font-bold text-balance">
-                        +{{ mmk(amount) }} MMK
+                        +{{ mmk(accountCreditAmount) }} MMK
                     </dd>
                 </div>
                 <div

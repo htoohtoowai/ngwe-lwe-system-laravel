@@ -151,6 +151,18 @@ const pinDetail = computed(() => {
     );
 });
 
+const pinConfirmLabel = computed(() => {
+    if (intent.value === 'receive') {
+        return t('teller.receiveFloatPin');
+    }
+
+    if (intent.value === 'return') {
+        return t('teller.confirmHandBackPin', 'Confirm hand back with PIN');
+    }
+
+    return t('teller.rejectFloatPin', 'Reject with PIN');
+});
+
 function open(kind: 'receive' | 'return') {
     intent.value = kind;
     actionFloat.value = null;
@@ -500,13 +512,26 @@ onBeforeUnmount(() => {
                     <p class="mt-3 text-xs leading-relaxed text-ink-300">
                         {{ t('teller.returnCloses') }}
                     </p>
+                    <p class="mt-2 text-xs leading-relaxed text-seal">
+                        {{
+                            t(
+                                'teller.returnPinHint',
+                                'Confirm with your PIN after handing the counted cash to the cashier.',
+                            )
+                        }}
+                    </p>
                     <button
                         type="button"
                         :disabled="!returnStockMatches"
                         @click="open('return')"
-                        class="mt-5 w-full rounded-counter border border-seal py-3 text-sm font-semibold text-seal transition hover:bg-seal hover:text-ink-950 disabled:opacity-35"
+                        class="mt-5 w-full rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110 disabled:opacity-35"
                     >
-                        {{ t('teller.handBackCashier') }}
+                        {{
+                            t(
+                                'teller.confirmHandBackPin',
+                                'Confirm hand back with PIN',
+                            )
+                        }}
                     </button>
                 </aside>
             </div>
@@ -780,6 +805,7 @@ onBeforeUnmount(() => {
             :error="pinError"
             :title="pinTitle"
             :detail="pinDetail"
+            :confirm-label="pinConfirmLabel"
             @confirm="confirm"
             @close="closePin"
         />

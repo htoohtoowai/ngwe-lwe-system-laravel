@@ -33,13 +33,38 @@ const balanced = computed(() =>
 );
 const noteCount = computed(() => props.notes.reduce((c, n) => c + qty(n), 0));
 
+function capFor(n: number): number {
+    if (props.stock !== null) {
+        return Number(props.stock[n] ?? 0);
+    }
+
+    if (props.expected !== null) {
+        return Number(props.expected[n] ?? 0);
+    }
+
+    return Infinity;
+}
+
+function clampQuantity(n: number, next: number): number {
+    const cap = capFor(n);
+
+    return Math.max(0, Math.min(Math.floor(next || 0), cap));
+}
+
 function set(n: number, next: number) {
     if (props.readonly) {
         return;
     }
 
-    const cap = props.stock?.[n] ?? Infinity;
-    const clamped = Math.max(0, Math.min(Math.floor(next || 0), cap));
+    const clamped = clampQuantity(n, next);
+    emit('update:modelValue', { ...props.modelValue, [n]: clamped });
+}
+
+function setFromInput(n: number, event: Event) {
+    const input = event.target as HTMLInputElement;
+    const clamped = clampQuantity(n, Number(input.value));
+
+    input.value = String(clamped);
     emit('update:modelValue', { ...props.modelValue, [n]: clamped });
 }
 
@@ -52,7 +77,7 @@ function autoFill() {
     const next: Record<number, number> = {};
 
     for (const n of [...props.notes].sort((a, b) => b - a)) {
-        const cap = props.stock?.[n] ?? Infinity;
+        const cap = capFor(n);
         const take = Math.min(Math.floor(left / n), cap);
         next[n] = take;
         left -= take * n;
@@ -117,7 +142,7 @@ const mismatch = (n: number) =>
                 :class="[
                     qty(n) > 0 ? 'bg-ink-100/40' : '',
                     mismatch(n) ? 'bg-debit/5' : '',
-                    !readonly && (stock?.[n] ?? Infinity) > qty(n)
+                    !readonly && capFor(n) > qty(n)
                         ? 'cursor-pointer select-none active:bg-ink-100'
                         : '',
                 ]"
@@ -158,26 +183,19 @@ const mismatch = (n: number) =>
                         :id="`teller-denomination-${n}`"
                         :value="qty(n)"
                         :readonly="readonly"
+                        :max="Number.isFinite(capFor(n)) ? capFor(n) : undefined"
+                        min="0"
                         inputmode="numeric"
                         autocomplete="off"
                         :aria-label="`${n.toLocaleString()} denomination count`"
                         :aria-invalid="mismatch(n)"
-                        @input="
-                            set(
-                                n,
-                                Number(
-                                    ($event.target as HTMLInputElement).value,
-                                ),
-                            )
-                        "
+                        @input="setFromInput(n, $event)"
                         class="field-input money h-8 w-14 rounded-counter px-1 py-1 text-center text-sm"
                         :class="mismatch(n) ? 'border-debit text-debit' : ''"
                     />
                     <button
                         type="button"
-                        :disabled="
-                            readonly || qty(n) >= (stock?.[n] ?? Infinity)
-                        "
+                        :disabled="readonly || qty(n) >= capFor(n)"
                         @click="set(n, qty(n) + 1)"
                         class="bank-button bank-button-secondary grid size-8 min-h-8 place-items-center rounded-counter p-0 disabled:opacity-30"
                         :aria-label="`တိုးရန် ${n.toLocaleString()}`"

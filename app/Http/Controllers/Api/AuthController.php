@@ -10,6 +10,7 @@ use App\Services\NgweLweTokenService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Symfony\Component\HttpFoundation\Cookie;
 
 class AuthController extends Controller
 {
@@ -32,20 +33,31 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
+        $token = $this->tokens->create($user);
+
         return response()->json([
-            'token' => $this->tokens->create($user),
+            'token' => $token,
             'user' => $this->safeUser($user),
-        ]);
+        ])->cookie($this->authCookie($token));
     }
 
     public function me(Request $request): JsonResponse
     {
-        return response()->json(['user' => $this->safeUser($request->user())]);
+        $response = response()->json(['user' => $this->safeUser($request->user())]);
+        $authorization = $request->header('Authorization');
+
+        if (is_string($authorization) && str_starts_with($authorization, 'Bearer ')) {
+            $response->cookie($this->authCookie(substr($authorization, 7)));
+        }
+
+        return $response;
     }
 
     public function logout(): JsonResponse
     {
-        return response()->json(['message' => 'Logged out']);
+        return response()
+            ->json(['message' => 'Logged out'])
+            ->withoutCookie('ngwe_lwe_api_token');
     }
 
     public function setPin(SetPinRequest $request): JsonResponse
@@ -81,5 +93,25 @@ class AuthController extends Controller
             'created_at' => $user->created_at,
             'updated_at' => $user->updated_at,
         ];
+    }
+
+    private function authCookie(string $token): Cookie
+    {
+        return cookie(
+            name: 'ngwe_lwe_api_token',
+            value: $token,
+            minutes: (int) ceil((int) config('ngwe_lwe.auth.token_ttl_seconds', 86400) / 60),
+            path: '/',
+            domain: null,
+            secure: $this->cookieSecure(),
+            httpOnly: true,
+            raw: false,
+            sameSite: 'lax',
+        );
+    }
+
+    private function cookieSecure(): bool
+    {
+        return str_starts_with((string) config('app.url'), 'https://');
     }
 }

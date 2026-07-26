@@ -66,6 +66,7 @@ class TellerController extends Controller
             'floatStock' => $this->onHand($request),
             'accounts' => $this->accounts(),
             'fee' => $this->fee($request, TransactionFeeCalculator::MODE_CASH_OUT),
+            'commission' => $this->commission($request, TransactionFeeCalculator::COMMISSION_RECEIVE),
             'completed' => $this->pullCompleted($request),
         ]);
     }
@@ -378,6 +379,24 @@ class TellerController extends Controller
         }
 
         return $this->fees->resolveFees($account, $amount, $mode)['customer_fee'];
+    }
+
+    private function commission(Request $request, string $direction): string
+    {
+        $amount = $request->float('amount');
+        $accountId = $request->integer('account_id');
+
+        if ($amount <= 0 || $accountId <= 0) {
+            return '0.00';
+        }
+
+        $account = $this->accounts->find($accountId);
+
+        if ($account === null || ! $account->is_active) {
+            return '0.00';
+        }
+
+        return $this->fees->commission($account, $amount, $direction);
     }
 
     /**

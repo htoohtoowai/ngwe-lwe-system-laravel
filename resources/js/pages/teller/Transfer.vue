@@ -133,7 +133,7 @@ function submit() {
     errors.value = {};
 
     router.post(
-        '/teller/transactions/transfer',
+        '/transactions/transfer',
         {
             _token: csrfToken(),
             from_account_id: fromAccountId.value,
@@ -166,7 +166,7 @@ function submit() {
             </header>
             <ReceiptSlip
                 :txn="completed"
-                next-href="/teller/transfer"
+                next-href="/transactions/transfer"
                 :next-label="t('transaction.transfer')"
             />
         </template>

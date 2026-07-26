@@ -6,6 +6,7 @@ const props = defineProps<{
     open: boolean;
     title: string;
     detail: string;
+    confirmLabel?: string;
     busy?: boolean;
     error?: string | null;
 }>();
@@ -111,7 +112,11 @@ watch(
                     @click="emit('confirm', pin)"
                     class="bank-button flex-1 rounded-counter bg-ink-900 text-white hover:bg-ink-800 disabled:opacity-40"
                 >
-                    {{ busy ? t('common.verifying') : t('common.authorise') }}
+                    {{
+                        busy
+                            ? t('common.verifying')
+                            : (confirmLabel ?? t('common.authorise'))
+                    }}
                 </button>
             </footer>
         </div>

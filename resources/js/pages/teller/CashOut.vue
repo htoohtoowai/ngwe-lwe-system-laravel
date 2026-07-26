@@ -40,6 +40,7 @@ const props = defineProps<{
     floatStock: Record<number, number>;
     accounts: TellerAccount[];
     fee: string;
+    commission: string;
     completed?: CompletedTxn | null;
 }>();
 
@@ -55,6 +56,7 @@ const { t } = useLocale();
 
 const activeFloat = computed(() => props.float?.status === 'ACTIVE');
 const feeNum = computed(() => Number(props.fee ?? 0));
+const commissionNum = computed(() => Number(props.commission ?? 0));
 const payoutTotal = computed(() =>
     props.notes.reduce((s, n) => s + n * (payout.value[n] ?? 0), 0),
 );
@@ -80,7 +82,7 @@ watch([amount, accountId], ([a, acc]) => {
         feeTimer = setTimeout(
             () =>
                 router.reload({
-                    only: ['fee'],
+                    only: ['fee', 'commission'],
                     data: { amount: a, account_id: acc },
                     headers: authHeaders(),
                 }),
@@ -100,8 +102,13 @@ const reviewLines = computed<ReviewLine[]>(() => [
         value: feeNum.value,
     },
     {
+        label: t('transaction.agentCommission'),
+        value: commissionNum.value,
+        signed: 'credit',
+    },
+    {
         label: t('transaction.accountCredited'),
-        value: amount.value || 0,
+        value: (amount.value || 0) + commissionNum.value,
         signed: 'credit',
         emphasize: true,
     },

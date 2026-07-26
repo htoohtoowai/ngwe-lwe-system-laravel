@@ -198,6 +198,9 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.feePaymentCash': 'Cash',
         'transaction.feePaymentCashHint':
             'Include the fee in the cash movement.',
+        'transaction.cashFeeReceivedNotes': 'Cash fee received notes',
+        'transaction.cashFeeReceivedHint':
+            'Count the service fee cash from the customer. These notes are added to your teller vault.',
         'transaction.feePaymentAccount': 'Account',
         'transaction.feePaymentAccountHint':
             'Debit the source account and credit a fee account.',
@@ -208,6 +211,7 @@ const messages: Record<Locale, Record<string, string>> = {
             'Choose the account that will receive this fee.',
         'transaction.feeAmount': 'Service fee',
         'transaction.commissionTier': 'commission tier',
+        'transaction.agentCommission': 'Agent commission',
         'transaction.company': 'Company',
         'transaction.accounts': 'accounts',
         'transaction.chooseCompanyFirst': 'Choose the service company first.',
@@ -355,6 +359,10 @@ const messages: Record<Locale, Record<string, string>> = {
         'teller.return': 'Return',
         'teller.receiveFloatPin': 'Receive float with PIN',
         'teller.handBackCashier': 'Hand back to cashier',
+        'teller.confirmHandBackPin': 'Confirm hand back with PIN',
+        'teller.returnPinHint':
+            'Confirm with your PIN after handing the counted cash to the cashier.',
+        'teller.rejectFloatPin': 'Reject with PIN',
         'teller.waitingCashier': 'Waiting for the cashier to confirm',
         'component.account': 'Account',
         'component.chooseAccount': 'Choose an account',
@@ -523,6 +531,7 @@ const messages: Record<Locale, Record<string, string>> = {
             'ဝန်ဆောင်ခ လက်ခံမည့်အကောင့်ကို ရွေးပါ။',
         'transaction.feeAmount': 'ဝန်ဆောင်ခ',
         'transaction.commissionTier': 'သတ်မှတ်ထားသော ဝန်ဆောင်ခအဆင့်',
+        'transaction.agentCommission': 'အေးဂျင့် ကော်မရှင်',
         'transaction.cashReceived': 'လက်ခံရငွေ',
         'transaction.cashReceivedCustomer': 'ဖောက်သည်ထံမှ လက်ခံရရှိသောငွေ',
         'transaction.cashInCountPrerequisite':

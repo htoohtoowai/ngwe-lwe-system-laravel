@@ -21,6 +21,7 @@ type DemoUser = {
 const props = defineProps<{
     demoUsers?: DemoUser[] | null;
     errors?: Record<string, string>;
+    returnTo?: string | null;
 }>();
 
 const username = ref('');
@@ -189,8 +190,9 @@ function consoleHref(role: SessionUser['role']): string {
 
 function goToConsole(role: SessionUser['role']): void {
     const token = readStoredToken();
+    const href = props.returnTo?.startsWith('/') ? props.returnTo : consoleHref(role);
 
-    router.visit(consoleHref(role), {
+    router.visit(href, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
 }

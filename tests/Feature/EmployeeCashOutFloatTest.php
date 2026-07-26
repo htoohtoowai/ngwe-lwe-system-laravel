@@ -58,6 +58,45 @@ class EmployeeCashOutFloatTest extends TestCase
         $this->assertSame(2, $balances[5_000]);
     }
 
+    public function test_employee_cash_out_account_fee_credits_receiving_account_with_amount_plus_fee(): void
+    {
+        [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 1]);
+        [$account, $serviceType] = $this->accountWithServiceType();
+        $feeAccount = Account::query()->create([
+            'service_type_id' => $serviceType->id,
+            'account_name' => 'Cash Out Receiving Account',
+            'phone_number' => '0900000099',
+            'balance' => 0,
+            'is_fee_account' => true,
+        ]);
+        $this->fixedTier($serviceType->id, feeWithdraw: 500, commWithdraw: 900);
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/transactions/cash-out', [
+                'account_id' => $account->id,
+                'amount' => 10_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'denominations' => [
+                    10_000 => 1,
+                ],
+                'fee_payment_method' => 'account',
+                'fee_account_id' => $feeAccount->id,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.customer_fee', '500.00')
+            ->assertJsonPath('data.commission_amount', '900.00')
+            ->assertJsonPath('data.balance_change', '11400.00')
+            ->assertJsonPath('data.fee_payment_method', 'account')
+            ->assertJsonPath('data.fee_account_id', $feeAccount->id);
+
+        $this->assertSame('0.00', $account->fresh()->balance);
+        $this->assertSame('11400.00', $feeAccount->fresh()->balance);
+
+        $activeFloat = app(CashFloatRepository::class)->activeForEmployee($employee->id);
+        $this->assertSame('0.00', $activeFloat->current_balance);
+    }
+
     public function test_employee_cash_out_requires_denominations(): void
     {
         [, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 3]);
@@ -242,7 +281,13 @@ class EmployeeCashOutFloatTest extends TestCase
         return [$account, $serviceType];
     }
 
-    private function fixedTier(int $serviceTypeId, int $feeDeposit = 0, int $feeWithdraw = 0): CommissionTier
+    private function fixedTier(
+        int $serviceTypeId,
+        int $feeDeposit = 0,
+        int $feeWithdraw = 0,
+        int $commDeposit = 0,
+        int $commWithdraw = 0,
+    ): CommissionTier
     {
         return CommissionTier::query()->create([
             'service_type_id' => $serviceTypeId,
@@ -252,6 +297,8 @@ class EmployeeCashOutFloatTest extends TestCase
             'fee_amount_deposit' => $feeDeposit,
             'fee_amount_withdraw' => $feeWithdraw,
             'comm_type' => 'FIXED',
+            'comm_deposit' => $commDeposit,
+            'comm_withdraw' => $commWithdraw,
             'additional_fee_type' => 'FIXED',
             'is_active' => true,
         ]);

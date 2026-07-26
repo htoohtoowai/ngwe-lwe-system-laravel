@@ -82,6 +82,28 @@ class TransactionEndpointsTest extends TestCase
             ->assertJsonPath('data.received_denominations.10000', 1);
     }
 
+    public function test_cash_in_credits_agent_commission_to_account_balance(): void
+    {
+        [, $token] = $this->activeTellerWithEmptyFloat();
+        [$account, $serviceType] = $this->accountWithBalance(50_000);
+        $this->fixedTier($serviceType->id, feeDeposit: 500, commDeposit: 250);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 10_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'received_denominations' => [10_000 => 1],
+                'handoff_denominations' => [10_000 => 1],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.commission_amount', '250.00')
+            ->assertJsonPath('data.balance_change', '-9750.00');
+
+        $this->assertSame('40250.00', $account->fresh()->balance);
+    }
+
     public function test_cash_in_rejects_overdraw(): void
     {
         [, $token] = $this->activeTellerWithEmptyFloat();
@@ -441,6 +463,37 @@ class TransactionEndpointsTest extends TestCase
         $this->assertSame('50000.00', $account->fresh()->balance);
     }
 
+    public function test_cashier_cancel_pending_cash_in_reverses_agent_commission(): void
+    {
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
+        [, $cashierToken] = $this->userWithToken('cashier');
+        [$account, $serviceType] = $this->accountWithBalance(50_000);
+        $this->fixedTier($serviceType->id, commDeposit: 250);
+
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 5_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
+            ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->assertSame('45250.00', $account->fresh()->balance);
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', [
+                'pin' => '9999',
+                'note' => 'customer left',
+            ])
+            ->assertOk();
+
+        $this->assertSame('50000.00', $account->fresh()->balance);
+    }
+
     public function test_cashier_cancel_pending_cash_in_requires_pin(): void
     {
         [, $tellerToken] = $this->activeTellerWithEmptyFloat();
@@ -617,7 +670,13 @@ class TransactionEndpointsTest extends TestCase
         return [$account, $serviceType];
     }
 
-    private function fixedTier(int $serviceTypeId, int $feeDeposit = 0, int $feeWithdraw = 0): CommissionTier
+    private function fixedTier(
+        int $serviceTypeId,
+        int $feeDeposit = 0,
+        int $feeWithdraw = 0,
+        int $commDeposit = 0,
+        int $commWithdraw = 0,
+    ): CommissionTier
     {
         return CommissionTier::query()->create([
             'service_type_id' => $serviceTypeId,
@@ -627,6 +686,8 @@ class TransactionEndpointsTest extends TestCase
             'fee_amount_deposit' => $feeDeposit,
             'fee_amount_withdraw' => $feeWithdraw,
             'comm_type' => 'FIXED',
+            'comm_deposit' => $commDeposit,
+            'comm_withdraw' => $commWithdraw,
             'additional_fee_type' => 'FIXED',
             'is_active' => true,
         ]);
