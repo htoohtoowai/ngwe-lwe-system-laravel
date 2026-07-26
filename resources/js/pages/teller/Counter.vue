@@ -1,11 +1,20 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Link, router, usePage } from '@inertiajs/vue3';
+import { computed, onBeforeUnmount, onMounted } from 'vue';
 import MoneyText from '@/components/teller/MoneyText.vue';
 import StateChip from '@/components/teller/StateChip.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
 import { readStoredToken } from '@/lib/auth-token';
+import {
+    createNgweLweEcho,
+    disconnectNgweLweEcho,
+    subscribeToRoleChannel,
+    subscribeToUserChannel,
+    watchNgweLweEchoConnection,
+} from '@/lib/echo';
+import type { RealtimeHandlers } from '@/lib/echo';
 import { useLocale } from '@/lib/i18n';
+import { startSmartPolling } from '@/lib/smart-polling';
 
 type TellerFloat = {
     id: number;
@@ -34,6 +43,18 @@ const props = defineProps<{
 }>();
 
 const { t } = useLocale();
+const page = usePage<{
+    auth?: {
+        user?: {
+            id: number;
+        } | null;
+    };
+}>();
+let unsubscribeTeller: (() => void) | null = null;
+let unsubscribeUser: (() => void) | null = null;
+let unwatchEchoConnection: (() => void) | null = null;
+let stopRealtimeFallback: (() => void) | null = null;
+let realtimeConnected = false;
 const actions = computed(() => [
     {
         label: t('nav.cashIn'),
@@ -71,6 +92,54 @@ function authHeaders(): Record<string, string> {
 
     return token ? { Authorization: `Bearer ${token}` } : {};
 }
+
+const refreshTellerCounter = () =>
+    router.reload({
+        only: ['float', 'denominations', 'today', 'recent'],
+        headers: authHeaders(),
+    });
+
+onMounted(() => {
+    const echo = createNgweLweEcho(readStoredToken());
+    const handlers: RealtimeHandlers = {
+        balance_update: refreshTellerCounter,
+        new_transaction: refreshTellerCounter,
+        float_update: refreshTellerCounter,
+        float_status_changed: refreshTellerCounter,
+        cash_in_confirmed: refreshTellerCounter,
+        cash_in_cancelled: refreshTellerCounter,
+    };
+
+    if (echo) {
+        unwatchEchoConnection = watchNgweLweEchoConnection(echo, (state) => {
+            realtimeConnected = state === 'connected';
+        });
+        unsubscribeTeller = subscribeToRoleChannel(echo, 'teller', handlers);
+
+        if (page.props.auth?.user?.id) {
+            unsubscribeUser = subscribeToUserChannel(
+                echo,
+                page.props.auth.user.id,
+                handlers,
+            );
+        }
+    }
+
+    stopRealtimeFallback = startSmartPolling({
+        refresh: refreshTellerCounter,
+        shouldPoll: () => !realtimeConnected,
+        activeIntervalMs: 5_000,
+        hiddenIntervalMs: 60_000,
+    });
+});
+
+onBeforeUnmount(() => {
+    stopRealtimeFallback?.();
+    unwatchEchoConnection?.();
+    unsubscribeTeller?.();
+    unsubscribeUser?.();
+    disconnectNgweLweEcho();
+});
 </script>
 
 <template>

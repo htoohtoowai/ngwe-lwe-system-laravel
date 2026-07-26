@@ -14,6 +14,13 @@ export type RealtimeEventName =
     | 'ping';
 
 export type RealtimePayload = Record<string, unknown>;
+export type RealtimeConnectionState =
+    | 'connected'
+    | 'connecting'
+    | 'disconnected'
+    | 'unavailable'
+    | 'failed'
+    | 'error';
 
 export type RealtimeHandlers = Partial<
     Record<RealtimeEventName, (payload: RealtimePayload) => void>
@@ -65,6 +72,68 @@ export function createNgweLweEcho(token: string | null): NgweLweEcho | null {
 export function disconnectNgweLweEcho(): void {
     activeEcho?.disconnect();
     activeEcho = null;
+}
+
+export function watchNgweLweEchoConnection(
+    echo: NgweLweEcho,
+    onChange: (state: RealtimeConnectionState) => void,
+): () => void {
+    const connection = (
+        echo as unknown as {
+            connector?: {
+                pusher?: {
+                    connection?: {
+                        state?: string;
+                        bind?: (
+                            event: string,
+                            callback: (payload?: unknown) => void,
+                        ) => void;
+                        unbind?: (
+                            event: string,
+                            callback: (payload?: unknown) => void,
+                        ) => void;
+                    };
+                };
+            };
+        }
+    ).connector?.pusher?.connection;
+
+    if (!connection?.bind || !connection.unbind) {
+        onChange('unavailable');
+
+        return () => undefined;
+    }
+
+    const normalize = (state: unknown): RealtimeConnectionState => {
+        if (
+            state === 'connected' ||
+            state === 'connecting' ||
+            state === 'disconnected' ||
+            state === 'unavailable' ||
+            state === 'failed' ||
+            state === 'error'
+        ) {
+            return state;
+        }
+
+        return 'disconnected';
+    };
+
+    const handleStateChange = (payload?: unknown) => {
+        const state =
+            typeof payload === 'object' &&
+            payload !== null &&
+            'current' in payload
+                ? (payload as { current?: unknown }).current
+                : payload;
+
+        onChange(normalize(state));
+    };
+
+    connection.bind('state_change', handleStateChange);
+    onChange(normalize(connection.state));
+
+    return () => connection.unbind?.('state_change', handleStateChange);
 }
 
 export function subscribeToRoleChannel(

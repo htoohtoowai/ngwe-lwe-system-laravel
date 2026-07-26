@@ -10,8 +10,10 @@ import {
     createNgweLweEcho,
     disconnectNgweLweEcho,
     subscribeToRoleChannel,
+    watchNgweLweEchoConnection,
 } from '@/lib/echo';
 import type { RealtimeHandlers } from '@/lib/echo';
+import { startSmartPolling } from '@/lib/smart-polling';
 
 type Denoms = Record<number, number>;
 type Teller = { id: number; name: string };
@@ -94,6 +96,9 @@ const transactionType = ref('all');
 const transactionDateFrom = ref('');
 const transactionDateTo = ref('');
 let unsubscribeRole: (() => void) | null = null;
+let unwatchEchoConnection: (() => void) | null = null;
+let stopRealtimeFallback: (() => void) | null = null;
+let realtimeConnected = false;
 
 const availableByNumber = computed(() => {
     const result: Denoms = {};
@@ -226,21 +231,32 @@ const refreshCashierData = () => reload();
 onMounted(() => {
     const echo = createNgweLweEcho(readStoredToken());
 
-    if (!echo) {
-        return;
-    }
-
     const handlers: RealtimeHandlers = {
+        balance_update: refreshCashierData,
         new_transaction: refreshCashierData,
         cash_in_pending: refreshCashierData,
         float_update: refreshCashierData,
         float_status_changed: refreshCashierData,
     };
 
-    unsubscribeRole = subscribeToRoleChannel(echo, 'cashier', handlers);
+    if (echo) {
+        unwatchEchoConnection = watchNgweLweEchoConnection(echo, (state) => {
+            realtimeConnected = state === 'connected';
+        });
+        unsubscribeRole = subscribeToRoleChannel(echo, 'cashier', handlers);
+    }
+
+    stopRealtimeFallback = startSmartPolling({
+        refresh: refreshCashierData,
+        shouldPoll: () => !realtimeConnected,
+        activeIntervalMs: 5_000,
+        hiddenIntervalMs: 60_000,
+    });
 });
 
 onBeforeUnmount(() => {
+    stopRealtimeFallback?.();
+    unwatchEchoConnection?.();
     unsubscribeRole?.();
     disconnectNgweLweEcho();
 });
@@ -557,9 +573,7 @@ function statusLabel(status: string): string {
                     </p>
                     <p class="mt-1 text-xs text-slate">
                         {{ availableByNumber[note] ?? 0 }} available ·
-                        {{
-                            formatMoney((availableByNumber[note] ?? 0) * note)
-                        }}
+                        {{ formatMoney((availableByNumber[note] ?? 0) * note) }}
                         MMK
                     </p>
                 </div>

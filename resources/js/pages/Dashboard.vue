@@ -11,9 +11,11 @@ import {
     disconnectNgweLweEcho,
     subscribeToRoleChannel,
     subscribeToUserChannel,
+    watchNgweLweEchoConnection,
 } from '@/lib/echo';
 import type { RealtimeHandlers } from '@/lib/echo';
 import { useLocale } from '@/lib/i18n';
+import { startSmartPolling } from '@/lib/smart-polling';
 
 type DenominationMap = Record<string, number>;
 type DenominationRow = {
@@ -98,6 +100,9 @@ const page = usePage<{
 }>();
 let unsubscribeRole: (() => void) | null = null;
 let unsubscribeUser: (() => void) | null = null;
+let unwatchEchoConnection: (() => void) | null = null;
+let stopRealtimeFallback: (() => void) | null = null;
+let realtimeConnected = false;
 const tabs = computed(() => ['All', ...props.companies]);
 const visibleAccounts = computed(() =>
     companyTab.value === 'All'
@@ -331,29 +336,40 @@ const refreshRealtimeData = () =>
 onMounted(() => {
     const echo = createNgweLweEcho(readStoredToken());
 
-    if (!echo) {
-        return;
-    }
-
     const handlers: RealtimeHandlers = {
+        balance_update: refreshRealtimeData,
         new_transaction: refreshRealtimeData,
         cash_in_pending: refreshRealtimeData,
         float_update: refreshRealtimeData,
         float_status_changed: refreshRealtimeData,
     };
 
-    unsubscribeRole = subscribeToRoleChannel(echo, props.role, handlers);
+    if (echo) {
+        unwatchEchoConnection = watchNgweLweEchoConnection(echo, (state) => {
+            realtimeConnected = state === 'connected';
+        });
+        unsubscribeRole = subscribeToRoleChannel(echo, props.role, handlers);
 
-    if (page.props.auth?.user?.id) {
-        unsubscribeUser = subscribeToUserChannel(
-            echo,
-            page.props.auth.user.id,
-            handlers,
-        );
+        if (page.props.auth?.user?.id) {
+            unsubscribeUser = subscribeToUserChannel(
+                echo,
+                page.props.auth.user.id,
+                handlers,
+            );
+        }
     }
+
+    stopRealtimeFallback = startSmartPolling({
+        refresh: refreshRealtimeData,
+        shouldPoll: () => !realtimeConnected,
+        activeIntervalMs: props.role === 'admin' ? 15_000 : 5_000,
+        hiddenIntervalMs: 60_000,
+    });
 });
 
 onBeforeUnmount(() => {
+    stopRealtimeFallback?.();
+    unwatchEchoConnection?.();
     unsubscribeRole?.();
     unsubscribeUser?.();
     disconnectNgweLweEcho();
@@ -728,9 +744,7 @@ onBeforeUnmount(() => {
                                     #{{ txn.id }} · {{ mmk(txn.amount) }} MMK
                                 </p>
                                 <p class="text-xs text-slate">
-                                    {{
-                                        txn.teller || txn.employee || 'Teller'
-                                    }}
+                                    {{ txn.teller || txn.employee || 'Teller' }}
                                     · {{ txn.customer_name || 'Customer' }}
                                 </p>
                             </td>
