@@ -84,10 +84,10 @@ class DatabaseSeeder extends Seeder
         $serviceTypes = collect();
 
         foreach ([
-            'cash_in' => ['name' => 'Demo Cash In', 'operation' => 'CashIn'],
-            'cash_out' => ['name' => 'Demo Cash Out', 'operation' => 'CashOut'],
-            'transfer' => ['name' => 'Demo Transfer', 'operation' => 'Transfer'],
-            'exchange' => ['name' => 'Demo Exchange', 'operation' => 'Exchange'],
+            'cash_in' => ['name' => 'WST', 'operation' => 'CashIn'],
+            'cash_out' => ['name' => 'CashOut', 'operation' => 'CashOut'],
+            'transfer' => ['name' => 'Transfer', 'operation' => 'Transfer'],
+            'exchange' => ['name' => 'Exchange', 'operation' => 'Exchange'],
         ] as $key => $seed) {
             $serviceTypes[$key] = ServiceType::query()->updateOrCreate(
                 [

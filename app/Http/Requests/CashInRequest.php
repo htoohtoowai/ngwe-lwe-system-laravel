@@ -10,7 +10,7 @@ class CashInRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user()?->role === 'teller';
     }
 
     public function rules(): array
@@ -24,6 +24,7 @@ class CashInRequest extends FormRequest
             'additional_fee_amount' => ['sometimes', 'numeric', 'min:0'],
             'fee_payment_method' => ['sometimes', Rule::in(['cash', 'account'])],
             'fee_account_id' => ['nullable', 'integer', 'exists:accounts,id', 'required_if:fee_payment_method,account'],
+            'screenshot' => ['sometimes', 'nullable', 'file', 'image', 'max:4096'],
             'screenshot_path' => ['sometimes', 'nullable', 'string', 'max:512'],
             'note' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'amount_received' => ['sometimes', 'nullable', 'numeric', 'min:0'],
@@ -34,6 +35,23 @@ class CashInRequest extends FormRequest
             'change_denominations' => ['sometimes', 'nullable', 'array'],
             'change_denominations.*' => ['integer', 'min:0'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $aliases = [];
+
+        if ($this->has('received_breakdown') && ! $this->has('received_denominations')) {
+            $aliases['received_denominations'] = $this->input('received_breakdown');
+        }
+
+        if ($this->has('change_breakdown') && ! $this->has('change_denominations')) {
+            $aliases['change_denominations'] = $this->input('change_breakdown');
+        }
+
+        if ($aliases !== []) {
+            $this->merge($aliases);
+        }
     }
 
     public function withValidator($validator): void

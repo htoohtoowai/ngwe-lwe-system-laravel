@@ -11,10 +11,10 @@ use App\Http\Resources\CashFloatResource;
 use App\Models\CashFloatAssignment;
 use App\Repositories\CashFloatRepository;
 use App\Services\CashFloatService;
+use App\Support\Money;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use App\Support\Money;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -39,6 +39,17 @@ class CashFloatController extends Controller
         return CashFloatResource::collection(
             $this->repository->list($employeeId, $status)
         );
+    }
+
+    public function myPending(Request $request): CashFloatResource|JsonResponse
+    {
+        $float = $this->repository->pendingForEmployee($request->user()->id);
+
+        if ($float === null) {
+            return response()->json(['data' => null]);
+        }
+
+        return new CashFloatResource($float->load(['denominations', 'employee', 'issuer']));
     }
 
     public function show(Request $request, CashFloatAssignment $float): CashFloatResource|JsonResponse

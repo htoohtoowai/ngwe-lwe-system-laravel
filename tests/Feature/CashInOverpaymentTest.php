@@ -195,7 +195,7 @@ class CashInOverpaymentTest extends TestCase
             ->assertStatus(422);
     }
 
-    public function test_owner_cannot_do_overpayment_change(): void
+    public function test_admin_cannot_create_cash_in(): void
     {
         [, $ownerToken] = $this->userWithToken('admin');
         [$account, $serviceType] = $this->accountWithBalance(100_000);
@@ -211,7 +211,7 @@ class CashInOverpaymentTest extends TestCase
                 'received_denominations' => [10_000 => 2, 5_000 => 1],
                 'change_denominations' => [5_000 => 1],
             ])
-            ->assertStatus(422);
+            ->assertForbidden();
     }
 
     public function test_overpayment_rejected_when_float_stock_insufficient(): void

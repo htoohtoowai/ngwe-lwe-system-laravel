@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\InsufficientBalanceException;
 use App\Exceptions\InsufficientVaultDenominationException;
+use App\Models\Account;
 use App\Models\ActivityLog;
 use App\Models\Transaction;
 use App\Models\User;
@@ -559,6 +560,7 @@ class TransactionService
 
         $fees = $this->calculator->resolveFees($account, $amount, TransactionFeeCalculator::MODE_CASH_IN);
         $commission = $this->calculator->commission($account, $amount, TransactionFeeCalculator::COMMISSION_SEND);
+        $feePayment = $this->resolveFeePayment($data, $account, $fees['customer_fee']);
         $fromCompanyId = $account->serviceType?->company_id;
 
         $normalizedDenominations = null;
@@ -768,7 +770,7 @@ class TransactionService
     /**
      * @return array{method:string,fee_account_id:int|null}
      */
-    private function resolveFeePayment(array $data, \App\Models\Account $sourceAccount, string $fee): array
+    private function resolveFeePayment(array $data, Account $sourceAccount, string $fee): array
     {
         $feeAccountInput = $data['fee_account_id'] ?? null;
         $method = (string) ($data['fee_payment_method'] ?? ($feeAccountInput !== null ? 'account' : 'cash'));
@@ -805,9 +807,9 @@ class TransactionService
      * Account-paid fees are taken from the transaction source and credited to
      * the configured fee account in the same database transaction.
      *
-     * @param array{method:string,fee_account_id:int|null} $feePayment
+     * @param  array{method:string,fee_account_id:int|null}  $feePayment
      */
-    private function debitFeeFromSourceIfNeeded(\App\Models\Account $sourceAccount, array $feePayment, string $fee): void
+    private function debitFeeFromSourceIfNeeded(Account $sourceAccount, array $feePayment, string $fee): void
     {
         if ($feePayment['method'] !== 'account' || (float) $fee <= 0) {
             return;

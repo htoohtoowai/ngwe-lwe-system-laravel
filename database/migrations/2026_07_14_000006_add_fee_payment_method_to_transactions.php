@@ -9,14 +9,18 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('transactions', function (Blueprint $table): void {
-            $table->string('fee_payment_method', 16)->default('cash')->after('fee_account_id');
+            if (! Schema::hasColumn('transactions', 'fee_payment_method')) {
+                $table->string('fee_payment_method', 16)->default('cash')->after('fee_account_id');
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('transactions', function (Blueprint $table): void {
-            $table->dropColumn('fee_payment_method');
+            if (Schema::hasColumn('transactions', 'fee_payment_method')) {
+                $table->dropColumn('fee_payment_method');
+            }
         });
     }
 };

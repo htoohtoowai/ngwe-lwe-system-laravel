@@ -52,6 +52,8 @@ class CashierController extends Controller
                     'amount' => Money::normalize($transaction->amount ?? 0),
                     'customer_name' => $transaction->customer_name,
                     'teller' => $transaction->creator?->full_name ?? $transaction->creator?->username ?? 'Teller',
+                    'creator_role' => $transaction->creator?->role,
+                    'settlement_amount' => $this->cashInSettlementAmount($transaction),
                     'received_denominations' => $transaction->received_denominations ?? [],
                     'handoff_denominations' => $transaction->handoff_denominations ?? [],
                     'change_denominations' => $transaction->change_denominations ?? [],
@@ -61,6 +63,17 @@ class CashierController extends Controller
                 ->values()
                 ->all(),
         ]);
+    }
+
+    private function cashInSettlementAmount(Transaction $transaction): string
+    {
+        $receivedDenominations = is_array($transaction->received_denominations) ? $transaction->received_denominations : [];
+        $handoffDenominations = is_array($transaction->handoff_denominations) ? $transaction->handoff_denominations : [];
+        $settlementDenominations = $transaction->creator?->role === 'teller'
+            ? $handoffDenominations
+            : $receivedDenominations;
+
+        return Money::normalize(Money::denominationTotal($settlementDenominations));
     }
 
     public function vault(Request $request): JsonResponse

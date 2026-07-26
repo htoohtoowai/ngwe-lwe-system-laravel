@@ -14,6 +14,8 @@ use App\Models\CashFloatAssignment;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Repositories\AccountRepository;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class RealtimeBroadcastService
 {
@@ -21,17 +23,17 @@ class RealtimeBroadcastService
 
     public function balanceUpdated(): void
     {
-        BalanceUpdated::dispatch($this->activeAccountsPayload());
+        $this->dispatchSafely(fn () => BalanceUpdated::dispatch($this->activeAccountsPayload()));
     }
 
     public function transactionCreated(Transaction $transaction): void
     {
         $payload = $this->transactionPayload($transaction);
 
-        NewTransaction::dispatch($payload);
+        $this->dispatchSafely(fn () => NewTransaction::dispatch($payload));
 
         if ($transaction->transaction_type === 'cash_in' && $transaction->status === 'PENDING_CASHIER_CONFIRM') {
-            CashInPending::dispatch($payload);
+            $this->dispatchSafely(fn () => CashInPending::dispatch($payload));
         }
 
         $this->balanceUpdated();
@@ -39,15 +41,27 @@ class RealtimeBroadcastService
 
     public function floatStatusChanged(CashFloatAssignment $cashFloat): void
     {
-        FloatStatusChanged::dispatch(
+        $this->dispatchSafely(fn () => FloatStatusChanged::dispatch(
             $this->cashFloatPayload($cashFloat),
             (int) $cashFloat->employee_id,
-        );
+        ));
     }
 
     public function ping(User $owner): void
     {
-        BroadcastPing::dispatch($owner->id, now()->toISOString());
+        $this->dispatchSafely(fn () => BroadcastPing::dispatch($owner->id, now()->toISOString()));
+    }
+
+    private function dispatchSafely(\Closure $dispatch): void
+    {
+        try {
+            $dispatch();
+        } catch (Throwable $exception) {
+            Log::warning('Realtime broadcast failed.', [
+                'message' => $exception->getMessage(),
+                'exception' => $exception::class,
+            ]);
+        }
     }
 
     /**

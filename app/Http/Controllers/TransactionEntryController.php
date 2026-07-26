@@ -12,10 +12,11 @@ use App\Http\Requests\ExchangeRequest;
 use App\Http\Requests\TransferRequest;
 use App\Models\Account;
 use App\Models\CashFloatAssignment;
+use App\Models\ServiceType;
 use App\Models\Transaction;
 use App\Repositories\AccountRepository;
-use App\Repositories\CashFloatRepository;
 use App\Repositories\CashDenominationRepository;
+use App\Repositories\CashFloatRepository;
 use App\Repositories\ExchangeRateRepository;
 use App\Services\TransactionFeeCalculator;
 use App\Services\TransactionService;
@@ -63,7 +64,16 @@ class TransactionEntryController extends Controller
 
     public function cashInStore(CashInRequest $request): RedirectResponse
     {
-        return $this->store($request, fn () => $this->transactions->createCashIn($request->validated(), $request->user()));
+        return $this->store($request, function () use ($request): Transaction {
+            $data = $request->validated();
+
+            if ($request->hasFile('screenshot')) {
+                unset($data['screenshot']);
+                $data['screenshot_path'] = $request->file('screenshot')?->store('transaction-screenshots', 'public');
+            }
+
+            return $this->transactions->createCashIn($data, $request->user());
+        });
     }
 
     public function cashOutStore(CashOutRequest $request): RedirectResponse
@@ -96,15 +106,14 @@ class TransactionEntryController extends Controller
             'float' => $float ? $this->floatProp($float) : null,
             'notes' => $this->notes(),
             'floatStock' => $float ? $this->floats->getDenominationBalance($float->id) : [],
-            'cashInRequiresDenominations' => in_array($user?->role, ['admin', 'teller'], true),
-            'cashInStock' => $user?->role === 'admin'
-                ? $this->cashDenominations->getAvailableBalance()
-                : ($float ? $this->floats->getDenominationBalance($float->id) : []),
+            'cashInRequiresDenominations' => $user?->role === 'teller',
+            'cashInStock' => $float ? $this->floats->getDenominationBalance($float->id) : [],
             'cashOutRequiresDenominations' => in_array($user?->role, ['admin', 'teller'], true),
             'cashOutStock' => $user?->role === 'admin'
                 ? $this->cashDenominations->getAvailableBalance()
                 : ($float ? $this->floats->getDenominationBalance($float->id) : []),
             'accounts' => $this->accountProps(),
+            'serviceTypes' => $this->serviceTypeProps(),
             'feeAccounts' => $this->accountProps($this->accounts->feeAccounts()),
             'fee' => $this->fee($request, $feeMode),
             'requiresDenominations' => $user?->role === 'teller',
@@ -152,7 +161,7 @@ class TransactionEntryController extends Controller
     }
 
     /**
-     * @return array<int, array{id:int,company:string,service:string,name:string,number:string|null,balance:string}>
+     * @return array<int, array{id:int,company:string,company_id:int|null,service:string,service_type_id:int|null,name:string,number:string|null,balance:string}>
      */
     private function accountProps($accounts = null): array
     {
@@ -160,10 +169,33 @@ class TransactionEntryController extends Controller
             ->map(fn (Account $account): array => [
                 'id' => $account->id,
                 'company' => $account->serviceType?->company?->name ?? 'Account',
+                'company_id' => $account->serviceType?->company_id,
                 'service' => $account->serviceType?->name ?? 'Account',
+                'service_type_id' => $account->service_type_id,
                 'name' => $account->account_name,
                 'number' => $account->phone_number,
                 'balance' => Money::normalize($account->balance ?? 0),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{id:int,company_id:int|null,company:string,name:string,operation:string}>
+     */
+    private function serviceTypeProps(): array
+    {
+        return ServiceType::query()
+            ->with('company')
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->map(fn (ServiceType $serviceType): array => [
+                'id' => $serviceType->id,
+                'company_id' => $serviceType->company_id,
+                'company' => $serviceType->company?->name ?? 'Account',
+                'name' => $serviceType->name,
+                'operation' => $serviceType->operation,
             ])
             ->values()
             ->all();

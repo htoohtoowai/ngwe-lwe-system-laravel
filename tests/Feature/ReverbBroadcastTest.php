@@ -8,6 +8,7 @@ use App\Events\CashInPending;
 use App\Events\FloatStatusChanged;
 use App\Events\NewTransaction;
 use App\Models\Account;
+use App\Models\CashFloatAssignment;
 use App\Models\CommissionTier;
 use App\Models\Company;
 use App\Models\ExchangeRate;
@@ -35,19 +36,20 @@ class ReverbBroadcastTest extends TestCase
 
     public function test_pending_cash_in_broadcasts_transaction_pending_and_balance_events(): void
     {
-        [$owner, $ownerToken] = $this->userWithToken('admin');
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
         [$account, $serviceType] = $this->accountWithBalance(50_000);
         $this->fixedTier($serviceType->id, feeDeposit: 500);
 
         Event::fake([BalanceUpdated::class, CashInPending::class, NewTransaction::class]);
 
-        $txnId = $this->withHeader('Authorization', 'Bearer '.$ownerToken)
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
             ->postJson('/api/transactions/cash-in', [
                 'account_id' => $account->id,
                 'amount' => 10_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
                 'received_denominations' => [10_000 => 1],
+                'handoff_denominations' => [10_000 => 1],
             ])
             ->assertCreated()
             ->json('data.id');
@@ -110,12 +112,13 @@ class ReverbBroadcastTest extends TestCase
     public function test_cash_in_confirm_cancel_and_balance_adjust_broadcast_balance_updates(): void
     {
         [, $ownerToken] = $this->userWithToken('admin');
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
         [, $cashierToken] = $this->userWithToken('cashier');
         [$account, $serviceType] = $this->accountWithBalance(100_000);
         $this->fixedTier($serviceType->id);
 
-        $confirmTxnId = $this->createPendingCashIn($ownerToken, $account->id, 10_000);
-        $cancelTxnId = $this->createPendingCashIn($ownerToken, $account->id, 5_000);
+        $confirmTxnId = $this->createPendingCashIn($tellerToken, $account->id, 10_000);
+        $cancelTxnId = $this->createPendingCashIn($tellerToken, $account->id, 5_000);
 
         Event::fake([BalanceUpdated::class, NewTransaction::class]);
 
@@ -209,15 +212,16 @@ class ReverbBroadcastTest extends TestCase
         Event::assertDispatched(BroadcastPing::class);
     }
 
-    private function createPendingCashIn(string $ownerToken, int $accountId, int $amount): int
+    private function createPendingCashIn(string $tellerToken, int $accountId, int $amount): int
     {
-        return (int) $this->withHeader('Authorization', 'Bearer '.$ownerToken)
+        return (int) $this->withHeader('Authorization', 'Bearer '.$tellerToken)
             ->postJson('/api/transactions/cash-in', [
                 'account_id' => $accountId,
                 'amount' => $amount,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
                 'received_denominations' => [$amount => 1],
+                'handoff_denominations' => [$amount => 1],
             ])
             ->assertCreated()
             ->json('data.id');
@@ -246,6 +250,26 @@ class ReverbBroadcastTest extends TestCase
             'is_active' => true,
             'password' => Hash::make('password123'),
         ]);
+    }
+
+    /**
+     * @return array{0: User, 1: string}
+     */
+    private function activeTellerWithEmptyFloat(): array
+    {
+        [$cashier] = $this->userWithToken('cashier');
+        [$teller, $token] = $this->userWithToken('teller');
+
+        CashFloatAssignment::query()->create([
+            'employee_id' => $teller->id,
+            'issued_by' => $cashier->id,
+            'status' => 'ACTIVE',
+            'total_amount' => 0,
+            'current_balance' => 0,
+            'received_at' => now(),
+        ]);
+
+        return [$teller, $token];
     }
 
     /**

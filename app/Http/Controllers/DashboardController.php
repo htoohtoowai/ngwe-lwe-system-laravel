@@ -231,6 +231,8 @@ class DashboardController extends Controller
                 'amount' => Money::normalize($transaction->amount ?? 0),
                 'customer_name' => $transaction->customer_name,
                 'teller' => $transaction->creator?->full_name ?? $transaction->creator?->username ?? 'Admin',
+                'creator_role' => $transaction->creator?->role,
+                'settlement_amount' => $this->cashInSettlementAmount($transaction),
                 'customer_fee' => Money::normalize($transaction->customer_fee ?? 0),
                 'fee_payment_method' => $transaction->fee_payment_method,
                 'received_denominations' => $transaction->received_denominations ?? [],
@@ -241,6 +243,17 @@ class DashboardController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    private function cashInSettlementAmount(Transaction $transaction): string
+    {
+        $receivedDenominations = is_array($transaction->received_denominations) ? $transaction->received_denominations : [];
+        $handoffDenominations = is_array($transaction->handoff_denominations) ? $transaction->handoff_denominations : [];
+        $settlementDenominations = $transaction->creator?->role === 'teller'
+            ? $handoffDenominations
+            : $receivedDenominations;
+
+        return Money::normalize(Money::denominationTotal($settlementDenominations));
     }
 
     private function scopedTransactions(User $user): Builder
