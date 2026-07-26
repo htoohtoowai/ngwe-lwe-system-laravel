@@ -202,12 +202,14 @@ type AdminTab =
     | 'vault'
     | 'reports';
 type AdminMode = 'list' | 'detail' | 'create' | 'edit';
+type AdminTransactionSubsection = 'records' | 'activity-logs';
 
 const props = defineProps<{
     role: 'admin';
     section?: AdminTab;
     mode?: AdminMode;
     resourceId?: number | null;
+    transactionSubsection?: AdminTransactionSubsection | null;
     announcement?: string | null;
     notificationCount?: number;
 }>();
@@ -220,6 +222,9 @@ const setupSections: AdminTab[] = [
 
 const activeTab = computed<AdminTab>(() => props.section ?? 'overview');
 const activeMode = computed<AdminMode>(() => props.mode ?? 'list');
+const activeTransactionSubsection = computed<AdminTransactionSubsection>(
+    () => props.transactionSubsection ?? 'records',
+);
 const resourceId = computed(() => props.resourceId ?? null);
 const loading = ref(false);
 const busy = ref('');
@@ -425,6 +430,12 @@ const sectionSlugs: Record<AdminTab, string> = {
     reports: 'reports',
 };
 const pageHeading = computed(() => {
+    if (activeTab.value === 'transactions' && activeMode.value === 'list') {
+        return activeTransactionSubsection.value === 'activity-logs'
+            ? 'Activity Logs'
+            : 'Transactions';
+    }
+
     const labels: Record<AdminTab, string> = {
         overview: 'Admin Operations',
         companies: 'Companies',
@@ -1008,19 +1019,25 @@ function logQuery(): Record<
     };
 }
 
-async function refreshTransactionsAndLogs(): Promise<void> {
-    await runAction('Transactions and logs refreshed.', async () => {
-        const [transactionsPayload, logsPayload] = await Promise.all([
-            request<ApiList<Transaction>>('/api/transactions', {
-                query: transactionQuery(),
-            }),
-            request<ApiList<ActivityLog>>('/api/activity-logs', {
-                query: logQuery(),
-            }),
-        ]);
+async function refreshTransactions(): Promise<void> {
+    await runAction('Transactions refreshed.', async () => {
+        const payload = await request<ApiList<Transaction>>(
+            '/api/transactions',
+            { query: transactionQuery() },
+        );
 
-        transactions.value = listFrom<Transaction>(transactionsPayload);
-        activityLogs.value = listFrom<ActivityLog>(logsPayload);
+        transactions.value = listFrom<Transaction>(payload);
+    });
+}
+
+async function refreshActivityLogs(): Promise<void> {
+    await runAction('Activity logs refreshed.', async () => {
+        const payload = await request<ApiList<ActivityLog>>(
+            '/api/activity-logs',
+            { query: logQuery() },
+        );
+
+        activityLogs.value = listFrom<ActivityLog>(payload);
     });
 }
 
@@ -3598,6 +3615,7 @@ async function sendBroadcastTest(): Promise<void> {
                 </div>
                 <template v-else>
                     <div
+                        v-if="activeTransactionSubsection === 'records'"
                         class="rounded-xl border border-line bg-card p-5 shadow-sm"
                     >
                         <div
@@ -3613,7 +3631,7 @@ async function sendBroadcastTest(): Promise<void> {
                             </div>
                             <form
                                 class="grid gap-2 sm:grid-cols-4 xl:min-w-[720px]"
-                                @submit.prevent="refreshTransactionsAndLogs"
+                                @submit.prevent="refreshTransactions"
                             >
                                 <label>
                                     <span class="bank-label">Type</span>
@@ -3775,6 +3793,7 @@ async function sendBroadcastTest(): Promise<void> {
                     </div>
 
                     <div
+                        v-if="activeTransactionSubsection === 'activity-logs'"
                         class="rounded-xl border border-line bg-card p-5 shadow-sm"
                     >
                         <div
@@ -3791,7 +3810,7 @@ async function sendBroadcastTest(): Promise<void> {
                             </div>
                             <form
                                 class="grid gap-2 sm:grid-cols-5 xl:min-w-[840px]"
-                                @submit.prevent="refreshTransactionsAndLogs"
+                                @submit.prevent="refreshActivityLogs"
                             >
                                 <label>
                                     <span class="bank-label">User</span>

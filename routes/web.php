@@ -73,6 +73,7 @@ $renderAdminOperations = static function (
     string $section = 'overview',
     string $mode = 'list',
     ?int $resourceId = null,
+    ?string $transactionSubsection = null,
 ) use ($adminSections) {
     abort_unless(array_key_exists($section, $adminSections), 404);
 
@@ -81,6 +82,9 @@ $renderAdminOperations = static function (
         'section' => $adminSections[$section],
         'mode' => $mode,
         'resourceId' => $resourceId,
+        'transactionSubsection' => $section === 'transactions'
+            ? ($transactionSubsection ?? 'records')
+            : null,
         'announcement' => 'Owner console for setup pages, reports, vault visibility and audit review.',
         'notificationCount' => Transaction::query()
             ->where('transaction_type', 'cash_in')
@@ -102,6 +106,8 @@ Route::middleware(['ngwe.auth', 'role:admin'])
         Route::get('/{section}/create', fn (Request $request, string $section) => $renderAdminOperations($request, $section, 'create'))
             ->whereIn('section', $adminCrudSections)
             ->name('.create');
+        Route::get('/transactions/activity-logs', fn (Request $request) => $renderAdminOperations($request, 'transactions', 'list', null, 'activity-logs'))
+            ->name('.transactions.activity-logs');
         Route::get('/{section}/{resourceId}/edit', fn (Request $request, string $section, int $resourceId) => $renderAdminOperations($request, $section, 'edit', $resourceId))
             ->whereIn('section', $adminCrudSections)
             ->whereNumber('resourceId')

@@ -59,6 +59,10 @@ type NavIcon =
     | 'users'
     | 'transactions'
     | 'settings';
+type NavChild = {
+    label: string;
+    href: string;
+};
 type NavItem = {
     label: string;
     labelMm: string;
@@ -66,6 +70,7 @@ type NavItem = {
     icon: NavIcon;
     roles: string[];
     section: NavSection;
+    children?: NavChild[];
 };
 
 const NAV: NavItem[] = [
@@ -204,6 +209,16 @@ const NAV: NavItem[] = [
         icon: 'transactions',
         roles: ['admin'],
         section: 'Admin',
+        children: [
+            {
+                label: 'Transaction Records',
+                href: '/admin/transactions',
+            },
+            {
+                label: 'Activity Logs',
+                href: '/admin/transactions/activity-logs',
+            },
+        ],
     },
     {
         label: 'Vault',
@@ -285,6 +300,7 @@ const iconPaths: Record<NavIcon, string[]> = {
 };
 
 const nav = computed(() => NAV.filter((n) => n.roles.includes(props.role)));
+const currentPath = computed(() => page.url.split('?')[0] ?? page.url);
 const homeHref = computed(() => {
     if (props.role === 'admin') {
         return '/admin';
@@ -320,6 +336,7 @@ const sectionLabel = (section: NavSection) =>
     );
 const navLabel = (item: NavItem) =>
     lang.value === 'mm' ? item.labelMm : item.label;
+const navChildLabel = (item: NavChild) => item.label;
 const roleLabel = computed(() => t(`role.${props.role}`));
 const displayName = computed(
     () => user.value?.full_name ?? user.value?.username ?? roleLabel.value,
@@ -350,20 +367,32 @@ function authHeaders(): Record<string, string> {
 
     return token ? { Authorization: `Bearer ${token}` } : {};
 }
-const isActive = (href: string) => {
+const isTransactionRecordsPath = (path: string) =>
+    path === '/admin/transactions' || /^\/admin\/transactions\/\d+$/.test(path);
+const isActive = (href: string, exact = false) => {
+    const path = currentPath.value;
+
     if (href === '/transactions') {
-        return page.url.startsWith('/transactions');
+        return path.startsWith('/transactions');
     }
 
     const resolved = hrefFor(href);
 
+    if (exact && resolved === '/admin/transactions') {
+        return isTransactionRecordsPath(path);
+    }
+
+    if (exact) {
+        return path === resolved || path.startsWith(`${resolved}/`);
+    }
+
     if (resolved === '/admin') {
-        return page.url === '/admin' || page.url === '/admin/overview';
+        return path === '/admin' || path === '/admin/overview';
     }
 
     return (
-        page.url === resolved ||
-        (resolved !== '/dashboard' && page.url.startsWith(resolved))
+        path === resolved ||
+        (resolved !== '/dashboard' && path.startsWith(resolved))
     );
 };
 
@@ -776,6 +805,51 @@ async function signOut() {
                                             ›
                                         </span>
                                     </Link>
+                                    <ul
+                                        v-if="
+                                            !sidebarCollapsed &&
+                                            item.children?.length &&
+                                            isActive(item.href)
+                                        "
+                                        class="mt-1 space-y-1 pl-12"
+                                    >
+                                        <li
+                                            v-for="child in item.children"
+                                            :key="child.href"
+                                        >
+                                            <Link
+                                                :href="hrefFor(child.href)"
+                                                :headers="authHeaders()"
+                                                :aria-current="
+                                                    isActive(child.href, true)
+                                                        ? 'page'
+                                                        : undefined
+                                                "
+                                                :title="navChildLabel(child)"
+                                                class="group/child flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-black transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                                                :class="
+                                                    isActive(child.href, true)
+                                                        ? 'bg-white/10 text-white'
+                                                        : 'text-white/50 hover:bg-white/10 hover:text-white'
+                                                "
+                                            >
+                                                <span
+                                                    class="size-1.5 rounded-full transition"
+                                                    :class="
+                                                        isActive(
+                                                            child.href,
+                                                            true,
+                                                        )
+                                                            ? 'bg-brand'
+                                                            : 'bg-white/25 group-hover/child:bg-white/70'
+                                                    "
+                                                />
+                                                <span class="truncate">
+                                                    {{ navChildLabel(child) }}
+                                                </span>
+                                            </Link>
+                                        </li>
+                                    </ul>
                                 </li>
                             </ul>
                         </section>
@@ -891,6 +965,55 @@ async function signOut() {
                                             </span>
                                             {{ navLabel(item) }}
                                         </Link>
+                                        <ul
+                                            v-if="item.children?.length"
+                                            class="mt-0.5 space-y-0.5 pl-12"
+                                        >
+                                            <li
+                                                v-for="child in item.children"
+                                                :key="child.href"
+                                            >
+                                                <Link
+                                                    :href="hrefFor(child.href)"
+                                                    :headers="authHeaders()"
+                                                    @click="drawer = false"
+                                                    :aria-current="
+                                                        isActive(
+                                                            child.href,
+                                                            true,
+                                                        )
+                                                            ? 'page'
+                                                            : undefined
+                                                    "
+                                                    class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-black transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                                                    :class="
+                                                        isActive(
+                                                            child.href,
+                                                            true,
+                                                        )
+                                                            ? 'bg-white/10 text-white'
+                                                            : 'text-white/50 hover:bg-white/10 hover:text-white'
+                                                    "
+                                                >
+                                                    <span
+                                                        class="size-1.5 rounded-full"
+                                                        :class="
+                                                            isActive(
+                                                                child.href,
+                                                                true,
+                                                            )
+                                                                ? 'bg-brand'
+                                                                : 'bg-white/25'
+                                                        "
+                                                    />
+                                                    <span class="truncate">
+                                                        {{
+                                                            navChildLabel(child)
+                                                        }}
+                                                    </span>
+                                                </Link>
+                                            </li>
+                                        </ul>
                                     </li>
                                 </ul>
                             </section>

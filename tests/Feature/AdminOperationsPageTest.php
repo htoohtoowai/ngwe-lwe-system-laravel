@@ -81,6 +81,22 @@ class AdminOperationsPageTest extends TestCase
                 );
         }
 
+        foreach ([
+            '/admin/transactions' => 'records',
+            '/admin/transactions/activity-logs' => 'activity-logs',
+        ] as $path => $transactionSubsection) {
+            $this->withHeader('Authorization', 'Bearer '.$token)
+                ->get($path)
+                ->assertOk()
+                ->assertInertia(fn (Assert $page) => $page
+                    ->component('admin/Operations')
+                    ->where('role', $admin->role)
+                    ->where('section', 'transactions')
+                    ->where('mode', 'list')
+                    ->where('transactionSubsection', $transactionSubsection)
+                );
+        }
+
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->get('/admin/master-data')
             ->assertNotFound();
