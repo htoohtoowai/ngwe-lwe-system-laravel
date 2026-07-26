@@ -155,11 +155,33 @@ const NAV: NavItem[] = [
         section: 'Admin',
     },
     {
+        label: 'Master Data',
+        labelMm: 'Master Data',
+        href: '/admin/companies',
+        icon: 'settings',
+        roles: ['admin'],
+        section: 'Admin',
+        children: [
+            {
+                label: 'Companies',
+                href: '/admin/companies',
+            },
+            {
+                label: 'Service Types',
+                href: '/admin/service-types',
+            },
+            {
+                label: 'Exchange Rates',
+                href: '/admin/exchange-rates',
+            },
+        ],
+    },
+    {
         label: 'Companies',
         labelMm: 'ကုမ္ပဏီများ',
         href: '/admin/companies',
         icon: 'companies',
-        roles: ['admin'],
+        roles: [],
         section: 'Admin',
     },
     {
@@ -167,7 +189,7 @@ const NAV: NavItem[] = [
         labelMm: 'ဝန်ဆောင်မှုအမျိုးအစား',
         href: '/admin/service-types',
         icon: 'services',
-        roles: ['admin'],
+        roles: [],
         section: 'Admin',
     },
     {
@@ -175,7 +197,7 @@ const NAV: NavItem[] = [
         labelMm: 'ငွေလဲနှုန်း',
         href: '/admin/exchange-rates',
         icon: 'exchange',
-        roles: ['admin'],
+        roles: [],
         section: 'Admin',
     },
     {
@@ -395,6 +417,9 @@ const isActive = (href: string, exact = false) => {
         (resolved !== '/dashboard' && path.startsWith(resolved))
     );
 };
+const isNavItemActive = (item: NavItem) =>
+    isActive(item.href) ||
+    item.children?.some((child) => isActive(child.href, true)) === true;
 
 onMounted(() => {
     sidebarCollapsed.value =
@@ -728,13 +753,13 @@ async function signOut() {
                             <ul class="space-y-1">
                                 <li
                                     v-for="item in section.items"
-                                    :key="item.href"
+                                    :key="`${item.label}-${item.href}`"
                                 >
                                     <Link
                                         :href="hrefFor(item.href)"
                                         :headers="authHeaders()"
                                         :aria-current="
-                                            isActive(item.href)
+                                            isNavItemActive(item)
                                                 ? 'page'
                                                 : undefined
                                         "
@@ -742,7 +767,7 @@ async function signOut() {
                                         :title="navLabel(item)"
                                         class="group relative flex items-center gap-3 rounded-xl border px-3 py-2.5 text-[13.5px] font-bold transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
                                         :class="
-                                            isActive(item.href)
+                                            isNavItemActive(item)
                                                 ? 'border-white/10 bg-white/10 text-white shadow-[inset_3px_0_0_#b31b2c]'
                                                 : 'border-transparent text-white/65 hover:bg-white/10 hover:text-white'
                                         "
@@ -750,7 +775,7 @@ async function signOut() {
                                         <span
                                             class="absolute inset-y-2 left-0 w-1 rounded-r-full transition"
                                             :class="
-                                                isActive(item.href)
+                                                isNavItemActive(item)
                                                     ? 'bg-brand'
                                                     : 'bg-transparent'
                                             "
@@ -758,7 +783,7 @@ async function signOut() {
                                         <span
                                             class="grid size-9 shrink-0 place-items-center rounded-xl transition"
                                             :class="
-                                                isActive(item.href)
+                                                isNavItemActive(item)
                                                     ? 'bg-brand text-white shadow-sm'
                                                     : 'bg-white/10 text-white/60 group-hover:bg-white/15 group-hover:text-white'
                                             "
@@ -797,7 +822,7 @@ async function signOut() {
                                             v-if="!sidebarCollapsed"
                                             class="grid size-6 place-items-center rounded-lg text-base leading-none transition"
                                             :class="
-                                                isActive(item.href)
+                                                isNavItemActive(item)
                                                     ? 'bg-brand text-white'
                                                     : 'bg-white/10 text-white/40 group-hover:bg-white/15 group-hover:text-white'
                                             "
@@ -809,7 +834,7 @@ async function signOut() {
                                         v-if="
                                             !sidebarCollapsed &&
                                             item.children?.length &&
-                                            isActive(item.href)
+                                            isNavItemActive(item)
                                         "
                                         class="mt-1 space-y-1 pl-12"
                                     >
@@ -918,20 +943,20 @@ async function signOut() {
                                 <ul class="space-y-0.5">
                                     <li
                                         v-for="item in section.items"
-                                        :key="item.href"
+                                        :key="`${item.label}-${item.href}`"
                                     >
                                         <Link
                                             :href="hrefFor(item.href)"
                                             :headers="authHeaders()"
                                             @click="drawer = false"
                                             :aria-current="
-                                                isActive(item.href)
+                                                isNavItemActive(item)
                                                     ? 'page'
                                                     : undefined
                                             "
                                             class="flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
                                             :class="
-                                                isActive(item.href)
+                                                isNavItemActive(item)
                                                     ? 'bg-white/10 text-white shadow-[inset_3px_0_0_#b31b2c]'
                                                     : 'text-white/65 hover:bg-white/10 hover:text-white'
                                             "
@@ -939,7 +964,7 @@ async function signOut() {
                                             <span
                                                 class="grid size-8 shrink-0 place-items-center rounded-lg"
                                                 :class="
-                                                    isActive(item.href)
+                                                    isNavItemActive(item)
                                                         ? 'bg-brand text-white'
                                                         : 'bg-white/10 text-white/60'
                                                 "

@@ -10,7 +10,9 @@ use App\Models\ServiceType;
 use App\Models\User;
 use App\Services\NgweLweTokenService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
@@ -202,6 +204,7 @@ class AdminOperationsPageTest extends TestCase
     public function test_admin_console_management_flows_write_expected_records(): void
     {
         [, $token] = $this->userWithToken('admin');
+        Storage::fake('public');
 
         $companyId = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/companies', [
@@ -212,6 +215,20 @@ class AdminOperationsPageTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.name', 'Console Pay')
             ->json('data.id');
+
+        $logoPath = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->post('/api/companies/'.$companyId.'/logo', [
+                'logo' => UploadedFile::fake()->image('console-pay.png'),
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.logo_path', fn (string $path): bool => str_starts_with($path, 'company-logos/'))
+            ->json('data.logo_path');
+
+        Storage::disk('public')->assertExists($logoPath);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->get('/api/companies/'.$companyId.'/logo')
+            ->assertOk();
 
         $serviceTypeId = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/service-types', [

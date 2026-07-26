@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import BankLayout from '@/layouts/BankLayout.vue';
 import { apiRequest } from '@/lib/api';
 import type { ApiRequestOptions } from '@/lib/api';
@@ -17,9 +17,11 @@ type StatusTone = 'ok' | 'warn' | 'muted';
 type Company = {
     id: number;
     name: string;
+    logo_path?: string | null;
     category: 'Pay' | 'Bank' | 'Both' | string;
     is_active: boolean;
     created_at?: string | null;
+    updated_at?: string | null;
 };
 
 type ServiceType = {
@@ -236,6 +238,9 @@ const error = ref('');
 const notice = ref('');
 const reportDate = ref(today());
 const closeNotes = ref('');
+const companyLogoFile = ref<File | null>(null);
+const companyLogoInput = ref<HTMLInputElement | null>(null);
+const companyLogoUrls = ref<Record<number, string>>({});
 
 const dailySummary = ref<Summary | null>(null);
 const companies = ref<Company[]>([]);
@@ -495,6 +500,8 @@ watch(
         if (serviceForm.value.company_id === null && values.length > 0) {
             serviceForm.value.company_id = values[0].id;
         }
+
+        void refreshCompanyLogoUrls(values);
     },
     { immediate: true },
 );
@@ -541,6 +548,10 @@ onMounted(() => {
     void refreshAll();
 });
 
+onBeforeUnmount(() => {
+    clearCompanyLogoUrls();
+});
+
 function today(): string {
     const current = new Date();
     current.setMinutes(current.getMinutes() - current.getTimezoneOffset());
@@ -552,6 +563,82 @@ function authHeaders(): Record<string, string> {
     const token = readStoredToken();
 
     return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function companyInitial(company: Company): string {
+    return company.name.trim().slice(0, 1).toUpperCase() || '?';
+}
+
+function resetCompanyLogoInput(): void {
+    companyLogoFile.value = null;
+
+    if (companyLogoInput.value) {
+        companyLogoInput.value.value = '';
+    }
+}
+
+function onCompanyLogoChange(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    companyLogoFile.value = input.files?.[0] ?? null;
+}
+
+function clearCompanyLogoUrls(): void {
+    Object.values(companyLogoUrls.value).forEach((url) => {
+        URL.revokeObjectURL(url);
+    });
+    companyLogoUrls.value = {};
+}
+
+async function refreshCompanyLogoUrls(
+    values: Company[] = companies.value,
+): Promise<void> {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    const companiesWithLogos = values.filter((company) => company.logo_path);
+    const logoIds = new Set(companiesWithLogos.map((company) => company.id));
+    const nextUrls = { ...companyLogoUrls.value };
+
+    Object.entries(nextUrls).forEach(([companyId, url]) => {
+        if (!logoIds.has(Number(companyId))) {
+            URL.revokeObjectURL(url);
+            delete nextUrls[Number(companyId)];
+        }
+    });
+
+    companyLogoUrls.value = nextUrls;
+
+    await Promise.all(
+        companiesWithLogos.map(async (company) => {
+            try {
+                const response = await fetch(
+                    `/api/companies/${company.id}/logo`,
+                    {
+                        headers: authHeaders(),
+                    },
+                );
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const previewUrl = URL.createObjectURL(await response.blob());
+                const previousUrl = companyLogoUrls.value[company.id];
+
+                if (previousUrl) {
+                    URL.revokeObjectURL(previousUrl);
+                }
+
+                companyLogoUrls.value = {
+                    ...companyLogoUrls.value,
+                    [company.id]: previewUrl,
+                };
+            } catch {
+                // Logo thumbnails are non-critical; upload/status text remains visible.
+            }
+        }),
+    );
 }
 
 function isSetupSection(tab: AdminTab): boolean {
@@ -606,6 +693,7 @@ function shouldShowDetail(section: AdminTab): boolean {
 
 function resetCompanyForm(): void {
     companyForm.value = { name: '', category: 'Pay', is_active: true };
+    resetCompanyLogoInput();
 }
 
 function resetServiceForm(): void {
@@ -1098,9 +1186,24 @@ async function saveCompany(): Promise<void> {
             },
         );
         const company = objectFrom<Company>(payload);
+        await uploadCompanyLogo(company.id);
         resetCompanyForm();
         await refreshAll();
         visitAdmin('companies', 'detail', company.id);
+    });
+}
+
+async function uploadCompanyLogo(companyId: number): Promise<void> {
+    if (companyLogoFile.value === null) {
+        return;
+    }
+
+    const body = new FormData();
+    body.append('logo', companyLogoFile.value);
+
+    await request<ApiObject<Company>>(`/api/companies/${companyId}/logo`, {
+        method: 'POST',
+        body,
     });
 }
 
@@ -1347,6 +1450,29 @@ async function saveExchangeRate(): Promise<void> {
         resetRateForm();
         await refreshAll();
         visitAdmin('exchange-rates', 'detail', rate.id);
+    });
+}
+
+async function deleteExchangeRate(rate: ExchangeRate): Promise<void> {
+    if (
+        typeof window !== 'undefined' &&
+        !window.confirm(
+            `Delete exchange rate ${rate.base_currency}/${rate.quote_currency}?`,
+        )
+    ) {
+        return;
+    }
+
+    await runAction('Exchange rate deleted.', async () => {
+        await request(`/api/exchange-rates/${rate.id}`, { method: 'DELETE' });
+        await refreshAll();
+
+        if (
+            activeTab.value === 'exchange-rates' &&
+            activeMode.value === 'detail'
+        ) {
+            visitAdmin('exchange-rates');
+        }
     });
 }
 
@@ -1732,6 +1858,22 @@ async function sendBroadcastTest(): Promise<void> {
                                 <option>Both</option>
                             </select>
                         </label>
+                        <label>
+                            <span class="bank-label">Logo</span>
+                            <input
+                                ref="companyLogoInput"
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                class="bank-input file:mr-3 file:rounded-pill file:border-0 file:bg-mist file:px-3 file:py-1.5 file:text-xs file:font-black file:text-ink"
+                                @change="onCompanyLogoChange"
+                            />
+                            <span
+                                v-if="companyLogoFile"
+                                class="mt-1 block text-xs font-bold text-slate"
+                            >
+                                Selected: {{ companyLogoFile.name }}
+                            </span>
+                        </label>
                         <label
                             class="flex items-center gap-2 text-sm font-bold text-ink"
                         >
@@ -1760,6 +1902,41 @@ async function sendBroadcastTest(): Promise<void> {
                     >
                         <template v-if="currentCompany">
                             <dl class="grid gap-3 text-sm sm:grid-cols-2">
+                                <div>
+                                    <dt class="font-bold text-slate">Logo</dt>
+                                    <dd class="mt-1 flex items-center gap-3">
+                                        <span
+                                            class="flex size-14 items-center justify-center overflow-hidden rounded-lg border border-line bg-card text-base font-black text-brand"
+                                        >
+                                            <img
+                                                v-if="
+                                                    companyLogoUrls[
+                                                        currentCompany.id
+                                                    ]
+                                                "
+                                                :src="
+                                                    companyLogoUrls[
+                                                        currentCompany.id
+                                                    ]
+                                                "
+                                                :alt="`${currentCompany.name} logo`"
+                                                class="size-full object-contain"
+                                            />
+                                            <span v-else>{{
+                                                companyInitial(currentCompany)
+                                            }}</span>
+                                        </span>
+                                        <span
+                                            class="text-xs font-bold text-slate"
+                                        >
+                                            {{
+                                                currentCompany.logo_path
+                                                    ? 'Uploaded'
+                                                    : 'No logo'
+                                            }}
+                                        </span>
+                                    </dd>
+                                </div>
                                 <div>
                                     <dt class="font-bold text-slate">Name</dt>
                                     <dd class="font-black text-ink">
@@ -1801,14 +1978,47 @@ async function sendBroadcastTest(): Promise<void> {
                                     :key="company.id"
                                 >
                                     <td class="px-3 py-3">
-                                        <p class="font-bold text-ink">
-                                            {{ company.name }}
-                                        </p>
-                                        <p
-                                            class="text-xs font-semibold text-slate"
-                                        >
-                                            {{ company.category }}
-                                        </p>
+                                        <div class="flex items-center gap-3">
+                                            <span
+                                                class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-card text-sm font-black text-brand"
+                                            >
+                                                <img
+                                                    v-if="
+                                                        companyLogoUrls[
+                                                            company.id
+                                                        ]
+                                                    "
+                                                    :src="
+                                                        companyLogoUrls[
+                                                            company.id
+                                                        ]
+                                                    "
+                                                    :alt="`${company.name} logo`"
+                                                    class="size-full object-contain"
+                                                />
+                                                <span v-else>{{
+                                                    companyInitial(company)
+                                                }}</span>
+                                            </span>
+                                            <div class="min-w-0">
+                                                <p
+                                                    class="truncate font-bold text-ink"
+                                                >
+                                                    {{ company.name }}
+                                                </p>
+                                                <p
+                                                    class="text-xs font-semibold text-slate"
+                                                >
+                                                    {{ company.category }}
+                                                    <span
+                                                        v-if="company.logo_path"
+                                                        class="text-slate/70"
+                                                    >
+                                                        / Logo
+                                                    </span>
+                                                </p>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td class="px-3 py-3 text-right">
                                         <div class="flex justify-end gap-1.5">
@@ -2142,6 +2352,18 @@ async function sendBroadcastTest(): Promise<void> {
                             >
                                 Edit
                             </Link>
+                            <button
+                                v-if="
+                                    shouldShowDetail('exchange-rates') &&
+                                    currentExchangeRate
+                                "
+                                type="button"
+                                class="bank-button bank-button-secondary py-2 text-brand"
+                                :disabled="busy !== ''"
+                                @click="deleteExchangeRate(currentExchangeRate)"
+                            >
+                                Delete
+                            </button>
                         </div>
                     </div>
                     <form
@@ -2310,6 +2532,14 @@ async function sendBroadcastTest(): Promise<void> {
                                 >
                                     Edit
                                 </Link>
+                                <button
+                                    type="button"
+                                    class="rounded-pill bg-card px-3 py-1 text-xs font-black text-brand"
+                                    :disabled="busy !== ''"
+                                    @click="deleteExchangeRate(rate)"
+                                >
+                                    Delete
+                                </button>
                             </div>
                         </div>
                     </div>

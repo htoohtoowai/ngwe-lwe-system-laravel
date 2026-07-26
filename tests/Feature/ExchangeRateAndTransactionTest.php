@@ -69,6 +69,25 @@ class ExchangeRateAndTransactionTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_owner_can_delete_exchange_rate(): void
+    {
+        [, $token] = $this->userWithToken('admin');
+        $rate = ExchangeRate::query()->create([
+            'base_currency' => 'THB',
+            'quote_currency' => 'MMK',
+            'base_amount' => 1,
+            'buy_rate' => 145,
+            'sell_rate' => 148,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->deleteJson('/api/exchange-rates/'.$rate->id)
+            ->assertOk()
+            ->assertJsonPath('message', 'Rate deleted');
+
+        $this->assertDatabaseMissing('exchange_rates', ['id' => $rate->id]);
+    }
+
     public function test_latest_endpoint_returns_placeholder_when_no_rate_stored(): void
     {
         [, $token] = $this->userWithToken('teller');

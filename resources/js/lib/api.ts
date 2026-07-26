@@ -3,7 +3,7 @@ export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 export type ApiRequestOptions = {
     token?: string | null;
     method?: HttpMethod;
-    body?: Record<string, unknown>;
+    body?: Record<string, unknown> | FormData;
     query?: Record<string, string | number | boolean | null | undefined>;
 };
 
@@ -23,11 +23,18 @@ export async function apiRequest<T>(
     options: ApiRequestOptions = {},
 ): Promise<T> {
     const url = withQuery(path, options.query);
+    const body = options.body;
+    const requestBody =
+        body === undefined
+            ? undefined
+            : isFormDataBody(body)
+              ? body
+              : JSON.stringify(body);
     const headers: HeadersInit = {
         Accept: 'application/json',
     };
 
-    if (options.body !== undefined) {
+    if (body !== undefined && !isFormDataBody(body)) {
         headers['Content-Type'] = 'application/json';
     }
 
@@ -38,10 +45,7 @@ export async function apiRequest<T>(
     const response = await fetch(url, {
         method: options.method ?? 'GET',
         headers,
-        body:
-            options.body === undefined
-                ? undefined
-                : JSON.stringify(options.body),
+        body: requestBody,
     });
     const payload = await parseJson(response);
 
@@ -59,6 +63,10 @@ export async function apiRequest<T>(
     }
 
     return payload as T;
+}
+
+function isFormDataBody(body: ApiRequestOptions['body']): body is FormData {
+    return typeof FormData !== 'undefined' && body instanceof FormData;
 }
 
 function withQuery(path: string, query?: ApiRequestOptions['query']): string {
