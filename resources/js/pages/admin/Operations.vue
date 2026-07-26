@@ -237,7 +237,6 @@ const notice = ref('');
 const reportDate = ref(today());
 const closeNotes = ref('');
 
-const dashboardSummary = ref<Summary | null>(null);
 const dailySummary = ref<Summary | null>(null);
 const companies = ref<Company[]>([]);
 const serviceTypes = ref<ServiceType[]>([]);
@@ -342,9 +341,6 @@ const activeServiceCount = computed(
 const activeAccountCount = computed(
     () => accounts.value.filter((account) => account.is_active).length,
 );
-const activeUserCount = computed(
-    () => users.value.filter((user) => user.is_active).length,
-);
 const digitalTotal = computed(() =>
     accounts.value.reduce((sum, account) => sum + numeric(account.balance), 0),
 );
@@ -358,12 +354,6 @@ const selectedTierService = computed(
         ) ?? null,
 );
 const latestRates = computed(() => exchangeRates.value.slice(0, 8));
-const pendingCashInCount = computed(
-    () =>
-        dashboardSummary.value?.pending_cash_in_count ??
-        props.notificationCount ??
-        0,
-);
 const vaultDenominations = computed(() =>
     denominationRows(vaultInventory.value?.main_vault ?? {}),
 );
@@ -944,7 +934,6 @@ async function refreshAll(): Promise<void> {
 
     try {
         const [
-            dashboardPayload,
             dailyPayload,
             companiesPayload,
             serviceTypesPayload,
@@ -959,7 +948,6 @@ async function refreshAll(): Promise<void> {
             reconciliationsPayload,
             statusPayload,
         ] = await Promise.all([
-            request<Summary>('/api/dashboard/summary'),
             request<ApiObject<Summary>>('/api/reports/daily-summary', {
                 query: { date: reportDate.value },
             }),
@@ -996,7 +984,6 @@ async function refreshAll(): Promise<void> {
             request<Record<string, unknown>>('/api/system/status'),
         ]);
 
-        dashboardSummary.value = objectFrom<Summary>(dashboardPayload);
         dailySummary.value = objectFrom<Summary>(dailyPayload);
         companies.value = listFrom<Company>(companiesPayload);
         serviceTypes.value = listFrom<ServiceType>(serviceTypesPayload);
@@ -1469,60 +1456,6 @@ async function sendBroadcastTest(): Promise<void> {
             >
                 {{ error }}
             </div>
-
-            <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <div
-                    class="rounded-xl border border-line bg-card p-4 shadow-sm"
-                >
-                    <p class="text-xs font-bold text-slate">Pending Cash In</p>
-                    <p class="money mt-2 text-2xl font-black text-ink">
-                        {{ pendingCashInCount }}
-                    </p>
-                </div>
-                <div
-                    class="rounded-xl border border-line bg-card p-4 shadow-sm"
-                >
-                    <p class="text-xs font-bold text-slate">
-                        Today's Transactions
-                    </p>
-                    <p class="money mt-2 text-2xl font-black text-ink">
-                        {{ dashboardSummary?.transaction_count ?? 0 }}
-                    </p>
-                </div>
-                <div
-                    class="rounded-xl border border-line bg-card p-4 shadow-sm"
-                >
-                    <p class="text-xs font-bold text-slate">Main Vault</p>
-                    <p class="money mt-2 text-2xl font-black text-ink">
-                        {{
-                            money(
-                                vaultInventory?.main_vault_total ??
-                                    dashboardSummary?.main_vault_total,
-                            )
-                        }}
-                    </p>
-                </div>
-                <div
-                    class="rounded-xl border border-line bg-card p-4 shadow-sm"
-                >
-                    <p class="text-xs font-bold text-slate">Digital Balance</p>
-                    <p class="money mt-2 text-2xl font-black text-ink">
-                        {{
-                            money(
-                                digitalTotal || dashboardSummary?.total_digital,
-                            )
-                        }}
-                    </p>
-                </div>
-                <div
-                    class="rounded-xl border border-line bg-card p-4 shadow-sm"
-                >
-                    <p class="text-xs font-bold text-slate">Active Staff</p>
-                    <p class="money mt-2 text-2xl font-black text-ink">
-                        {{ activeUserCount }}
-                    </p>
-                </div>
-            </section>
 
             <section
                 v-if="activeTab === 'overview'"
