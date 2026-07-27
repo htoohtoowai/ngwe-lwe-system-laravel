@@ -141,6 +141,12 @@ class TransactionEntryController extends Controller
             'feeAccounts' => $this->accountProps($this->accounts->feeAccounts()),
             'fee' => $this->fee($request, $feeMode),
             'commission' => $this->commission($request, $commissionDirection),
+            'receiveCommission' => $transactionType === 'transfer'
+                ? $this->commissionForAccount($request, 'receive_account_id', TransactionFeeCalculator::COMMISSION_RECEIVE)
+                : '0.00',
+            'payoutCommission' => $transactionType === 'transfer'
+                ? $this->commissionForAccount($request, 'payout_account_id', TransactionFeeCalculator::COMMISSION_SEND)
+                : '0.00',
             'requiresDenominations' => $user?->role === 'teller',
             'completed' => $this->pullCompleted($request),
             'history' => $this->history($request, $transactionType),
@@ -187,7 +193,7 @@ class TransactionEntryController extends Controller
     }
 
     /**
-     * @return array<int, array{id:int,company:string,company_id:int|null,company_logo_url:string|null,service:string,service_type_id:int|null,name:string,number:string|null,balance:string}>
+     * @return array<int, array{id:int,company:string,company_id:int|null,company_category:string|null,company_logo_url:string|null,service:string,service_type_id:int|null,name:string,number:string|null,balance:string}>
      */
     private function accountProps($accounts = null): array
     {
@@ -196,6 +202,7 @@ class TransactionEntryController extends Controller
                 'id' => $account->id,
                 'company' => $account->serviceType?->company?->name ?? 'Account',
                 'company_id' => $account->serviceType?->company_id,
+                'company_category' => $account->serviceType?->company?->category,
                 'company_logo_url' => $this->companyLogoUrl($account->serviceType?->company?->logo_path),
                 'service' => $account->serviceType?->name ?? 'Account',
                 'service_type_id' => $account->service_type_id,
@@ -208,7 +215,7 @@ class TransactionEntryController extends Controller
     }
 
     /**
-     * @return array<int, array{id:int,company_id:int|null,company:string,company_logo_url:string|null,name:string,operation:string}>
+     * @return array<int, array{id:int,company_id:int|null,company:string,company_category:string|null,company_logo_url:string|null,name:string,operation:string}>
      */
     private function serviceTypeProps(): array
     {
@@ -221,6 +228,7 @@ class TransactionEntryController extends Controller
                 'id' => $serviceType->id,
                 'company_id' => $serviceType->company_id,
                 'company' => $serviceType->company?->name ?? 'Account',
+                'company_category' => $serviceType->company?->category,
                 'company_logo_url' => $this->companyLogoUrl($serviceType->company?->logo_path),
                 'name' => $serviceType->name,
                 'operation' => $serviceType->operation,
@@ -300,6 +308,22 @@ class TransactionEntryController extends Controller
         return $this->fees->commission($account, $amount, $direction);
     }
 
+    private function commissionForAccount(Request $request, string $accountKey, string $direction): string
+    {
+        $amount = $request->float('amount');
+        $accountId = $request->integer($accountKey);
+
+        if ($amount <= 0 || $accountId <= 0) {
+            return '0.00';
+        }
+
+        $account = $this->accounts->find($accountId);
+
+        return $account !== null && $account->is_active
+            ? $this->fees->commission($account, $amount, $direction)
+            : '0.00';
+    }
+
     /**
      * @return array{buy_rate:string,sell_rate:string}
      */
@@ -324,7 +348,7 @@ class TransactionEntryController extends Controller
     }
 
     /**
-     * @return array{id:int,amount:string,fee_amount:string,status:string,created_at:string,from_label:string,to_label:string,customer_name:string|null,customer_phone:string|null}
+     * @return array<string, mixed>
      */
     private function completed(Transaction $transaction): array
     {
@@ -336,8 +360,13 @@ class TransactionEntryController extends Controller
             'fee_amount' => Money::normalize($transaction->customer_fee ?? 0),
             'status' => $transaction->status,
             'created_at' => $transaction->created_at?->toDateTimeString() ?? now()->toDateTimeString(),
-            'from_label' => $this->accountLabel($transaction->account_id) ?? 'Counter float',
-            'to_label' => $this->accountLabel($transaction->to_account_id) ?? $this->accountLabel($transaction->account_id) ?? 'Counter float',
+            'from_label' => $this->transferSourceLabel($transaction) ?? $this->accountLabel($transaction->account_id) ?? 'Counter float',
+            'to_label' => $this->transferDestinationLabel($transaction) ?? $this->accountLabel($transaction->to_account_id) ?? $this->accountLabel($transaction->account_id) ?? 'Counter float',
+            'system_receive_label' => $this->accountLabel($transaction->to_account_id),
+            'system_payout_label' => $this->accountLabel($transaction->account_id),
+            'receive_commission_amount' => Money::normalize($transaction->receive_commission_amount ?? 0),
+            'payout_commission_amount' => Money::normalize($transaction->payout_commission_amount ?? 0),
+            'destination_customer_name' => $transaction->destination_customer_name,
             'customer_name' => $transaction->customer_name,
             'customer_phone' => $transaction->customer_phone,
         ];
@@ -358,6 +387,33 @@ class TransactionEntryController extends Controller
         $company = $account->serviceType?->company?->name;
 
         return trim(($company ? "{$company} - " : '').$account->account_name);
+    }
+
+    private function transferSourceLabel(Transaction $transaction): ?string
+    {
+        if ($transaction->transaction_type !== 'transfer' || $transaction->source_account_type === null) {
+            return null;
+        }
+
+        $type = strtoupper((string) $transaction->source_account_type);
+        $provider = trim((string) $transaction->source_provider);
+        $number = trim((string) $transaction->source_account_number);
+
+        return trim($type.' '.($provider !== '' ? $provider : 'Customer account').($number !== '' ? " ({$number})" : ''));
+    }
+
+    private function transferDestinationLabel(Transaction $transaction): ?string
+    {
+        if ($transaction->transaction_type !== 'transfer' || $transaction->destination_provider === null) {
+            return null;
+        }
+
+        $provider = trim((string) $transaction->destination_provider);
+        $name = trim((string) $transaction->destination_customer_name);
+        $number = trim((string) $transaction->destination_account_number);
+        $customer = trim(($name !== '' ? $name : 'Customer').($number !== '' ? " ({$number})" : ''));
+
+        return trim(($provider !== '' ? "{$provider} - " : '').$customer);
     }
 
     /**
@@ -387,8 +443,8 @@ class TransactionEntryController extends Controller
                 'exchange_rate' => $transaction->exchange_rate,
                 'status' => $transaction->status,
                 'created_at' => $transaction->created_at?->toDateTimeString(),
-                'account_label' => $this->accountLabel($transaction->account_id),
-                'to_account_label' => $this->accountLabel($transaction->to_account_id),
+                'account_label' => $this->transferSourceLabel($transaction) ?? $this->accountLabel($transaction->account_id),
+                'to_account_label' => $this->transferDestinationLabel($transaction) ?? $this->accountLabel($transaction->to_account_id),
                 'customer_name' => $transaction->customer_name,
                 'customer_phone' => $transaction->customer_phone,
                 'note' => $transaction->note,

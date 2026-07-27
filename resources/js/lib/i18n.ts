@@ -192,18 +192,27 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.transfer': 'Transfer',
         'transaction.exchange': 'Exchange',
         'transaction.enterDetails': 'Enter Cash In details',
+        'transaction.enterCashOutDetails': 'Enter Cash Out details',
+        'transaction.enterTransferDetails': 'Enter Transfer details',
         'transaction.description': 'Description',
         'transaction.fee': 'Fee',
         'transaction.feePaymentMethod': 'How will the service fee be paid?',
         'transaction.feePaymentCash': 'Cash',
         'transaction.feePaymentCashHint':
             'Include the fee in the cash movement.',
+        'transaction.cashOutFeeCashOutcome':
+            'Customer pays the fee in cash; fee notes are added to teller vault.',
         'transaction.cashFeeReceivedNotes': 'Cash fee received notes',
         'transaction.cashFeeReceivedHint':
             'Count the service fee cash from the customer. These notes are added to your teller vault.',
         'transaction.feePaymentAccount': 'Account',
         'transaction.feePaymentAccountHint':
             'Debit the source account and credit a fee account.',
+        'transaction.feePaymentAccountIncludedHint':
+            'Customer sends the fee with the amount into the system receive account.',
+        'transaction.cashOutAccountFeeHint':
+            'Add the fee into the selected account to credit. No separate fee account is needed.',
+        'transaction.cashOutAccountFeeDestination': 'Fee will be credited to: ',
         'transaction.feeAccount': 'Fee account',
         'transaction.chooseFeeAccount': 'Choose the fee account',
         'transaction.noFeeAccounts': 'No active fee account is configured.',
@@ -212,9 +221,26 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.feeAmount': 'Service fee',
         'transaction.commissionTier': 'commission tier',
         'transaction.agentCommission': 'Agent commission',
+        'transaction.receiveCommission': 'Receive account commission',
+        'transaction.payoutCommission': 'Payout account commission',
+        'transaction.customerSends': 'Customer sends',
+        'transaction.systemReceives': 'System receives',
+        'transaction.systemSends': 'System sends',
+        'transaction.customerReceives': 'Customer receives',
+        'transaction.receiveLeg': 'Receive side',
+        'transaction.payoutLeg': 'Payout side',
+        'transaction.payBank': 'Pay / Bank',
+        'transaction.noSystemAccount':
+            'No active system account is available for this company.',
         'transaction.company': 'Company',
         'transaction.accounts': 'accounts',
+        'transaction.companies': 'companies',
         'transaction.chooseCompanyFirst': 'Choose the service company first.',
+        'transaction.cashOutCreditCompany': 'Company to credit',
+        'transaction.cashOutCreditCompanyHint':
+            'Choose the pay/bank company, then choose the account that will receive the Cash Out credit.',
+        'transaction.cashOutFilteredAccountHint':
+            'Only accounts under the selected company are shown.',
         'transaction.serviceType': 'Service type',
         'transaction.chooseServiceType': 'Choose a service type',
         'transaction.screenshot': 'Screenshot',
@@ -263,9 +289,44 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.notesMyVault': 'Notes from my vault',
         'transaction.accountDebit': 'KPay account to debit',
         'transaction.accountCredit': 'KPay account to credit',
+        'transaction.cashOutAccountCredit': 'Account to credit',
         'transaction.exchangeAccount': 'Exchange account',
         'transaction.sourceAccount': 'Source account',
+        'transaction.sourceProvider': 'Source pay/bank',
+        'transaction.sourceCompany': 'Source company',
+        'transaction.transferCustomerInfo': 'Customer information',
+        'transaction.transferCustomerInfoHint':
+            'Type the customer/beneficiary name and account number manually. System accounts are selected below.',
+        'transaction.customerPayBank': 'Customer Pay/Bank',
+        'transaction.customerSourceCompany': 'Customer source company',
+        'transaction.sourceBeneficiaryName': 'Customer / beneficiary name',
+        'transaction.sourceManualHint':
+            'Enter the customer side manually: company, name, and account.',
+        'transaction.sourceAccountNumber': 'Source account number',
+        'transaction.customerSourceAccountNumber':
+            'Customer source account number',
+        'transaction.destinationCompany': 'Destination company',
+        'transaction.destinationCompanyHint':
+            'Choose the company first. Only accounts under that company will be shown below.',
         'transaction.destinationAccount': 'Destination account',
+        'transaction.destinationAccountFilteredHint':
+            'Destination account list is filtered by the selected company.',
+        'transaction.systemReceiveCompany': 'System receive company',
+        'transaction.systemReceiveCompanyHint':
+            'Customer sends money into this system Pay/Bank company.',
+        'transaction.systemReceiveAccount': 'System receive account',
+        'transaction.systemPayoutCompany': 'System payout company',
+        'transaction.systemPayoutCompanyHint':
+            'System sends money out from this company to the customer destination.',
+        'transaction.systemPayoutAccount': 'System payout account',
+        'transaction.customerDestinationAccount':
+            'Customer destination account',
+        'transaction.destinationBeneficiaryName': 'Customer / beneficiary name',
+        'transaction.customerDestinationHint':
+            'Type the customer destination account number manually. The company comes from the selected system payout company.',
+        'transaction.destinationAccountNumber': 'Destination account number',
+        'transaction.customerDestinationAccountNumber':
+            'Customer destination account number',
         'transaction.cashInAmount': 'Cash In amount',
         'transaction.cashOutAmount': 'Enter Cash Out Amount',
         'transaction.cashToExchange': 'Cash to exchange',
@@ -293,6 +354,7 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.status': 'Status',
         'transaction.kpayBalanceDecreased': 'KPay balance decreased',
         'transaction.kpayBalanceIncreased': 'KPay balance increased',
+        'transaction.accountBalanceIncreased': 'Account balance increased',
         'transaction.mainVaultIncrease': 'Cashier main vault increase',
         'transaction.tellerVaultNetChange': 'Teller vault net change',
         'transaction.tellerDenominationChange': 'Teller denomination change',
@@ -514,15 +576,24 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.transfer': 'ငွေလွှဲ',
         'transaction.exchange': 'ငွေလဲ',
         'transaction.enterDetails': 'Cash In စာရင်းသွင်းရန်',
+        'transaction.enterCashOutDetails': 'Cash Out စာရင်းသွင်းရန်',
+        'transaction.enterTransferDetails': 'ငွေလွှဲစာရင်းသွင်းရန်',
         'transaction.description': 'မှတ်ချက်',
         'transaction.fee': 'ဝန်ဆောင်ခ',
         'transaction.feePaymentMethod': 'ဝန်ဆောင်ခ ပေးချေမည့်နည်း',
         'transaction.feePaymentCash': 'ငွေသားဖြင့်',
         'transaction.feePaymentCashHint':
             'ဝန်ဆောင်ခကို ငွေသားလှုပ်ရှားမှုထဲ ထည့်မည်။',
+        'transaction.cashOutFeeCashOutcome':
+            'Customer က fee ကို ငွေသားပေးမည်။ Fee notes ကို Teller ငွေခွဲထဲ တိုးမည်။',
         'transaction.feePaymentAccount': 'အကောင့်ဖြင့်',
         'transaction.feePaymentAccountHint':
             'မူလအကောင့်မှ နုတ်ပြီး ဝန်ဆောင်ခအကောင့်ထဲ တိုးမည်။',
+        'transaction.feePaymentAccountIncludedHint':
+            'Customer က Amount နှင့် Fee ကို System လက်ခံအကောင့်ထဲ အတူပေးမည်။',
+        'transaction.cashOutAccountFeeHint':
+            'Fee ကို ရွေးထားတဲ့ ငွေဝင်မည့်အကောင့်ထဲပဲ ထည့်မည်။ Fee account ထပ်ရွေးရန် မလိုပါ။',
+        'transaction.cashOutAccountFeeDestination': 'Fee ဝင်မည့်အကောင့်: ',
         'transaction.feeAccount': 'ဝန်ဆောင်ခထည့်မည့်အကောင့်',
         'transaction.chooseFeeAccount': 'ဝန်ဆောင်ခထည့်မည့်အကောင့် ရွေးပါ',
         'transaction.noFeeAccounts':
@@ -532,6 +603,17 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.feeAmount': 'ဝန်ဆောင်ခ',
         'transaction.commissionTier': 'သတ်မှတ်ထားသော ဝန်ဆောင်ခအဆင့်',
         'transaction.agentCommission': 'အေးဂျင့် ကော်မရှင်',
+        'transaction.receiveCommission': 'လက်ခံအကောင့် ကော်မရှင်',
+        'transaction.payoutCommission': 'ပေးပို့အကောင့် ကော်မရှင်',
+        'transaction.customerSends': 'Customer ပေးမည်',
+        'transaction.systemReceives': 'System လက်ခံမည်',
+        'transaction.systemSends': 'System ပေးပို့မည်',
+        'transaction.customerReceives': 'Customer လက်ခံမည်',
+        'transaction.receiveLeg': 'လက်ခံခြမ်း',
+        'transaction.payoutLeg': 'ပေးပို့ခြမ်း',
+        'transaction.payBank': 'Pay / Bank',
+        'transaction.noSystemAccount':
+            'ဒီ Company အတွက် အသုံးပြုနိုင်သော System account မရှိသေးပါ။',
         'transaction.cashReceived': 'လက်ခံရငွေ',
         'transaction.cashReceivedCustomer': 'ဖောက်သည်ထံမှ လက်ခံရရှိသောငွေ',
         'transaction.cashInCountPrerequisite':
@@ -574,9 +656,44 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.notesMyVault': 'ကိုယ်ပိုင်ငွေခွဲမှ ငွေ',
         'transaction.accountDebit': 'ငွေနုတ်မည့် KPay အကောင့်',
         'transaction.accountCredit': 'ငွေထည့်မည့် KPay အကောင့်',
+        'transaction.cashOutAccountCredit': 'ငွေဝင်မည့်အကောင့်',
         'transaction.exchangeAccount': 'ငွေလဲမည့်အကောင့်',
         'transaction.sourceAccount': 'ငွေထွက်မည့်အကောင့်',
+        'transaction.sourceProvider': 'မူလ Pay/Bank',
+        'transaction.sourceCompany': 'မူလ Company',
+        'transaction.transferCustomerInfo': 'Customer information',
+        'transaction.transferCustomerInfoHint':
+            'Customer / beneficiary name နဲ့ account number ကို manual ရိုက်ထည့်ပါ။ System account တွေကို အောက်မှာရွေးပါ။',
+        'transaction.customerPayBank': 'Customer Pay/Bank',
+        'transaction.customerSourceCompany': 'Customer source company',
+        'transaction.sourceBeneficiaryName': 'Customer / beneficiary name',
+        'transaction.sourceManualHint':
+            'Customer ဘက် Company, Name, Account ကို manual ဖြည့်ပါ။',
+        'transaction.sourceAccountNumber': 'မူလအကောင့်နံပါတ်',
+        'transaction.customerSourceAccountNumber':
+            'Customer source account number',
+        'transaction.destinationCompany': 'သွားမည့် Company',
+        'transaction.destinationCompanyHint':
+            'Company ကို အရင်ရွေးပါ။ အဲဒီ company နဲ့ဆိုင်တဲ့ accounts တွေပဲ အောက်မှာပြပါမယ်။',
         'transaction.destinationAccount': 'ငွေဝင်မည့်အကောင့်',
+        'transaction.destinationAccountFilteredHint':
+            'Destination account list ကို ရွေးထားတဲ့ company နဲ့ filter လုပ်ထားပါတယ်။',
+        'transaction.systemReceiveCompany': 'System ငွေလက်ခံမည့် Company',
+        'transaction.systemReceiveCompanyHint':
+            'Customer က ဒီ system Pay/Bank company ထဲကို ငွေပေးမည်။',
+        'transaction.systemReceiveAccount': 'System ငွေလက်ခံမည့်အကောင့်',
+        'transaction.systemPayoutCompany': 'System ငွေပို့မည့် Company',
+        'transaction.systemPayoutCompanyHint':
+            'System က ဒီ company အကောင့်မှ Customer destination သို့ ငွေပို့မည်။',
+        'transaction.systemPayoutAccount': 'System ငွေပို့မည့်အကောင့်',
+        'transaction.customerDestinationAccount':
+            'Customer destination account',
+        'transaction.destinationBeneficiaryName': 'Customer / beneficiary name',
+        'transaction.customerDestinationHint':
+            'Customer destination account number ကို manual ရိုက်ထည့်ပါ။ Company က ရွေးထားတဲ့ system payout company ဖြစ်ပါမယ်။',
+        'transaction.destinationAccountNumber': 'Destination account number',
+        'transaction.customerDestinationAccountNumber':
+            'Customer destination account number',
         'transaction.cashInAmount': 'Cash In ပမာဏ',
         'transaction.cashOutAmount': 'ငွေထုတ်မည့်ပမာဏ',
         'transaction.cashToExchange': 'ငွေလဲမည့်ပမာဏ',
@@ -604,6 +721,7 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.status': 'အခြေအနေ',
         'transaction.kpayBalanceDecreased': 'KPay လက်ကျန် လျော့မည်',
         'transaction.kpayBalanceIncreased': 'KPay လက်ကျန် တိုးမည်',
+        'transaction.accountBalanceIncreased': 'အကောင့်လက်ကျန် တိုးမည်',
         'transaction.mainVaultIncrease': 'Cashier Main Vault ထဲ ဝင်မည့်ငွေ',
         'transaction.tellerVaultNetChange':
             'Teller ငွေခွဲ စုစုပေါင်းပြောင်းလဲမှု',
@@ -679,7 +797,13 @@ const messages: Record<Locale, Record<string, string>> = {
         'common.choose': 'ရွေးပါ',
         'transaction.company': 'ကုမ္ပဏီ',
         'transaction.accounts': 'အကောင့်',
+        'transaction.companies': 'ကုမ္ပဏီ',
         'transaction.chooseCompanyFirst': 'ဝန်ဆောင်မှုကုမ္ပဏီကို အရင်ရွေးပါ။',
+        'transaction.cashOutCreditCompany': 'ငွေဝင်မည့် Company',
+        'transaction.cashOutCreditCompanyHint':
+            'Pay/Bank company ကို အရင်ရွေးပြီး Cash Out credit ဝင်မည့်အကောင့်ကို ရွေးပါ။',
+        'transaction.cashOutFilteredAccountHint':
+            'ရွေးထားတဲ့ company နဲ့ဆိုင်တဲ့ accounts တွေပဲ ပြပါမယ်။',
         'transaction.serviceType': 'ဝန်ဆောင်မှုအမျိုးအစား',
         'transaction.chooseServiceType': 'ဝန်ဆောင်မှုအမျိုးအစား ရွေးပါ',
         'transaction.screenshot': 'Screenshot',

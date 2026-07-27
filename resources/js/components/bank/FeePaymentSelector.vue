@@ -16,8 +16,9 @@ withDefaults(
             balance: string;
         }[];
         disabled?: boolean;
+        accountIncludedInTransaction?: boolean;
     }>(),
-    { disabled: false },
+    { disabled: false, accountIncludedInTransaction: false },
 );
 
 const emit = defineEmits<{
@@ -100,13 +101,18 @@ function setAccount(event: Event) {
                         t('transaction.feePaymentAccount')
                     }}</span>
                     <span class="block text-[11px] text-slate">{{
-                        t('transaction.feePaymentAccountHint')
+                        accountIncludedInTransaction
+                            ? t('transaction.feePaymentAccountIncludedHint')
+                            : t('transaction.feePaymentAccountHint')
                     }}</span>
                 </span>
             </label>
         </div>
 
-        <div v-if="modelValue === 'account'" class="mt-3">
+        <div
+            v-if="modelValue === 'account' && !accountIncludedInTransaction"
+            class="mt-3"
+        >
             <label
                 class="mb-1.5 block text-[12px] font-bold text-slate"
                 for="fee-account-select"

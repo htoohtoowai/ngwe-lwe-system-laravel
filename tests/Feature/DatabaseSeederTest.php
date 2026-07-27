@@ -62,11 +62,16 @@ class DatabaseSeederTest extends TestCase
             'Demo Transfer Source',
             'Demo Transfer Target',
             'Demo Exchange Till',
-            'Demo Fee Account',
+            'Demo Wave Fee Account',
+        ])->count());
+
+        $this->assertSame(2, Account::query()->whereIn('account_name', [
+            'System KBZPay Transfer',
+            'System CB Bank Transfer',
         ])->count());
 
         $this->assertDatabaseHas('accounts', [
-            'account_name' => 'Demo Fee Account',
+            'account_name' => 'Demo Wave Fee Account',
             'is_fee_account' => 1,
         ]);
         $this->assertDatabaseHas('exchange_rates', [
@@ -96,7 +101,12 @@ class DatabaseSeederTest extends TestCase
             'Demo Transfer Source',
             'Demo Transfer Target',
             'Demo Exchange Till',
-            'Demo Fee Account',
+            'Demo Wave Fee Account',
+        ])->count());
+
+        $this->assertSame(2, Account::query()->whereIn('account_name', [
+            'System KBZPay Transfer',
+            'System CB Bank Transfer',
         ])->count());
 
         $this->assertSame(8, DB::table('cash_denomination_logs')

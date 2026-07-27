@@ -70,6 +70,12 @@ class EmployeeTransferExchangeFloatTest extends TestCase
             ->postJson('/api/transactions/transfer', [
                 'from_account_id' => $from->id,
                 'to_account_id' => $to->id,
+                'source_account_type' => 'pay',
+                'source_provider' => 'KBZPay',
+                'source_account_number' => '09123456789',
+                'destination_provider' => 'CB Bank',
+                'destination_customer_name' => 'Mya Mya',
+                'destination_account_number' => '001-001122-001',
                 'amount' => 10_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '09',

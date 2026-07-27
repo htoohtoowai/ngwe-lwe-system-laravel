@@ -25,6 +25,9 @@ const props = withDefaults(
         accounts: {
             id: number;
             company: string;
+            company_id?: number | null;
+            company_category?: string | null;
+            company_logo_url?: string | null;
             name: string;
             number?: string;
             balance: string;
@@ -59,6 +62,8 @@ const props = withDefaults(
 
 const step = ref<'form' | 'review'>('form');
 const accountId = ref<number | null>(null);
+const creditAccountType = ref<'pay' | 'bank'>('pay');
+const selectedCreditCompany = ref('');
 const amount = ref(0);
 const description = ref('');
 const denoms = ref<Record<number, number>>({});
@@ -74,8 +79,42 @@ const commissionNum = computed(() => Number(props.commission ?? 0));
 const account = computed(() =>
     props.accounts.find((a) => a.id === accountId.value),
 );
-const selectedFeeAccount = computed(() =>
-    props.feeAccounts.find((a) => a.id === feeAccountId.value),
+const creditCompanies = computed(() => {
+    const unique = new Map<
+        string,
+        { id: number | null; name: string; logoUrl: string | null }
+    >();
+
+    for (const candidate of props.accounts) {
+        const category = (candidate.company_category ?? 'Both')
+            .trim()
+            .toLowerCase();
+
+        if (
+            !candidate.company ||
+            unique.has(candidate.company) ||
+            (category !== creditAccountType.value && category !== 'both')
+        ) {
+            continue;
+        }
+
+        unique.set(candidate.company, {
+            id: candidate.company_id ?? null,
+            name: candidate.company,
+            logoUrl: candidate.company_logo_url ?? null,
+        });
+    }
+
+    return Array.from(unique.values());
+});
+const creditAccounts = computed(() =>
+    props.accounts.filter(
+        (candidate) =>
+            candidate.company === selectedCreditCompany.value &&
+            ['both', creditAccountType.value].includes(
+                (candidate.company_category ?? 'Both').trim().toLowerCase(),
+            ),
+    ),
 );
 const denomTotal = computed(() =>
     props.notes.reduce(
@@ -111,8 +150,7 @@ const cashierLocked = computed(() => props.role === 'cashier');
 const feePaymentValid = computed(
     () =>
         feeNum.value <= 0 ||
-        feePaymentMethod.value === 'cash' ||
-        feeAccountId.value !== null,
+        ['cash', 'account'].includes(feePaymentMethod.value),
 );
 const ready = computed(
     () =>
@@ -124,6 +162,26 @@ const ready = computed(
         !floatLocked.value &&
         !cashierLocked.value,
 );
+
+watch(creditCompanies, (nextCompanies) => {
+    if (
+        !nextCompanies.some(
+            (company) => company.name === selectedCreditCompany.value,
+        )
+    ) {
+        selectedCreditCompany.value = '';
+    }
+});
+
+watch([creditAccountType, selectedCreditCompany], () => {
+    if (
+        !creditAccounts.value.some(
+            (candidate) => candidate.id === accountId.value,
+        )
+    ) {
+        accountId.value = null;
+    }
+});
 
 let feeTimer: ReturnType<typeof setTimeout>;
 watch([amount, accountId], ([nextAmount, nextAccount]) => {
@@ -289,16 +347,143 @@ function submit() {
             "
         >
             <h2 class="text-base font-bold">
-                {{ t('transaction.enterDetails') }}
+                {{ t('transaction.enterCashOutDetails') }}
             </h2>
 
-            <div class="mt-4">
+            <section
+                class="mt-4 rounded-field border border-line bg-mist/25 p-4"
+                aria-labelledby="cash-out-credit-company-title"
+            >
+                <div class="flex items-start justify-between gap-3">
+                    <div>
+                        <h3
+                            id="cash-out-credit-company-title"
+                            class="text-sm font-black text-ink"
+                        >
+                            {{ t('transaction.cashOutCreditCompany') }}
+                        </h3>
+                        <p class="mt-1 text-xs text-slate">
+                            {{ t('transaction.cashOutCreditCompanyHint') }}
+                        </p>
+                    </div>
+                    <span class="text-xs font-bold text-brand">{{
+                        t('component.required')
+                    }}</span>
+                </div>
+
+                <div class="mt-3 max-w-md">
+                    <span class="bank-label">{{
+                        t('transaction.payBank')
+                    }}</span>
+                    <div class="mt-1.5 grid grid-cols-2 gap-2">
+                        <label
+                            class="bank-choice flex cursor-pointer items-center gap-2 rounded-field border bg-card px-3 py-2.5 transition"
+                            :class="
+                                creditAccountType === 'pay'
+                                    ? 'border-brand ring-1 ring-brand/20'
+                                    : 'border-line hover:border-ink/30'
+                            "
+                        >
+                            <input
+                                v-model="creditAccountType"
+                                type="radio"
+                                name="cash_out_credit_account_type"
+                                value="pay"
+                                class="accent-brand"
+                            />
+                            <span class="text-sm font-bold">Pay</span>
+                        </label>
+                        <label
+                            class="bank-choice flex cursor-pointer items-center gap-2 rounded-field border bg-card px-3 py-2.5 transition"
+                            :class="
+                                creditAccountType === 'bank'
+                                    ? 'border-brand ring-1 ring-brand/20'
+                                    : 'border-line hover:border-ink/30'
+                            "
+                        >
+                            <input
+                                v-model="creditAccountType"
+                                type="radio"
+                                name="cash_out_credit_account_type"
+                                value="bank"
+                                class="accent-brand"
+                            />
+                            <span class="text-sm font-bold">Bank</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div
+                    class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+                    role="radiogroup"
+                    aria-label="Company to credit"
+                >
+                    <button
+                        v-for="company in creditCompanies"
+                        :key="company.id ?? company.name"
+                        type="button"
+                        role="radio"
+                        :aria-checked="selectedCreditCompany === company.name"
+                        class="group flex min-h-16 items-center gap-2 rounded-xl border px-3 py-2 text-left transition"
+                        :class="
+                            selectedCreditCompany === company.name
+                                ? 'border-brand bg-brand-soft text-brand shadow-sm ring-2 ring-brand/15'
+                                : 'border-line bg-card text-ink hover:border-brand/40 hover:bg-brand-soft/40'
+                        "
+                        @click="selectedCreditCompany = company.name"
+                    >
+                        <span
+                            class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl text-sm font-black"
+                            :class="
+                                selectedCreditCompany === company.name
+                                    ? 'bg-brand text-white'
+                                    : 'bg-white text-brand shadow-sm'
+                            "
+                        >
+                            <img
+                                v-if="company.logoUrl"
+                                :src="company.logoUrl"
+                                :alt="`${company.name} logo`"
+                                class="size-full object-contain p-1"
+                            />
+                            <span v-else>
+                                {{ company.name.slice(0, 1).toUpperCase() }}
+                            </span>
+                        </span>
+                        <span class="min-w-0">
+                            <span class="block truncate text-xs font-black">{{
+                                company.name
+                            }}</span>
+                            <span class="mt-0.5 block text-[10px] text-slate">
+                                {{
+                                    props.accounts.filter(
+                                        (candidate) =>
+                                            candidate.company === company.name,
+                                    ).length
+                                }}
+                                {{ t('transaction.accounts') }}
+                            </span>
+                        </span>
+                    </button>
+                </div>
+
+                <p
+                    v-if="creditCompanies.length === 0"
+                    class="mt-3 rounded-field border border-dashed border-line px-3 py-3 text-xs font-semibold text-slate"
+                >
+                    {{ t('transaction.noSystemAccount') }}
+                </p>
+
                 <AccountTile
+                    class="mt-3"
                     v-model="accountId"
-                    :accounts="accounts"
-                    :label="t('transaction.accountCredit')"
+                    :accounts="creditAccounts"
+                    :label="t('transaction.cashOutAccountCredit')"
                 />
-            </div>
+                <p class="mt-2 text-xs text-slate">
+                    {{ t('transaction.cashOutFilteredAccountHint') }}
+                </p>
+            </section>
 
             <div class="mt-5">
                 <BigAmountInput
@@ -328,6 +513,7 @@ function submit() {
                     v-model:fee-account-id="feeAccountId"
                     :fee="feeNum"
                     :fee-accounts="feeAccounts"
+                    account-included-in-transaction
                 />
             </div>
 
@@ -416,13 +602,13 @@ function submit() {
             <dl class="mt-5 divide-y divide-line border-y border-line">
                 <div class="flex justify-between py-3 text-sm">
                     <dt class="text-slate">
-                        {{ t('transaction.accountCredit') }}
+                        {{ t('transaction.cashOutAccountCredit') }}
                     </dt>
                     <dd class="text-right font-bold">
                         {{ account?.name }}
-                        <span
-                            class="block text-[11px] font-medium text-slate"
-                            >{{ account?.company }}</span
+                        <span class="block text-[11px] font-medium text-slate"
+                            >{{ creditAccountType.toUpperCase() }} ·
+                            {{ account?.company }}</span
                         >
                     </dd>
                 </div>
@@ -459,7 +645,7 @@ function submit() {
                         }}<span
                             v-if="feePaymentMethod === 'account'"
                             class="block text-[11px] font-medium text-slate"
-                            >{{ selectedFeeAccount?.name }}</span
+                            >{{ account?.name }}</span
                         >
                     </dd>
                 </div>
@@ -481,7 +667,7 @@ function submit() {
                             v-if="feePaymentMethod === 'account'"
                             class="block text-[11px] font-medium text-slate"
                         >
-                            {{ selectedFeeAccount?.name }}
+                            {{ account?.name }}
                         </span>
                     </dt>
                     <dd class="money font-bold text-balance">

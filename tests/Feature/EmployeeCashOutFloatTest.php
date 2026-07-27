@@ -62,13 +62,6 @@ class EmployeeCashOutFloatTest extends TestCase
     {
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 1]);
         [$account, $serviceType] = $this->accountWithServiceType();
-        $feeAccount = Account::query()->create([
-            'service_type_id' => $serviceType->id,
-            'account_name' => 'Cash Out Receiving Account',
-            'phone_number' => '0900000099',
-            'balance' => 0,
-            'is_fee_account' => true,
-        ]);
         $this->fixedTier($serviceType->id, feeWithdraw: 500, commWithdraw: 900);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
@@ -81,17 +74,15 @@ class EmployeeCashOutFloatTest extends TestCase
                     10_000 => 1,
                 ],
                 'fee_payment_method' => 'account',
-                'fee_account_id' => $feeAccount->id,
             ])
             ->assertCreated()
             ->assertJsonPath('data.customer_fee', '500.00')
             ->assertJsonPath('data.commission_amount', '900.00')
             ->assertJsonPath('data.balance_change', '11400.00')
             ->assertJsonPath('data.fee_payment_method', 'account')
-            ->assertJsonPath('data.fee_account_id', $feeAccount->id);
+            ->assertJsonPath('data.fee_account_id', $account->id);
 
-        $this->assertSame('0.00', $account->fresh()->balance);
-        $this->assertSame('11400.00', $feeAccount->fresh()->balance);
+        $this->assertSame('11400.00', $account->fresh()->balance);
 
         $activeFloat = app(CashFloatRepository::class)->activeForEmployee($employee->id);
         $this->assertSame('0.00', $activeFloat->current_balance);

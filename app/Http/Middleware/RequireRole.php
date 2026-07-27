@@ -13,7 +13,14 @@ class RequireRole
         $user = $request->user();
 
         if ($user === null || ! in_array($user->role, $roles, true)) {
-            if (! $request->is('api/*') && ! ($request->expectsJson() && ! $request->header('X-Inertia'))) {
+            if (
+                $request->header('X-Inertia')
+                || (
+                    ! $request->is('api/*')
+                    && $request->bearerToken() === null
+                    && ! $request->expectsJson()
+                )
+            ) {
                 return redirect($this->homeForRole($user?->role))
                     ->withErrors(['request' => 'Access denied']);
             }

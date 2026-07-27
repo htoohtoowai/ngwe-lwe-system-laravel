@@ -276,6 +276,8 @@ class TransactionService
      *   amount: float|string,
      *   customer_name: string,
      *   customer_phone: string,
+     *   destination_provider?: string|null,
+     *   destination_account_number?: string|null,
      *   customer_fee?: float|string,
      *   additional_fee_amount?: float|string,
      *   fee_account_id?: int|null,
@@ -297,7 +299,7 @@ class TransactionService
 
         $fees = $this->calculator->resolveFees($account, $amount, TransactionFeeCalculator::MODE_CASH_OUT);
         $commission = $this->calculator->commission($account, $amount, TransactionFeeCalculator::COMMISSION_RECEIVE);
-        $feePayment = $this->resolveFeePayment($data, $account, $fees['customer_fee']);
+        $feePayment = $this->resolveCashOutFeePayment($data, $account, $fees['customer_fee']);
         $fromCompanyId = $account->serviceType?->company_id;
 
         $normalizedDenominations = null;
@@ -466,9 +468,15 @@ class TransactionService
      * @param  array{
      *   from_account_id: int,
      *   to_account_id: int,
+     *   source_account_type?: string|null,
+     *   source_provider?: string|null,
+     *   source_account_number?: string|null,
+     *   destination_provider?: string|null,
+     *   destination_customer_name?: string|null,
+     *   destination_account_number?: string|null,
      *   amount: float|string,
      *   customer_name: string,
-     *   customer_phone: string,
+     *   customer_phone?: string|null,
      *   customer_fee?: float|string,
      *   additional_fee_amount?: float|string,
      *   fee_account_id?: int|null,
@@ -496,9 +504,17 @@ class TransactionService
             throw new InvalidArgumentException("Target account #{$data['to_account_id']} not found or inactive.");
         }
 
-        $fees = $this->calculator->resolveFees($fromAccount, $amount, TransactionFeeCalculator::MODE_CASH_IN);
-        $commission = $this->calculator->commission($fromAccount, $amount, TransactionFeeCalculator::COMMISSION_SEND);
-        $feePayment = $this->resolveFeePayment($data, $fromAccount, $fees['customer_fee']);
+        $customerTransfer = ! empty($data['source_account_type']);
+        $feeReferenceAccount = $customerTransfer ? $toAccount : $fromAccount;
+        $fees = $this->calculator->resolveFees($feeReferenceAccount, $amount, TransactionFeeCalculator::MODE_CASH_IN);
+        $receiveCommission = $customerTransfer
+            ? $this->calculator->commission($toAccount, $amount, TransactionFeeCalculator::COMMISSION_RECEIVE)
+            : Money::normalize(0);
+        $payoutCommission = $this->calculator->commission($fromAccount, $amount, TransactionFeeCalculator::COMMISSION_SEND);
+        $commission = Money::normalize((float) $receiveCommission + (float) $payoutCommission);
+        $feePayment = $customerTransfer
+            ? $this->resolveTransferFeePayment($data, $toAccount)
+            : $this->resolveFeePayment($data, $fromAccount, $fees['customer_fee']);
         $fromCompanyId = $fromAccount->serviceType?->company_id;
         $toCompanyId = $toAccount->serviceType?->company_id;
 
@@ -533,18 +549,25 @@ class TransactionService
             throw new InvalidArgumentException('fee_denominations are only allowed for Teller Transfer fees paid in cash.');
         }
 
-        $transaction = DB::transaction(function () use ($data, $creator, $fromAccount, $toAccount, $amount, $fees, $feePayment, $commission, $fromCompanyId, $toCompanyId, $normalizedFeeDenominations): Transaction {
-            $this->accounts->debitBalance($fromAccount->id, (float) $amount + ($feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0));
-            $this->creditAgentCommission($fromAccount->id, $commission);
+        $transaction = DB::transaction(function () use ($data, $creator, $customerTransfer, $fromAccount, $toAccount, $amount, $fees, $feePayment, $commission, $receiveCommission, $payoutCommission, $fromCompanyId, $toCompanyId, $normalizedFeeDenominations): Transaction {
+            $payoutDebit = Money::normalize(
+                (float) $amount
+                + (! $customerTransfer && $feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0),
+            );
+            $this->accounts->debitBalance($fromAccount->id, $payoutDebit);
+            $this->creditAgentCommission($fromAccount->id, $payoutCommission);
 
-            $credited = $this->accounts->incrementBalance($toAccount->id, $amount);
+            $receiveCredit = Money::normalize(
+                (float) $amount
+                + (float) $receiveCommission
+                + ($customerTransfer && $feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0),
+            );
+            $credited = $this->accounts->incrementBalance($toAccount->id, $receiveCredit);
+            $fromBalanceChange = Money::normalize(-((float) $payoutDebit) + (float) $payoutCommission);
+
             if ($credited === null) {
                 throw new RuntimeException("Unable to credit transfer to active account #{$toAccount->id}.");
             }
-            $fromBalanceChange = Money::normalize(
-                -((float) $amount + ($feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0))
-                + (float) $commission,
-            );
 
             $txn = $this->transactions->create([
                 'transaction_type' => 'transfer',
@@ -552,8 +575,16 @@ class TransactionService
                 'to_account_id' => $toAccount->id,
                 'amount' => $amount,
                 'customer_name' => $data['customer_name'],
-                'customer_phone' => $data['customer_phone'],
+                'customer_phone' => $data['customer_phone'] ?? null,
+                'source_account_type' => $data['source_account_type'] ?? null,
+                'source_provider' => $data['source_provider'] ?? null,
+                'source_account_number' => $data['source_account_number'] ?? null,
+                'destination_provider' => $data['destination_provider'] ?? null,
+                'destination_customer_name' => $data['destination_customer_name'] ?? null,
+                'destination_account_number' => $data['destination_account_number'] ?? null,
                 'commission_amount' => $commission,
+                'receive_commission_amount' => $receiveCommission,
+                'payout_commission_amount' => $payoutCommission,
                 'customer_fee' => $fees['customer_fee'],
                 'additional_fee_amount' => $fees['additional_fee'],
                 'balance_change' => $fromBalanceChange,
@@ -587,17 +618,27 @@ class TransactionService
                 );
             }
 
-            $this->creditFeeAccount($feePayment['fee_account_id'], $fees['customer_fee']);
+            if (! $customerTransfer) {
+                $this->creditFeeAccount($feePayment['fee_account_id'], $fees['customer_fee']);
+            }
 
             $this->log($creator->id, 'transaction_created', $txn->id, [
                 'type' => 'transfer',
                 'from_account_id' => $fromAccount->id,
                 'to_account_id' => $toAccount->id,
+                'source_account_type' => $data['source_account_type'] ?? null,
+                'source_provider' => $data['source_provider'] ?? null,
+                'source_account_number' => $data['source_account_number'] ?? null,
+                'destination_provider' => $data['destination_provider'] ?? null,
+                'destination_customer_name' => $data['destination_customer_name'] ?? null,
+                'destination_account_number' => $data['destination_account_number'] ?? null,
                 'customer_name' => $data['customer_name'],
-                'customer_phone' => $data['customer_phone'],
+                'customer_phone' => $data['customer_phone'] ?? null,
                 'amount' => $amount,
                 'from_balance_delta' => $fromBalanceChange,
-                'to_balance_delta' => $amount,
+                'to_balance_delta' => $receiveCredit,
+                'receive_commission_amount' => $receiveCommission,
+                'payout_commission_amount' => $payoutCommission,
                 'fee_denominations' => $normalizedFeeDenominations,
             ]);
 
@@ -960,6 +1001,66 @@ class TransactionService
         }
 
         return ['method' => 'account', 'fee_account_id' => $feeAccount->id];
+    }
+
+    /**
+     * Cash Out account-paid fees are credited into the same KPay/account-to-credit
+     * selected for the transaction, so tellers do not choose a separate fee account.
+     *
+     * @return array{method:string,fee_account_id:int|null}
+     */
+    private function resolveCashOutFeePayment(array $data, Account $creditAccount, string $fee): array
+    {
+        $feeAccountInput = $data['fee_account_id'] ?? null;
+        $method = (string) ($data['fee_payment_method'] ?? 'cash');
+
+        if (! in_array($method, ['cash', 'account'], true)) {
+            throw new InvalidArgumentException('Fee payment method must be cash or account.');
+        }
+
+        if ($method === 'cash') {
+            if ($feeAccountInput !== null) {
+                throw new InvalidArgumentException('Fee account must be empty when the fee is paid in cash.');
+            }
+
+            return ['method' => 'cash', 'fee_account_id' => null];
+        }
+
+        if ($feeAccountInput !== null && (int) $feeAccountInput !== $creditAccount->id) {
+            throw new InvalidArgumentException('Cash Out account-paid fees are credited to the selected account only.');
+        }
+
+        return ['method' => 'account', 'fee_account_id' => $creditAccount->id];
+    }
+
+    /**
+     * For a customer transfer, an account-paid fee arrives with the transfer
+     * amount in the selected system receive account.
+     *
+     * @return array{method:string,fee_account_id:int|null}
+     */
+    private function resolveTransferFeePayment(array $data, Account $receiveAccount): array
+    {
+        $feeAccountInput = $data['fee_account_id'] ?? null;
+        $method = (string) ($data['fee_payment_method'] ?? 'cash');
+
+        if (! in_array($method, ['cash', 'account'], true)) {
+            throw new InvalidArgumentException('Fee payment method must be cash or account.');
+        }
+
+        if ($method === 'cash') {
+            if ($feeAccountInput !== null) {
+                throw new InvalidArgumentException('Fee account must be empty when the fee is paid in cash.');
+            }
+
+            return ['method' => 'cash', 'fee_account_id' => null];
+        }
+
+        if ($feeAccountInput !== null && (int) $feeAccountInput !== $receiveAccount->id) {
+            throw new InvalidArgumentException('Transfer account-paid fees are credited to the system receive account.');
+        }
+
+        return ['method' => 'account', 'fee_account_id' => $receiveAccount->id];
     }
 
     /**

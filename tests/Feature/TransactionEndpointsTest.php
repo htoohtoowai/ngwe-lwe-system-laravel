@@ -214,6 +214,49 @@ class TransactionEndpointsTest extends TestCase
         $this->assertSame('10000.00', $to->fresh()->balance);
     }
 
+    public function test_customer_transfer_posts_both_system_legs_and_account_fee(): void
+    {
+        [, $token] = $this->owner();
+        [$systemReceive, $serviceType] = $this->accountWithBalance(0, 'System KPay');
+        [$systemPayout, $payoutServiceType] = $this->accountWithBalance(50_000, 'System CB Bank');
+        $this->fixedTier($serviceType->id, feeDeposit: 500, commWithdraw: 80);
+        $this->fixedTier($payoutServiceType->id, commDeposit: 100);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/transfer', [
+                'from_account_id' => $systemPayout->id,
+                'source_account_type' => 'pay',
+                'source_provider' => 'KPay',
+                'source_account_number' => '09123456789',
+                'to_account_id' => $systemReceive->id,
+                'destination_provider' => 'CB Bank',
+                'destination_customer_name' => 'Mya Mya',
+                'destination_account_number' => 'CB-001122',
+                'amount' => 10_000,
+                'customer_name' => 'Aung',
+                'fee_payment_method' => 'account',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.transaction_type', 'transfer')
+            ->assertJsonPath('data.account_id', $systemPayout->id)
+            ->assertJsonPath('data.to_account_id', $systemReceive->id)
+            ->assertJsonPath('data.source_account_type', 'pay')
+            ->assertJsonPath('data.source_provider', 'KPay')
+            ->assertJsonPath('data.source_account_number', '09123456789')
+            ->assertJsonPath('data.destination_provider', 'CB Bank')
+            ->assertJsonPath('data.destination_customer_name', 'Mya Mya')
+            ->assertJsonPath('data.destination_account_number', 'CB-001122')
+            ->assertJsonPath('data.customer_fee', '500.00')
+            ->assertJsonPath('data.fee_account_id', $systemReceive->id)
+            ->assertJsonPath('data.commission_amount', '180.00')
+            ->assertJsonPath('data.receive_commission_amount', '80.00')
+            ->assertJsonPath('data.payout_commission_amount', '100.00')
+            ->assertJsonPath('data.balance_change', '-9900.00');
+
+        $this->assertSame('10580.00', $systemReceive->fresh()->balance);
+        $this->assertSame('40100.00', $systemPayout->fresh()->balance);
+    }
+
     public function test_transfer_rejects_same_account(): void
     {
         [, $token] = $this->owner();
@@ -684,8 +727,7 @@ class TransactionEndpointsTest extends TestCase
         int $feeWithdraw = 0,
         int $commDeposit = 0,
         int $commWithdraw = 0,
-    ): CommissionTier
-    {
+    ): CommissionTier {
         return CommissionTier::query()->create([
             'service_type_id' => $serviceTypeId,
             'amount_from' => 1,
