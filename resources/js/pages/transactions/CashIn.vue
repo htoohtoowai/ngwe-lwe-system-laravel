@@ -152,6 +152,7 @@ const accountBalanceRequired = computed(
 const cashSettlementAmount = computed(
     () => amount.value + (feePaymentMethod.value === 'cash' ? feeNum.value : 0),
 );
+const customerTotalDue = computed(() => amount.value + feeNum.value);
 const amountReceived = computed(() =>
     cashInNeedsDenoms.value ? receivedTotal.value : amount.value,
 );
@@ -934,6 +935,26 @@ function submit() {
             <p class="mt-1 text-[13px] text-slate">
                 {{ t('transaction.awaitingCashier') }}
             </p>
+
+            <div
+                class="mt-5 rounded-field border border-balance/25 bg-balance/5 px-4 py-4"
+            >
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-xs font-black uppercase text-balance">
+                            {{ t('transaction.customerSends') }}
+                        </p>
+                        <p class="mt-1 text-[13px] font-semibold text-slate">
+                            {{ t('transaction.amount') }} +
+                            {{ t('transaction.fee') }}
+                        </p>
+                    </div>
+                    <p class="money text-right text-2xl font-black text-balance">
+                        {{ mmk(customerTotalDue) }}
+                        <span class="text-xs text-slate">MMK</span>
+                    </p>
+                </div>
+            </div>
 
             <dl class="mt-5 divide-y divide-line border-y border-line">
                 <div class="flex justify-between py-3 text-sm">

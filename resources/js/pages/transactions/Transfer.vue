@@ -135,6 +135,7 @@ const sourceCompanies = computed(() => {
         const category = (serviceType.company_category ?? 'Both')
             .trim()
             .toLowerCase();
+
         if (category !== selectedCategory && category !== 'both') {
             continue;
         }
@@ -203,6 +204,7 @@ const receiveCredit = computed(
         receiveCommissionNum.value +
         (feePaymentMethod.value === 'account' ? feeNum.value : 0),
 );
+const customerTotalDue = computed(() => amount.value + feeNum.value);
 const payoutBalanceChange = computed(
     () => -amount.value + payoutCommissionNum.value,
 );
@@ -991,6 +993,26 @@ function submit() {
             <p class="mt-1 text-[13px] text-slate">
                 {{ t('transaction.reviewHint') }}
             </p>
+
+            <div
+                class="mt-5 rounded-field border border-balance/25 bg-balance/5 px-4 py-4"
+            >
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-xs font-black uppercase text-balance">
+                            {{ t('transaction.customerSends') }}
+                        </p>
+                        <p class="mt-1 text-[13px] font-semibold text-slate">
+                            {{ t('transaction.amount') }} +
+                            {{ t('transaction.fee') }}
+                        </p>
+                    </div>
+                    <p class="money text-right text-2xl font-black text-balance">
+                        {{ mmk(customerTotalDue) }}
+                        <span class="text-xs text-slate">MMK</span>
+                    </p>
+                </div>
+            </div>
 
             <dl
                 class="transfer-review-list mt-5 divide-y divide-line border-y border-line"

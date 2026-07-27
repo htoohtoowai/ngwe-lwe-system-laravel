@@ -102,6 +102,20 @@ const mmkSettlementAmount = computed(() =>
         ? Math.round((amount.value || 0) * Number(activeRate.value))
         : amount.value || 0,
 );
+const exchangeCustomerActionLabel = computed(() =>
+    currency.value === 'THB'
+        ? t('transaction.customerReceives')
+        : t('transaction.customerSends'),
+);
+const exchangeCustomerActionHint = computed(() =>
+    currency.value === 'THB'
+        ? `${currency.value} -> MMK`
+        : t('transaction.cashReceivedCustomer'),
+);
+const exchangeCustomerActionAmount = computed(() => mmkSettlementAmount.value);
+const exchangeCustomerTotalDue = computed(
+    () => mmkSettlementAmount.value + feeNum.value,
+);
 const needsPayoutDenoms = computed(
     () => props.role === 'teller' && currency.value === 'THB',
 );
@@ -543,6 +557,42 @@ function submit() {
             <p class="mt-1 text-[13px] text-slate">
                 {{ t('transaction.reviewHint') }}
             </p>
+
+            <div
+                class="mt-5 rounded-field border border-balance/25 bg-balance/5 px-4 py-4"
+            >
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-xs font-black uppercase text-balance">
+                            {{ exchangeCustomerActionLabel }}
+                        </p>
+                        <p class="mt-1 text-[13px] font-semibold text-slate">
+                            {{ exchangeCustomerActionHint }}
+                        </p>
+                    </div>
+                    <p class="money text-right text-2xl font-black text-balance">
+                        {{
+                            mmk(
+                                currency === 'MMK'
+                                    ? exchangeCustomerTotalDue
+                                    : exchangeCustomerActionAmount,
+                            )
+                        }}
+                        <span class="text-xs text-slate">MMK</span>
+                    </p>
+                </div>
+                <div
+                    v-if="feeNum > 0"
+                    class="mt-3 flex items-center justify-between gap-4 border-t border-balance/15 pt-3 text-sm"
+                >
+                    <span class="font-semibold text-slate">
+                        {{ t('transaction.fee') }}
+                    </span>
+                    <span class="money font-black text-balance">
+                        {{ mmk(feeNum) }} MMK
+                    </span>
+                </div>
+            </div>
 
             <dl class="mt-5 divide-y divide-line border-y border-line">
                 <div class="flex justify-between py-3 text-sm">

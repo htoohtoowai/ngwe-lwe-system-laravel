@@ -140,6 +140,8 @@ const accountCreditAmount = computed(() =>
         ? amount.value + feeNum.value + commissionNum.value
         : amount.value + commissionNum.value,
 );
+const customerCashPayout = computed(() => amount.value);
+const customerFeeDue = computed(() => feeNum.value);
 const cashStock = computed(() =>
     props.role === 'admin' ? (props.cashOutStock ?? {}) : props.floatStock,
 );
@@ -598,6 +600,36 @@ function submit() {
             <p class="mt-1 text-[13px] text-slate">
                 {{ t('transaction.reviewHint') }}
             </p>
+
+            <div
+                class="mt-5 rounded-field border border-balance/25 bg-balance/5 px-4 py-4"
+            >
+                <div class="flex items-start justify-between gap-4">
+                    <div>
+                        <p class="text-xs font-black uppercase text-balance">
+                            {{ t('transaction.customerReceives') }}
+                        </p>
+                        <p class="mt-1 text-[13px] font-semibold text-slate">
+                            {{ t('transaction.cashPaidCustomer') }}
+                        </p>
+                    </div>
+                    <p class="money text-right text-2xl font-black text-balance">
+                        {{ mmk(customerCashPayout) }}
+                        <span class="text-xs text-slate">MMK</span>
+                    </p>
+                </div>
+                <div
+                    v-if="customerFeeDue > 0"
+                    class="mt-3 flex items-center justify-between gap-4 border-t border-balance/15 pt-3 text-sm"
+                >
+                    <span class="font-semibold text-slate">
+                        {{ t('transaction.fee') }}
+                    </span>
+                    <span class="money font-black text-balance">
+                        +{{ mmk(customerFeeDue) }} MMK
+                    </span>
+                </div>
+            </div>
 
             <dl class="mt-5 divide-y divide-line border-y border-line">
                 <div class="flex justify-between py-3 text-sm">
