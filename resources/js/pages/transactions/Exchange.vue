@@ -4,8 +4,6 @@ import { computed, ref, watch } from 'vue';
 import AccountTile from '@/components/bank/AccountTile.vue';
 import BigAmountInput from '@/components/bank/BigAmountInput.vue';
 import DenomDrawer from '@/components/bank/DenomDrawer.vue';
-import FeePaymentSelector from '@/components/bank/FeePaymentSelector.vue';
-import type { FeePaymentMethod } from '@/components/bank/FeePaymentSelector.vue';
 import TransactionHistoryTable from '@/components/teller/TransactionHistoryTable.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
 import { readStoredToken } from '@/lib/auth-token';
@@ -59,7 +57,8 @@ const step = ref<'form' | 'review'>('form');
 const accountId = ref<number | null>(null);
 const amount = ref(0);
 const currency = ref<'MMK' | 'THB'>('MMK');
-const exchangePaymentMethod = ref<'cash' | 'account'>('cash');
+const exchangePaymentDisplayMethod = ref<'pay' | 'bank' | 'cash'>('pay');
+const exchangePaymentMethod = ref<'cash' | 'account'>('account');
 const customerName = ref('');
 const customerPhone = ref('');
 const description = ref('');
@@ -67,7 +66,7 @@ const denoms = ref<Record<number, number>>({});
 const receivedDenoms = ref<Record<number, number>>({});
 const submitting = ref(false);
 const errors = ref<Record<string, string>>({});
-const feePaymentMethod = ref<FeePaymentMethod>('cash');
+const feePaymentMethod = ref<'cash' | 'account'>('cash');
 const feeAccountId = ref<number | null>(null);
 const { t } = useLocale();
 
@@ -116,14 +115,17 @@ const exchangeCustomerActionAmount = computed(() => mmkSettlementAmount.value);
 const exchangeCustomerTotalDue = computed(
     () => mmkSettlementAmount.value + feeNum.value,
 );
+const cashReceivedIsCash = computed(
+    () => exchangePaymentDisplayMethod.value === 'cash',
+);
 const needsPayoutDenoms = computed(
     () => props.role === 'teller' && currency.value === 'THB',
 );
 const needsReceivedDenoms = computed(
     () =>
         props.role === 'teller' &&
-        currency.value === 'MMK' &&
-        exchangePaymentMethod.value === 'cash',
+        cashReceivedIsCash.value &&
+        currency.value === 'MMK',
 );
 const floatLocked = computed(
     () =>
@@ -167,6 +169,10 @@ const money = (value: string | number) =>
         maximumFractionDigits: currency.value === 'THB' ? 2 : 0,
     });
 const mmk = (value: string | number) => Number(value).toLocaleString();
+function selectExchangePayment(method: 'pay' | 'bank' | 'cash'): void {
+    exchangePaymentDisplayMethod.value = method;
+    exchangePaymentMethod.value = method === 'cash' ? 'cash' : 'account';
+}
 function authHeaders(): Record<string, string> {
     const token = readStoredToken();
 
@@ -190,9 +196,7 @@ function submit() {
                 feePaymentMethod.value === 'account'
                     ? feeAccountId.value
                     : null,
-            ...(needsPayoutDenoms.value
-                ? { denominations: denoms.value }
-                : {}),
+            ...(needsPayoutDenoms.value ? { denominations: denoms.value } : {}),
             ...(needsReceivedDenoms.value
                 ? { received_denominations: receivedDenoms.value }
                 : {}),
@@ -280,12 +284,6 @@ function submit() {
                         <span class="text-[11px] text-slate">MMK</span>
                     </dd>
                 </div>
-                <div class="flex justify-between py-3 text-sm">
-                    <dt class="text-slate">{{ t('transaction.fee') }}</dt>
-                    <dd class="money font-bold">
-                        {{ mmk(completed.fee_amount) }} MMK
-                    </dd>
-                </div>
             </dl>
             <div class="mt-6 flex gap-2">
                 <Link
@@ -316,17 +314,12 @@ function submit() {
         >
             <h2 class="text-base font-bold">Enter Details</h2>
 
-            <div class="mt-4 grid gap-4 md:grid-cols-2">
-                <AccountTile
-                    v-model="accountId"
-                    :accounts="accounts"
-                    :label="t('transaction.exchangeAccount')"
-                />
+            <div class="mt-4 grid items-stretch gap-4 md:grid-cols-2">
                 <div>
                     <p class="mb-1.5 text-[13px] font-semibold text-slate">
                         {{ t('transaction.direction') }}
                     </p>
-                    <div class="rounded-field bg-mist p-1">
+                    <div class="flex min-h-16 rounded-field bg-mist p-1">
                         <button
                             type="button"
                             class="bank-choice w-1/2 rounded-field px-4 py-3 text-sm font-bold transition"
@@ -354,29 +347,22 @@ function submit() {
                             {{ t('transaction.thbToMmk') }}
                         </button>
                     </div>
-                    <div
-                        class="mt-2 rounded-field bg-mist px-4 py-3 text-[13px] font-semibold text-slate"
-                    >
-                        <p>
-                            {{ t('transaction.sellRate') }}:
-                            <span class="money text-ink">{{
-                                mmk(rate.sell_rate)
-                            }}</span>
-                        </p>
-                        <p>
-                            {{ t('transaction.buyRate') }}:
-                            <span class="money text-ink">{{
-                                mmk(rate.buy_rate)
-                            }}</span>
-                        </p>
-                    </div>
                 </div>
+                <AccountTile
+                    v-model="accountId"
+                    :accounts="accounts"
+                    :label="t('transaction.exchangeAccount')"
+                />
             </div>
 
             <div class="mt-5">
                 <BigAmountInput
                     v-model="amount"
                     :currency="currency"
+                    currency-class="font-medium text-slate"
+                    :reading-currency-label="
+                        currency === 'THB' ? 'ဘတ်' : 'ကျပ်'
+                    "
                     :label="t('transaction.cashToExchange')"
                     :chips="
                         currency === 'THB' ? [100, 500, 1000, 5000] : undefined
@@ -384,103 +370,192 @@ function submit() {
                 />
             </div>
 
-            <div class="mt-5 grid gap-4 md:grid-cols-2">
-                <label>
-                    <span class="bank-label">{{
-                        t('transaction.customerName')
-                    }}</span>
-                    <input
-                        v-model="customerName"
-                        type="text"
-                        autocomplete="name"
-                        :placeholder="t('transaction.customerName')"
-                        class="bank-input"
-                    />
-                </label>
-                <label>
-                    <span class="bank-label">{{
-                        t('transaction.customerPhone')
-                    }}</span>
-                    <input
-                        v-model="customerPhone"
-                        type="tel"
-                        inputmode="tel"
-                        autocomplete="tel"
-                        :placeholder="t('transaction.customerPhone')"
-                        class="bank-input"
-                    />
-                </label>
-            </div>
-
-            <div v-if="currency === 'MMK'" class="mt-4">
-                <p class="mb-1.5 text-[13px] font-semibold text-slate">
-                    {{ t('transaction.cashReceived') }}
-                </p>
-                <div class="rounded-field bg-mist p-1">
-                    <button
-                        type="button"
-                        class="bank-choice w-1/2 rounded-field px-4 py-3 text-sm font-bold transition"
-                        :aria-pressed="exchangePaymentMethod === 'cash'"
-                        :class="
-                            exchangePaymentMethod === 'cash'
-                                ? 'bg-card text-ink shadow-sm'
-                                : 'text-slate'
-                        "
-                        @click="exchangePaymentMethod = 'cash'"
-                    >
-                        {{ t('transaction.feePaymentCash') }}
-                    </button>
-                    <button
-                        type="button"
-                        class="bank-choice w-1/2 rounded-field px-4 py-3 text-sm font-bold transition"
-                        :aria-pressed="exchangePaymentMethod === 'account'"
-                        :class="
-                            exchangePaymentMethod === 'account'
-                                ? 'bg-card text-ink shadow-sm'
-                                : 'text-slate'
-                        "
-                        @click="exchangePaymentMethod = 'account'"
-                    >
-                        {{ t('transaction.feePaymentAccount') }}
-                    </button>
-                </div>
-            </div>
-
-            <div class="mt-4 grid gap-3 md:grid-cols-2">
-                <div class="rounded-field bg-mist px-4 py-3">
-                    <p class="text-[13px] font-semibold text-slate">
-                        {{ t('transaction.sellRate') }} /
-                        {{ t('transaction.buyRate') }}
+            <div class="mt-5 space-y-4">
+                <div>
+                    <p class="mb-1.5 text-[13px] font-semibold text-slate">
+                        {{ t('transaction.cashReceived') }}
                     </p>
-                    <p class="money text-sm font-bold">{{ mmk(activeRate) }}</p>
+                    <div class="grid grid-cols-3 rounded-field bg-mist p-1">
+                        <button
+                            type="button"
+                            class="bank-choice rounded-field px-4 py-3 text-sm font-bold transition"
+                            :aria-pressed="
+                                exchangePaymentDisplayMethod === 'pay'
+                            "
+                            :class="
+                                exchangePaymentDisplayMethod === 'pay'
+                                    ? 'bg-card text-ink shadow-sm'
+                                    : 'text-slate'
+                            "
+                            @click="selectExchangePayment('pay')"
+                        >
+                            Pay
+                        </button>
+                        <button
+                            type="button"
+                            class="bank-choice rounded-field px-4 py-3 text-sm font-bold transition"
+                            :aria-pressed="
+                                exchangePaymentDisplayMethod === 'bank'
+                            "
+                            :class="
+                                exchangePaymentDisplayMethod === 'bank'
+                                    ? 'bg-card text-ink shadow-sm'
+                                    : 'text-slate'
+                            "
+                            @click="selectExchangePayment('bank')"
+                        >
+                            Bank
+                        </button>
+                        <button
+                            type="button"
+                            class="bank-choice rounded-field px-4 py-3 text-sm font-bold transition"
+                            :aria-pressed="
+                                exchangePaymentDisplayMethod === 'cash'
+                            "
+                            :class="
+                                exchangePaymentDisplayMethod === 'cash'
+                                    ? 'bg-card text-ink shadow-sm'
+                                    : 'text-slate'
+                            "
+                            @click="selectExchangePayment('cash')"
+                        >
+                            Cash
+                        </button>
+                    </div>
                 </div>
-                <div
-                    class="flex items-center justify-between rounded-field bg-mist px-4 py-3"
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label class="bank-label" for="exchange-customer-name">
+                            {{
+                                exchangePaymentDisplayMethod === 'bank'
+                                    ? 'Beneficiary Name'
+                                    : t('transaction.customerName')
+                            }}
+                        </label>
+                        <input
+                            id="exchange-customer-name"
+                            v-model="customerName"
+                            type="text"
+                            autocomplete="name"
+                            class="bank-input mt-1.5"
+                            :placeholder="
+                                exchangePaymentDisplayMethod === 'bank'
+                                    ? 'Beneficiary Name'
+                                    : t('transaction.customerName')
+                            "
+                        />
+                    </div>
+                    <div>
+                        <label class="bank-label" for="exchange-customer-phone">
+                            {{
+                                exchangePaymentDisplayMethod === 'bank'
+                                    ? 'Account Number'
+                                    : t('transaction.customerPhone')
+                            }}
+                        </label>
+                        <input
+                            id="exchange-customer-phone"
+                            v-model="customerPhone"
+                            type="tel"
+                            :inputmode="
+                                exchangePaymentDisplayMethod === 'bank'
+                                    ? 'numeric'
+                                    : 'tel'
+                            "
+                            :autocomplete="
+                                exchangePaymentDisplayMethod === 'bank'
+                                    ? 'off'
+                                    : 'tel'
+                            "
+                            class="bank-input mt-1.5"
+                            :placeholder="
+                                exchangePaymentDisplayMethod === 'bank'
+                                    ? 'Account Number'
+                                    : t('transaction.customerPhone')
+                            "
+                        />
+                    </div>
+                </div>
+                <div class="mt-4 grid gap-3 md:grid-cols-2">
+                    <div class="rounded-field bg-mist px-4 py-3">
+                        <p class="text-[13px] font-semibold text-slate">
+                            {{ t('transaction.sellRate') }} /
+                            {{ t('transaction.buyRate') }}
+                        </p>
+                        <p class="money text-sm font-bold">{{ mmk(activeRate) }}</p>
+                    </div>
+                    <div class="rounded-field bg-mist px-4 py-3">
+                        <p class="text-[13px] font-semibold text-slate">MMK</p>
+                        <p class="money text-sm font-bold">
+                            {{ mmk(mmkSettlementAmount) }}
+                        </p>
+                    </div>
+                </div>
+                <section
+                    v-if="needsReceivedDenoms"
+                    class="overflow-hidden rounded-2xl border-2 border-brand/20 bg-card shadow-sm"
+                    aria-labelledby="exchange-customer-cash-title"
                 >
-                    <p class="text-[13px] font-semibold text-slate">
-                        {{ t('transaction.fee') }}
-                    </p>
-                    <p class="money text-sm font-bold">
-                        {{ mmk(feeNum) }}
-                        <span class="text-[10px] text-slate">MMK</span>
-                    </p>
-                </div>
-                <div class="rounded-field bg-mist px-4 py-3 md:col-span-2">
-                    <p class="text-[13px] font-semibold text-slate">MMK</p>
-                    <p class="money text-sm font-bold">
-                        {{ mmk(mmkSettlementAmount) }}
-                    </p>
-                </div>
+                    <header
+                        class="flex items-start justify-between gap-3 border-b border-line bg-brand-soft/55 px-4 py-4 sm:px-5"
+                    >
+                        <div class="flex min-w-0 items-start gap-3">
+                            <span
+                                class="grid size-9 shrink-0 place-items-center rounded-xl bg-brand text-xs font-black text-white"
+                                >01</span
+                            >
+                            <div class="min-w-0">
+                                <h3
+                                    id="exchange-customer-cash-title"
+                                    class="text-sm font-bold text-ink"
+                                >
+                                    {{ t('transaction.cashReceivedCustomer') }}
+                                </h3>
+                                <p class="mt-1 text-xs leading-5 text-slate">
+                                    {{ t('transaction.cashReceived') }}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="shrink-0 text-right">
+                            <p
+                                class="text-[10px] font-bold tracking-wide text-slate uppercase"
+                            >
+                                {{ t('component.counted') }}
+                            </p>
+                            <p
+                                class="money mt-0.5 text-lg font-black text-brand"
+                            >
+                                {{ mmk(receivedDenomTotal) }}
+                            </p>
+                            <p class="text-[10px] font-bold text-slate">MMK</p>
+                        </div>
+                    </header>
+                    <div class="p-3 sm:p-4">
+                        <DenomDrawer
+                            v-model="receivedDenoms"
+                            :notes="notes"
+                            :target="mmkSettlementAmount"
+                            :enforce-stock="false"
+                            :label="t('component.notesCounted')"
+                            id-prefix="exchange-received-denomination"
+                            :show-title="false"
+                            :compact="true"
+                        />
+                    </div>
+                    <footer
+                        class="flex items-center justify-between border-t border-line bg-mist/45 px-4 py-3 text-xs sm:px-5"
+                    >
+                        <span class="font-semibold text-slate">{{
+                            t('transaction.cashReceived')
+                        }}</span>
+                        <span class="money font-black text-ink"
+                            >{{ mmk(receivedDenomTotal) }} MMK</span
+                        >
+                    </footer>
+                </section>
             </div>
 
-            <div class="mt-4">
-                <FeePaymentSelector
-                    v-model="feePaymentMethod"
-                    v-model:fee-account-id="feeAccountId"
-                    :fee="feeNum"
-                    :fee-accounts="feeAccounts"
-                />
-            </div>
+
 
             <div class="mt-5">
                 <label class="bank-label" for="exchange-description">{{
@@ -504,17 +579,6 @@ function submit() {
                         ({{ description.length }}/250)
                     </span>
                 </div>
-            </div>
-
-            <div v-if="needsReceivedDenoms" class="mt-5">
-                <DenomDrawer
-                    v-model="receivedDenoms"
-                    :notes="notes"
-                    :target="mmkSettlementAmount"
-                    :enforce-stock="false"
-                    :label="t('transaction.cashReceivedCustomer')"
-                    id-prefix="exchange-received-denomination"
-                />
             </div>
 
             <div v-if="needsPayoutDenoms" class="mt-5">
@@ -563,14 +627,16 @@ function submit() {
             >
                 <div class="flex items-start justify-between gap-4">
                     <div>
-                        <p class="text-xs font-black uppercase text-balance">
+                        <p class="text-xs font-black text-balance uppercase">
                             {{ exchangeCustomerActionLabel }}
                         </p>
                         <p class="mt-1 text-[13px] font-semibold text-slate">
                             {{ exchangeCustomerActionHint }}
                         </p>
                     </div>
-                    <p class="money text-right text-2xl font-black text-balance">
+                    <p
+                        class="money text-right text-2xl font-black text-balance"
+                    >
                         {{
                             mmk(
                                 currency === 'MMK'
@@ -580,17 +646,6 @@ function submit() {
                         }}
                         <span class="text-xs text-slate">MMK</span>
                     </p>
-                </div>
-                <div
-                    v-if="feeNum > 0"
-                    class="mt-3 flex items-center justify-between gap-4 border-t border-balance/15 pt-3 text-sm"
-                >
-                    <span class="font-semibold text-slate">
-                        {{ t('transaction.fee') }}
-                    </span>
-                    <span class="money font-black text-balance">
-                        {{ mmk(feeNum) }} MMK
-                    </span>
                 </div>
             </div>
 
@@ -611,7 +666,7 @@ function submit() {
                     </dt>
                     <dd class="money text-lg font-bold">
                         {{ money(amount) }}
-                        <span class="text-[11px] text-slate">{{
+                        <span class="text-[11px] font-medium text-slate">{{
                             currency
                         }}</span>
                     </dd>
@@ -637,30 +692,6 @@ function submit() {
                         {{ t('transaction.customerPhone') }}
                     </dt>
                     <dd class="text-right font-bold">{{ customerPhone }}</dd>
-                </div>
-                <div class="flex justify-between py-3 text-sm">
-                    <dt class="text-slate">{{ t('transaction.fee') }}</dt>
-                    <dd class="money font-bold">{{ mmk(feeNum) }} MMK</dd>
-                </div>
-                <div class="flex justify-between py-3 text-sm">
-                    <dt class="text-slate">
-                        {{ t('transaction.feePaymentMethod') }}
-                    </dt>
-                    <dd class="text-right font-bold">
-                        {{
-                            feePaymentMethod === 'cash'
-                                ? t('transaction.feePaymentCash')
-                                : t('transaction.feePaymentAccount')
-                        }}<span
-                            v-if="feePaymentMethod === 'account'"
-                            class="block text-[11px] font-medium text-slate"
-                            >{{
-                                feeAccounts.find(
-                                    (item) => item.id === feeAccountId,
-                                )?.name
-                            }}</span
-                        >
-                    </dd>
                 </div>
                 <div class="flex justify-between py-3 text-sm">
                     <dt class="font-bold">

@@ -8,11 +8,15 @@ const props = withDefaults(
         label?: string;
         id?: string;
         currency?: string;
+        currencyClass?: string;
+        readingCurrencyLabel?: string;
         chips?: number[];
     }>(),
     {
         id: 'transaction-amount',
         currency: 'MMK',
+        currencyClass: 'font-bold text-slate',
+        readingCurrencyLabel: 'ကျပ်',
         chips: () => [10_000, 50_000, 100_000, 500_000],
     },
 );
@@ -89,7 +93,7 @@ function set(value: number): void {
                     )
                 "
             />
-            <span class="shrink-0 text-sm font-bold text-slate">{{
+            <span class="shrink-0 text-sm" :class="currencyClass">{{
                 currency
             }}</span>
             <button
@@ -110,9 +114,9 @@ function set(value: number): void {
             :class="modelValue > 0 ? 'text-ink' : 'text-transparent'"
         >
             {{ reading || '—' }}
-            <span v-if="modelValue > 0" class="font-medium text-slate"
-                >ကျပ်</span
-            >
+            <span v-if="modelValue > 0" class="font-medium text-slate">{{
+                readingCurrencyLabel
+            }}</span>
         </p>
 
         <div class="flex flex-wrap gap-1.5">
