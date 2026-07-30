@@ -704,13 +704,16 @@ class TransactionService
             throw new InvalidArgumentException('Exchange payment method must be cash or account.');
         }
 
-        $fees = $this->calculator->resolveFees($account, $mmkSettlementAmount, TransactionFeeCalculator::MODE_CASH_IN);
+        $fees = [
+            'customer_fee' => Money::normalize(0),
+            'additional_fee' => Money::normalize(0),
+        ];
         $commission = $this->calculator->commission($account, $mmkSettlementAmount, TransactionFeeCalculator::COMMISSION_SEND);
         $feePayment = $this->resolveFeePayment($data, $account, $fees['customer_fee']);
         $fromCompanyId = $account->serviceType?->company_id;
 
         $normalizedDenominations = null;
-        if ($creator->role === 'teller' && $currency === 'THB') {
+        if ($creator->role === 'teller' && $currency === 'THB' && $exchangePaymentMethod === 'cash') {
             $normalizedDenominations = $this->floatValidator->validateFloatOperation(
                 $creator->id,
                 is_array($data['denominations'] ?? null) ? $data['denominations'] : [],

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\SystemCompatibilityController;
 use App\Http\Controllers\CashierController;
 use App\Http\Controllers\DashboardController;
@@ -44,6 +45,9 @@ Route::middleware(['ngwe.auth', 'role:admin'])->get('/reports/daily/pdf', functi
 })
     ->name('reports.daily.pdf');
 Route::middleware('ngwe.auth')->get('/dashboard', DashboardController::class)->name('dashboard');
+Route::middleware('ngwe.auth')
+    ->get('/companies/{company}/logo', [CompanyController::class, 'logo'])
+    ->name('companies.logo');
 $adminSections = [
     'overview' => 'overview',
     'companies' => 'companies',
@@ -68,16 +72,33 @@ $adminDetailSections = [
     ...$adminCrudSections,
     'transactions',
 ];
+$adminPageComponents = [
+    'overview' => 'admin/Overview',
+    'companies' => 'admin/Companies',
+    'service-types' => 'admin/ServiceTypes',
+    'exchange-rates' => 'admin/ExchangeRates',
+    'accounts' => 'admin/Accounts',
+    'fees' => 'admin/Fees',
+    'users' => 'admin/Users',
+    'vault' => 'admin/Vault',
+    'reports' => 'admin/Reports',
+];
 $renderAdminOperations = static function (
     Request $request,
     string $section = 'overview',
     string $mode = 'list',
     ?int $resourceId = null,
     ?string $transactionSubsection = null,
-) use ($adminSections) {
+) use ($adminSections, $adminPageComponents) {
     abort_unless(array_key_exists($section, $adminSections), 404);
 
-    return Inertia::render('admin/Operations', [
+    $component = $section === 'transactions'
+        ? ($mode === 'detail'
+            ? 'admin/transactions/Detail'
+            : 'admin/transactions/ActivityLogs')
+        : $adminPageComponents[$section];
+
+    return Inertia::render($component, [
         'role' => $request->user()?->role,
         'section' => $adminSections[$section],
         'mode' => $mode,
@@ -100,6 +121,27 @@ Route::middleware(['ngwe.auth', 'role:admin'])
             ->name('');
         Route::get('/overview', fn (Request $request) => $renderAdminOperations($request))
             ->name('.overview');
+        Route::get('/transactions', fn (Request $request) => Inertia::render('admin/transactions/All', [
+            'role' => $request->user()?->role,
+            'announcement' => 'Admin transaction records.',
+            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
+        ]))->name('.transactions');
+        Route::get('/transactions/cash-in', fn (Request $request) => Inertia::render('admin/transactions/CashIn', [
+            'role' => $request->user()?->role,
+            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
+        ]))->name('.transactions.cash-in');
+        Route::get('/transactions/cash-out', fn (Request $request) => Inertia::render('admin/transactions/CashOut', [
+            'role' => $request->user()?->role,
+            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
+        ]))->name('.transactions.cash-out');
+        Route::get('/transactions/transfer', fn (Request $request) => Inertia::render('admin/transactions/Transfer', [
+            'role' => $request->user()?->role,
+            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
+        ]))->name('.transactions.transfer');
+        Route::get('/transactions/exchange', fn (Request $request) => Inertia::render('admin/transactions/Exchange', [
+            'role' => $request->user()?->role,
+            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
+        ]))->name('.transactions.exchange');
         Route::get('/{section}', fn (Request $request, string $section) => $renderAdminOperations($request, $section))
             ->whereIn('section', array_keys($adminSections))
             ->name('.section');
@@ -108,6 +150,14 @@ Route::middleware(['ngwe.auth', 'role:admin'])
             ->name('.create');
         Route::get('/transactions/activity-logs', fn (Request $request) => $renderAdminOperations($request, 'transactions', 'list', null, 'activity-logs'))
             ->name('.transactions.activity-logs');
+        Route::get('/vault/log', fn (Request $request) => Inertia::render('admin/vault/Log', [
+            'role' => $request->user()?->role,
+            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
+        ]))->name('.vault.log');
+        Route::get('/reports/reconciliations', fn (Request $request) => Inertia::render('admin/reports/Reconciliations', [
+            'role' => $request->user()?->role,
+            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
+        ]))->name('.reports.reconciliations');
         Route::get('/{section}/{resourceId}/edit', fn (Request $request, string $section, int $resourceId) => $renderAdminOperations($request, $section, 'edit', $resourceId))
             ->whereIn('section', $adminCrudSections)
             ->whereNumber('resourceId')
@@ -125,11 +175,16 @@ Route::middleware(['ngwe.auth', 'role:cashier'])
         Route::get('/profile', [CashierController::class, 'profile'])->name('profile');
         Route::get('/{section}', CashierController::class)
             ->whereIn('section', [
+                'dashboard',
                 'teller-entry-notifications',
                 'main-vault-denomination-stock',
                 'morning-issue',
                 'end-of-day',
                 'teller-entry-history',
+                'teller-entry-history-cash-in',
+                'teller-entry-history-cash-out',
+                'teller-entry-history-transfer',
+                'teller-entry-history-exchange',
                 'main-vault-audit-log',
             ])
             ->name('section');

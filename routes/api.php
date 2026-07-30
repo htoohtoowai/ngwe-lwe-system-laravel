@@ -120,6 +120,7 @@ Route::middleware(['ngwe.auth', 'role:cashier'])->group(function (): void {
 Route::prefix('cashier')->middleware('ngwe.auth')->group(function (): void {
     Route::get('/employees', [CashierController::class, 'employees'])->middleware('role:cashier');
     Route::get('/pending-cash-ins', [CashierController::class, 'pendingCashIns'])->middleware('role:cashier');
+    Route::post('/notifications/{transaction}/read', [CashierController::class, 'markNotificationRead'])->middleware('role:cashier');
     Route::get('/vault', [CashierController::class, 'vault']);
     Route::post('/vault/entry', [VaultController::class, 'storeEntry'])->middleware('role:cashier');
     Route::get('/vault/logs', [CashierController::class, 'vaultLogs']);

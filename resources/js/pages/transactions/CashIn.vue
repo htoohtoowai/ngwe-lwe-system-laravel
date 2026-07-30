@@ -84,9 +84,53 @@ const feePaymentMethod = ref<FeePaymentMethod>('cash');
 const feeAccountId = ref<number | null>(null);
 const submitting = ref(false);
 const errors = ref<Record<string, string>>({});
+const historySearch = ref('');
+const historyStatus = ref('all');
+const historyDateFrom = ref('');
+const historyDateTo = ref('');
 const { t } = useLocale();
 
 const feeNum = computed(() => Number(props.fee ?? 0));
+const historyStatuses = computed(() =>
+    [...new Set(props.history.map((row) => row.status))].sort(),
+);
+const filteredHistory = computed(() => {
+    const query = historySearch.value.trim().toLowerCase();
+
+    return props.history.filter((row) => {
+        const reference = String(row.id).padStart(6, '0');
+        const matchesSearch =
+            query === '' ||
+            [
+                reference,
+                `#${reference}`,
+                row.customer_name,
+                row.customer_phone,
+                row.account_label,
+                row.to_account_label,
+                row.note,
+                row.amount,
+                row.status,
+            ].some((value) => String(value ?? '').toLowerCase().includes(query));
+        const matchesStatus =
+            historyStatus.value === 'all' ||
+            row.status === historyStatus.value;
+        const transactionDate = row.created_at?.slice(0, 10) ?? '';
+        const matchesDateFrom =
+            historyDateFrom.value === '' ||
+            transactionDate >= historyDateFrom.value;
+        const matchesDateTo =
+            historyDateTo.value === '' ||
+            transactionDate <= historyDateTo.value;
+
+        return (
+            matchesSearch &&
+            matchesStatus &&
+            matchesDateFrom &&
+            matchesDateTo
+        );
+    });
+});
 const account = computed(() =>
     props.accounts.find((a) => a.id === accountId.value),
 );
@@ -314,6 +358,13 @@ function onScreenshotChange(event: Event) {
     screenshot.value = input.files?.[0] ?? null;
 }
 
+function clearHistoryFilters(): void {
+    historySearch.value = '';
+    historyStatus.value = 'all';
+    historyDateFrom.value = '';
+    historyDateTo.value = '';
+}
+
 function submit() {
     submitting.value = true;
     router.post(
@@ -364,11 +415,71 @@ function submit() {
             {{ t('transaction.cashIn') }}
         </h1>
 
-        <TransactionHistoryTable
-            v-if="view === 'history'"
-            :rows="history"
-            :title="`${t('transaction.cashIn')} ${t('common.history', 'History')}`"
-        />
+        <template v-if="view === 'history'">
+            <section
+                class="mt-5 rounded-2xl border border-line bg-card p-4"
+                aria-label="Cash In history filters"
+            >
+                <div
+                    class="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(16rem,2fr)_minmax(10rem,1fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_auto]"
+                >
+                    <label class="min-w-0">
+                        <span class="bank-label">Search</span>
+                        <input
+                            v-model="historySearch"
+                            type="search"
+                            class="bank-input mt-1.5"
+                            placeholder="Reference, customer, phone, account"
+                        />
+                    </label>
+                    <label>
+                        <span class="bank-label">Status</span>
+                        <select
+                            v-model="historyStatus"
+                            class="bank-input mt-1.5"
+                        >
+                            <option value="all">All statuses</option>
+                            <option
+                                v-for="status in historyStatuses"
+                                :key="status"
+                                :value="status"
+                            >
+                                {{ status }}
+                            </option>
+                        </select>
+                    </label>
+                    <label>
+                        <span class="bank-label">From</span>
+                        <input
+                            v-model="historyDateFrom"
+                            type="date"
+                            class="bank-input mt-1.5"
+                        />
+                    </label>
+                    <label>
+                        <span class="bank-label">To</span>
+                        <input
+                            v-model="historyDateTo"
+                            type="date"
+                            class="bank-input mt-1.5"
+                        />
+                    </label>
+                    <button
+                        type="button"
+                        class="bank-button bank-button-secondary self-end rounded-pill px-4"
+                        @click="clearHistoryFilters"
+                    >
+                        Clear
+                    </button>
+                </div>
+            </section>
+
+            <TransactionHistoryTable
+                :rows="filteredHistory"
+                :title="`${t('transaction.cashIn')} ${t('common.history', 'History')}`"
+                empty-text="No Cash In transactions match these filters."
+            />
+        </template>
 
         <p
             v-if="view === 'entry' && floatLocked"

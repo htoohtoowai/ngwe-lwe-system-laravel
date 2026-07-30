@@ -2,6 +2,7 @@
 import { Link, router } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import BankLayout from '@/layouts/BankLayout.vue';
+import AdminListFrame from '@/components/admin/operations/AdminListFrame.vue';
 import { apiRequest } from '@/lib/api';
 import type { ApiRequestOptions } from '@/lib/api';
 import { readStoredToken } from '@/lib/auth-token';
@@ -88,6 +89,7 @@ type Transaction = {
     id: number;
     transaction_type: string;
     customer_name: string | null;
+    customer_phone?: string | null;
     amount: MoneyValue;
     customer_fee: MoneyValue;
     commission_amount: MoneyValue;
@@ -125,19 +127,6 @@ type VaultInventory = {
     employee_floats: FloatSnapshot[];
     total_employee_cash: MoneyValue;
     grand_physical_total: MoneyValue;
-};
-
-type VaultLog = {
-    id: number;
-    txn_type: string;
-    float_id: number | null;
-    denomination: number;
-    quantity: number;
-    transaction_id: number | null;
-    performed_by_name: string | null;
-    verified_by_name: string | null;
-    note: string | null;
-    created_at?: string | null;
 };
 
 type FloatSnapshot = {
@@ -181,17 +170,6 @@ type Summary = {
     account_snapshots?: AccountSnapshot[];
 };
 
-type Reconciliation = {
-    id: number;
-    recon_date: string | null;
-    closed_by_name: string | null;
-    closed_at: string | null;
-    grand_total: MoneyValue;
-    total_cash: MoneyValue;
-    total_digital: MoneyValue;
-    notes: string | null;
-};
-
 type AdminTab =
     | 'overview'
     | 'companies'
@@ -204,7 +182,13 @@ type AdminTab =
     | 'vault'
     | 'reports';
 type AdminMode = 'list' | 'detail' | 'create' | 'edit';
-type AdminTransactionSubsection = 'records' | 'activity-logs';
+type AdminTransactionSubsection =
+    | 'records'
+    | 'cash-in'
+    | 'cash-out'
+    | 'transfer'
+    | 'exchange'
+    | 'activity-logs';
 type AdminBreadcrumbItem = {
     label: string;
     href?: string;
@@ -231,6 +215,24 @@ const activeMode = computed<AdminMode>(() => props.mode ?? 'list');
 const activeTransactionSubsection = computed<AdminTransactionSubsection>(
     () => props.transactionSubsection ?? 'records',
 );
+const transactionPageConfig = computed(() => {
+    const configs = {
+        records: { title: 'All Transactions', type: '' },
+        'cash-in': { title: 'Cash In Transactions', type: 'cash_in' },
+        'cash-out': { title: 'Cash Out Transactions', type: 'cash_out' },
+        transfer: { title: 'Transfer Transactions', type: 'transfer' },
+        exchange: { title: 'Exchange Transactions', type: 'exchange' },
+        'activity-logs': { title: 'Activity Logs', type: '' },
+    } satisfies Record<
+        AdminTransactionSubsection,
+        { title: string; type: string }
+    >;
+
+    return configs[activeTransactionSubsection.value];
+});
+const isTransactionRecordsPage = computed(
+    () => activeTransactionSubsection.value !== 'activity-logs',
+);
 const resourceId = computed(() => props.resourceId ?? null);
 const loading = ref(false);
 const busy = ref('');
@@ -251,11 +253,73 @@ const transactions = ref<Transaction[]>([]);
 const activityLogs = ref<ActivityLog[]>([]);
 const cashFloats = ref<CashFloat[]>([]);
 const vaultInventory = ref<VaultInventory | null>(null);
-const vaultLogs = ref<VaultLog[]>([]);
 const exchangeRates = ref<ExchangeRate[]>([]);
-const reconciliations = ref<Reconciliation[]>([]);
 const commissionTiers = ref<CommissionTier[]>([]);
-const systemStatus = ref<Record<string, unknown> | null>(null);
+const adminListSearch = ref('');
+const adminListFilter = ref('');
+const adminListPageSize = ref(25);
+const adminListPage = ref(1);
+
+function filteredList<T extends object>(rows: T[]): T[] {
+    const query = adminListSearch.value.trim().toLowerCase();
+
+    return rows.filter((row) => {
+        const searchable = JSON.stringify(row).toLowerCase().includes(query);
+        const status =
+            adminListFilter.value === '' ||
+            ('is_active' in row &&
+                String(Boolean(row.is_active)) === adminListFilter.value);
+
+        return searchable && status;
+    });
+}
+
+function pagedList<T>(rows: T[]): T[] {
+    const start = (adminListPage.value - 1) * adminListPageSize.value;
+    return rows.slice(start, start + adminListPageSize.value);
+}
+
+const filteredCompanies = computed(() => filteredList(companies.value));
+const filteredServiceTypes = computed(() => filteredList(serviceTypes.value));
+const filteredExchangeRates = computed(() => filteredList(exchangeRates.value));
+const filteredAccounts = computed(() => filteredList(accounts.value));
+const filteredUsers = computed(() => filteredList(users.value));
+const filteredTiers = computed(() =>
+    filteredList(
+        tierServiceTypeId.value === null
+            ? commissionTiers.value
+            : commissionTiers.value.filter(
+                  (tier) =>
+                      tier.service_type_id === tierServiceTypeId.value,
+              ),
+    ),
+);
+const currentAdminList = computed(() => {
+    if (activeTab.value === 'companies') return filteredCompanies.value;
+    if (activeTab.value === 'service-types') return filteredServiceTypes.value;
+    if (activeTab.value === 'exchange-rates') return filteredExchangeRates.value;
+    if (activeTab.value === 'accounts') return filteredAccounts.value;
+    if (activeTab.value === 'fees') return filteredTiers.value;
+    if (activeTab.value === 'users') return filteredUsers.value;
+    return [];
+});
+const adminListPageCount = computed(() =>
+    Math.max(1, Math.ceil(currentAdminList.value.length / adminListPageSize.value)),
+);
+const paginatedCompanies = computed(() => pagedList(filteredCompanies.value));
+const paginatedServiceTypes = computed(() => pagedList(filteredServiceTypes.value));
+const paginatedExchangeRates = computed(() => pagedList(filteredExchangeRates.value));
+const paginatedAccounts = computed(() => pagedList(filteredAccounts.value));
+const paginatedTiers = computed(() => pagedList(filteredTiers.value));
+const paginatedUsers = computed(() => pagedList(filteredUsers.value));
+const statusFilterOptions = [
+    { value: 'true', label: 'Active' },
+    { value: 'false', label: 'Inactive' },
+];
+
+watch([adminListSearch, adminListFilter, adminListPageSize, activeTab], () => {
+    adminListPage.value = 1;
+});
 
 const companyForm = ref({
     name: '',
@@ -328,11 +392,70 @@ const transactionFilters = ref({
     date_from: '',
     date_to: '',
 });
+const transactionSearch = ref('');
+const transactionPageSize = ref(10);
+const transactionPage = ref(1);
+const filteredTransactions = computed(() => {
+    const query = transactionSearch.value.trim().toLowerCase();
+
+    if (query === '') {
+        return transactions.value;
+    }
+
+    return transactions.value.filter((transaction) =>
+        [
+            transaction.id,
+            `#${transaction.id}`,
+            transaction.customer_name,
+            transaction.customer_phone,
+            transaction.transaction_type,
+            transactionTypeLabel(transaction.transaction_type),
+            transaction.amount,
+            transaction.customer_fee,
+            transaction.status,
+            userName(transaction.created_by),
+        ].some((value) => String(value ?? '').toLowerCase().includes(query)),
+    );
+});
+const transactionPageCount = computed(() =>
+    Math.max(1, Math.ceil(filteredTransactions.value.length / transactionPageSize.value)),
+);
+const paginatedTransactions = computed(() => {
+    const start = (transactionPage.value - 1) * transactionPageSize.value;
+
+    return filteredTransactions.value.slice(start, start + transactionPageSize.value);
+});
+const activityPageSize = ref(10);
+const activityPage = ref(1);
+const activityPageCount = computed(() =>
+    Math.max(1, Math.ceil(activityLogs.value.length / activityPageSize.value)),
+);
+const paginatedActivityLogs = computed(() => {
+    const start = (activityPage.value - 1) * activityPageSize.value;
+
+    return activityLogs.value.slice(start, start + activityPageSize.value);
+});
 const logFilters = ref({
     user_id: null as number | null,
     action: '',
     entity_type: '',
     date: '',
+});
+
+watch(
+    [transactionSearch, transactionPageSize, activeTransactionSubsection],
+    () => {
+        transactionPage.value = 1;
+    },
+);
+watch([activityPageSize, logFilters], () => {
+    activityPage.value = 1;
+});
+watch(transactionPageCount, (count) => {
+    transactionPage.value = Math.min(transactionPage.value, count);
+});
+watch(activityPageCount, (count) => {
+    activityPage.value = Math.min(activityPage.value, count);
 });
 
 const activeCompanyCount = computed(
@@ -447,9 +570,7 @@ const adminModeLabels: Record<Exclude<AdminMode, 'list'>, string> = {
 };
 const pageHeading = computed(() => {
     if (activeTab.value === 'transactions' && activeMode.value === 'list') {
-        return activeTransactionSubsection.value === 'activity-logs'
-            ? 'Activity Logs'
-            : 'Transactions';
+        return transactionPageConfig.value.title;
     }
 
     const modeLabel =
@@ -474,9 +595,8 @@ const breadcrumbItems = computed<AdminBreadcrumbItem[]>(() => {
         items.push({
             label:
                 activeTab.value === 'transactions' &&
-                activeMode.value === 'list' &&
-                activeTransactionSubsection.value === 'activity-logs'
-                    ? 'Activity Logs'
+                activeMode.value === 'list'
+                    ? transactionPageConfig.value.title
                     : adminTabLabels[activeTab.value],
             href:
                 activeMode.value === 'list'
@@ -515,7 +635,11 @@ watch(
             accountForm.value.service_type_id = firstId;
         }
 
-        if (tierServiceTypeId.value === null) {
+        if (
+            tierServiceTypeId.value === null &&
+            activeTab.value === 'fees' &&
+            activeMode.value !== 'list'
+        ) {
             tierServiceTypeId.value = firstId;
         }
     },
@@ -1031,10 +1155,7 @@ async function refreshAll(): Promise<void> {
             logsPayload,
             floatsPayload,
             vaultPayload,
-            vaultLogsPayload,
             ratesPayload,
-            reconciliationsPayload,
-            statusPayload,
         ] = await Promise.all([
             request<ApiObject<Summary>>('/api/reports/daily-summary', {
                 query: { date: reportDate.value },
@@ -1059,17 +1180,9 @@ async function refreshAll(): Promise<void> {
             }),
             request<ApiList<CashFloat>>('/api/cash-floats'),
             request<ApiObject<VaultInventory>>('/api/vault/inventory'),
-            request<ApiList<VaultLog>>('/api/vault/log', {
-                query: { per_page: 100 },
-            }),
             request<ApiList<ExchangeRate>>('/api/exchange-rates', {
                 query: { limit: 50 },
             }),
-            request<ApiList<Reconciliation>>(
-                '/api/reports/daily-reconciliations',
-                { query: { per_page: 20 } },
-            ),
-            request<Record<string, unknown>>('/api/system/status'),
         ]);
 
         dailySummary.value = objectFrom<Summary>(dailyPayload);
@@ -1081,12 +1194,7 @@ async function refreshAll(): Promise<void> {
         activityLogs.value = listFrom<ActivityLog>(logsPayload);
         cashFloats.value = listFrom<CashFloat>(floatsPayload);
         vaultInventory.value = objectFrom<VaultInventory>(vaultPayload);
-        vaultLogs.value = listFrom<VaultLog>(vaultLogsPayload);
         exchangeRates.value = listFrom<ExchangeRate>(ratesPayload);
-        reconciliations.value = listFrom<Reconciliation>(
-            reconciliationsPayload,
-        );
-        systemStatus.value = statusPayload;
         await refreshTiers();
         syncFormsFromRoute();
     } catch (exception) {
@@ -1112,7 +1220,10 @@ function transactionQuery(): Record<
 > {
     return {
         limit: 200,
-        type: transactionFilters.value.type || null,
+        type:
+            transactionPageConfig.value.type ||
+            transactionFilters.value.type ||
+            null,
         date_from: transactionFilters.value.date_from || null,
         date_to: transactionFilters.value.date_to || null,
     };
@@ -1623,7 +1734,7 @@ async function sendBroadcastTest(): Promise<void> {
                         </form>
                     </div>
 
-                    <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         <div class="rounded-lg bg-mist p-4">
                             <p class="text-xs font-bold text-slate">Cash In</p>
                             <p class="money mt-1 font-black text-ink">
@@ -1640,6 +1751,18 @@ async function sendBroadcastTest(): Promise<void> {
                             <p class="text-xs font-bold text-slate">Transfer</p>
                             <p class="money mt-1 font-black text-ink">
                                 {{ money(dailySummary?.total_transfer) }}
+                            </p>
+                        </div>
+                        <div class="rounded-lg bg-mist p-4">
+                            <p class="text-xs font-bold text-slate">Exchange</p>
+                            <p class="money mt-1 font-black text-ink">
+                                {{ money(dailySummary?.total_exchange) }}
+                            </p>
+                        </div>
+                        <div class="rounded-lg bg-mist p-4">
+                            <p class="text-xs font-bold text-slate">Transactions</p>
+                            <p class="money mt-1 font-black text-ink">
+                                {{ dailySummary?.transaction_count ?? 0 }}
                             </p>
                         </div>
                         <div class="rounded-lg bg-mist p-4">
@@ -1749,41 +1872,6 @@ async function sendBroadcastTest(): Promise<void> {
                         </div>
                     </div>
 
-                    <h3
-                        class="mt-6 text-sm font-black tracking-[0.16em] text-slate uppercase"
-                    >
-                        Employee Floats
-                    </h3>
-                    <div class="mt-3 space-y-2">
-                        <div
-                            v-for="float in topFloatSnapshots"
-                            :key="float.float_id"
-                            class="flex items-center justify-between rounded-lg border border-line px-3 py-2"
-                        >
-                            <div class="min-w-0">
-                                <p class="truncate text-sm font-bold text-ink">
-                                    {{
-                                        float.employee_name ??
-                                        `Employee #${float.employee_id}`
-                                    }}
-                                </p>
-                                <p class="text-xs font-semibold text-slate">
-                                    {{ float.status }}
-                                </p>
-                            </div>
-                            <strong class="money shrink-0 text-sm text-ink">{{
-                                money(
-                                    float.denom_total ?? float.current_balance,
-                                )
-                            }}</strong>
-                        </div>
-                        <p
-                            v-if="topFloatSnapshots.length === 0"
-                            class="rounded-lg bg-mist px-3 py-4 text-center text-sm font-semibold text-slate"
-                        >
-                            No active float snapshot.
-                        </p>
-                    </div>
                 </div>
             </section>
 
@@ -1796,8 +1884,13 @@ async function sendBroadcastTest(): Promise<void> {
                     class="rounded-xl border border-line bg-card p-5 shadow-sm"
                 >
                     <div class="flex items-center justify-between gap-3">
-                        <h2 class="text-lg font-black text-ink">Companies</h2>
-                        <div class="flex gap-2">
+                        <h2
+                            v-if="activeMode !== 'list'"
+                            class="text-lg font-black text-ink"
+                        >
+                            Companies
+                        </h2>
+                        <div class="ml-auto flex gap-2">
                             <Link
                                 v-if="activeMode !== 'list'"
                                 :href="adminPath('companies')"
@@ -1967,14 +2060,22 @@ async function sendBroadcastTest(): Promise<void> {
                             Company not found.
                         </p>
                     </div>
-                    <div
+                    <AdminListFrame
                         v-else
-                        class="mt-5 max-h-[26rem] overflow-y-auto rounded-lg border border-line"
+                        v-model:search="adminListSearch"
+                        v-model:filter="adminListFilter"
+                        v-model:page="adminListPage"
+                        v-model:page-size="adminListPageSize"
+                        :total="filteredCompanies.length"
+                        :page-count="adminListPageCount"
+                        :filter-options="statusFilterOptions"
+                        search-placeholder="Search company"
                     >
+                    <div class="mt-4 overflow-auto rounded-lg border border-line">
                         <table class="w-full text-left text-sm">
                             <tbody class="divide-y divide-line">
                                 <tr
-                                    v-for="company in companies"
+                                    v-for="company in paginatedCompanies"
                                     :key="company.id"
                                 >
                                     <td class="px-3 py-3">
@@ -2074,6 +2175,7 @@ async function sendBroadcastTest(): Promise<void> {
                             </tbody>
                         </table>
                     </div>
+                    </AdminListFrame>
                 </div>
 
                 <div
@@ -2081,10 +2183,13 @@ async function sendBroadcastTest(): Promise<void> {
                     class="rounded-xl border border-line bg-card p-5 shadow-sm"
                 >
                     <div class="flex items-center justify-between gap-3">
-                        <h2 class="text-lg font-black text-ink">
+                        <h2
+                            v-if="activeMode !== 'list'"
+                            class="text-lg font-black text-ink"
+                        >
                             Service Types
                         </h2>
-                        <div class="flex gap-2">
+                        <div class="ml-auto flex gap-2">
                             <Link
                                 v-if="activeMode !== 'list'"
                                 :href="adminPath('service-types')"
@@ -2231,14 +2336,22 @@ async function sendBroadcastTest(): Promise<void> {
                             Service type not found.
                         </p>
                     </div>
-                    <div
+                    <AdminListFrame
                         v-else
-                        class="mt-5 max-h-[26rem] overflow-y-auto rounded-lg border border-line"
+                        v-model:search="adminListSearch"
+                        v-model:filter="adminListFilter"
+                        v-model:page="adminListPage"
+                        v-model:page-size="adminListPageSize"
+                        :total="filteredServiceTypes.length"
+                        :page-count="adminListPageCount"
+                        :filter-options="statusFilterOptions"
+                        search-placeholder="Search service type, company, operation"
                     >
+                    <div class="mt-4 overflow-auto rounded-lg border border-line">
                         <table class="w-full text-left text-sm">
                             <tbody class="divide-y divide-line">
                                 <tr
-                                    v-for="serviceType in serviceTypes"
+                                    v-for="serviceType in paginatedServiceTypes"
                                     :key="serviceType.id"
                                 >
                                     <td class="px-3 py-3">
@@ -2308,6 +2421,7 @@ async function sendBroadcastTest(): Promise<void> {
                             </tbody>
                         </table>
                     </div>
+                    </AdminListFrame>
                 </div>
 
                 <div
@@ -2315,10 +2429,13 @@ async function sendBroadcastTest(): Promise<void> {
                     class="rounded-xl border border-line bg-card p-5 shadow-sm"
                 >
                     <div class="flex items-center justify-between gap-3">
-                        <h2 class="text-lg font-black text-ink">
+                        <h2
+                            v-if="activeMode !== 'list'"
+                            class="text-lg font-black text-ink"
+                        >
                             Exchange Rates
                         </h2>
-                        <div class="flex gap-2">
+                        <div class="ml-auto flex gap-2">
                             <Link
                                 v-if="activeMode !== 'list'"
                                 :href="adminPath('exchange-rates')"
@@ -2490,9 +2607,19 @@ async function sendBroadcastTest(): Promise<void> {
                             Exchange rate not found.
                         </p>
                     </div>
-                    <div v-else class="mt-5 space-y-2">
+                    <AdminListFrame
+                        v-else
+                        v-model:search="adminListSearch"
+                        v-model:filter="adminListFilter"
+                        v-model:page="adminListPage"
+                        v-model:page-size="adminListPageSize"
+                        :total="filteredExchangeRates.length"
+                        :page-count="adminListPageCount"
+                        search-placeholder="Search currency or rate"
+                    >
+                    <div class="mt-4 space-y-2">
                         <div
-                            v-for="rate in latestRates"
+                            v-for="rate in paginatedExchangeRates"
                             :key="rate.id"
                             class="flex items-center justify-between gap-3 rounded-lg bg-mist px-3 py-2"
                         >
@@ -2543,6 +2670,7 @@ async function sendBroadcastTest(): Promise<void> {
                             </div>
                         </div>
                     </div>
+                    </AdminListFrame>
                 </div>
             </section>
 
@@ -2824,8 +2952,7 @@ async function sendBroadcastTest(): Promise<void> {
                     class="rounded-xl border border-line bg-card p-5 shadow-sm"
                 >
                     <div class="flex items-center justify-between gap-3">
-                        <h2 class="text-lg font-black text-ink">Accounts</h2>
-                        <div class="flex items-center gap-3">
+                        <div class="ml-auto flex items-center gap-3">
                             <strong class="money text-sm text-slate">{{
                                 money(digitalTotal)
                             }}</strong>
@@ -2838,9 +2965,17 @@ async function sendBroadcastTest(): Promise<void> {
                             </Link>
                         </div>
                     </div>
-                    <div
-                        class="mt-4 overflow-auto rounded-lg border border-line"
+                    <AdminListFrame
+                        v-model:search="adminListSearch"
+                        v-model:filter="adminListFilter"
+                        v-model:page="adminListPage"
+                        v-model:page-size="adminListPageSize"
+                        :total="filteredAccounts.length"
+                        :page-count="adminListPageCount"
+                        :filter-options="statusFilterOptions"
+                        search-placeholder="Search account, service, phone"
                     >
+                    <div class="mt-4 overflow-auto rounded-lg border border-line">
                         <table class="w-full min-w-[820px] text-left text-sm">
                             <thead class="bg-mist text-xs text-slate uppercase">
                                 <tr>
@@ -2857,7 +2992,7 @@ async function sendBroadcastTest(): Promise<void> {
                             </thead>
                             <tbody class="divide-y divide-line">
                                 <tr
-                                    v-for="account in accounts"
+                                    v-for="account in paginatedAccounts"
                                     :key="account.id"
                                 >
                                     <td class="px-4 py-3">
@@ -2941,6 +3076,7 @@ async function sendBroadcastTest(): Promise<void> {
                             </tbody>
                         </table>
                     </div>
+                    </AdminListFrame>
                 </div>
             </section>
 
@@ -3223,27 +3359,20 @@ async function sendBroadcastTest(): Promise<void> {
                     v-else
                     class="rounded-xl border border-line bg-card p-5 shadow-sm"
                 >
-                    <div
-                        class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"
-                    >
-                        <div>
-                            <h2 class="text-lg font-black text-ink">Tiers</h2>
-                            <p class="text-sm font-bold text-slate">
-                                {{
-                                    selectedTierService
-                                        ? serviceLabel(selectedTierService)
-                                        : 'All service types'
-                                }}
-                            </p>
-                        </div>
-                        <div class="flex flex-wrap items-end gap-2">
+                    <div class="grid items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
+                        <input
+                            v-model="adminListSearch"
+                            type="search"
+                            class="bank-input"
+                            placeholder="Search tier, service or amount"
+                        />
+                        <div class="flex items-end gap-2">
                             <label>
-                                <span class="bank-label">Service Type</span>
                                 <select
                                     v-model.number="tierServiceTypeId"
                                     class="bank-input py-2.5"
                                 >
-                                    <option :value="null">All</option>
+                                    <option :value="null">Service Type</option>
                                     <option
                                         v-for="serviceType in serviceTypes"
                                         :key="serviceType.id"
@@ -3253,18 +3382,37 @@ async function sendBroadcastTest(): Promise<void> {
                                     </option>
                                 </select>
                             </label>
-                            <Link
-                                :href="adminPath('fees', 'create')"
-                                :headers="authHeaders()"
-                                class="bank-button bank-button-primary"
-                            >
-                                Create
-                            </Link>
                         </div>
+                        <label>
+                            <select v-model="adminListFilter" class="bank-input py-2.5">
+                                <option value="">Status</option>
+                                <option
+                                    v-for="option in statusFilterOptions"
+                                    :key="option.value"
+                                    :value="option.value"
+                                >
+                                    {{ option.label }}
+                                </option>
+                            </select>
+                        </label>
+                        <Link
+                            :href="adminPath('fees', 'create')"
+                            :headers="authHeaders()"
+                            class="bank-button bank-button-primary"
+                        >
+                            Create
+                        </Link>
                     </div>
-                    <div
-                        class="mt-4 overflow-auto rounded-lg border border-line"
+                    <AdminListFrame
+                        v-model:search="adminListSearch"
+                        v-model:filter="adminListFilter"
+                        v-model:page="adminListPage"
+                        v-model:page-size="adminListPageSize"
+                        :total="filteredTiers.length"
+                        :page-count="adminListPageCount"
+                        hide-toolbar
                     >
+                    <div class="mt-4 overflow-auto rounded-lg border border-line">
                         <table class="w-full min-w-[860px] text-left text-sm">
                             <thead class="bg-mist text-xs text-slate uppercase">
                                 <tr>
@@ -3277,7 +3425,7 @@ async function sendBroadcastTest(): Promise<void> {
                             </thead>
                             <tbody class="divide-y divide-line">
                                 <tr
-                                    v-for="tier in visibleCommissionTiers"
+                                    v-for="tier in paginatedTiers"
                                     :key="tier.id"
                                 >
                                     <td
@@ -3359,6 +3507,7 @@ async function sendBroadcastTest(): Promise<void> {
                             </tbody>
                         </table>
                     </div>
+                    </AdminListFrame>
                 </div>
             </section>
 
@@ -3637,18 +3786,25 @@ async function sendBroadcastTest(): Promise<void> {
                     class="rounded-xl border border-line bg-card p-5 shadow-sm"
                 >
                     <div class="flex items-center justify-between gap-3">
-                        <h2 class="text-lg font-black text-ink">Users</h2>
                         <Link
                             :href="adminPath('users', 'create')"
                             :headers="authHeaders()"
-                            class="bank-button bank-button-primary py-2"
+                            class="bank-button bank-button-primary ml-auto py-2"
                         >
                             Create
                         </Link>
                     </div>
-                    <div
-                        class="mt-4 overflow-auto rounded-lg border border-line"
+                    <AdminListFrame
+                        v-model:search="adminListSearch"
+                        v-model:filter="adminListFilter"
+                        v-model:page="adminListPage"
+                        v-model:page-size="adminListPageSize"
+                        :total="filteredUsers.length"
+                        :page-count="adminListPageCount"
+                        :filter-options="statusFilterOptions"
+                        search-placeholder="Search staff, username, email or role"
                     >
+                    <div class="mt-4 overflow-auto rounded-lg border border-line">
                         <table class="w-full min-w-[760px] text-left text-sm">
                             <thead class="bg-mist text-xs text-slate uppercase">
                                 <tr>
@@ -3661,7 +3817,7 @@ async function sendBroadcastTest(): Promise<void> {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-line">
-                                <tr v-for="user in users" :key="user.id">
+                                <tr v-for="user in paginatedUsers" :key="user.id">
                                     <td class="px-4 py-3">
                                         <p class="font-bold text-ink">
                                             {{ user.full_name }}
@@ -3737,6 +3893,7 @@ async function sendBroadcastTest(): Promise<void> {
                             </tbody>
                         </table>
                     </div>
+                    </AdminListFrame>
                 </div>
             </section>
 
@@ -3827,25 +3984,36 @@ async function sendBroadcastTest(): Promise<void> {
                 </div>
                 <template v-else>
                     <div
-                        v-if="activeTransactionSubsection === 'records'"
+                        v-if="isTransactionRecordsPage"
                         class="rounded-xl border border-line bg-card p-5 shadow-sm"
                     >
                         <div
                             class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between"
                         >
-                            <div>
-                                <h2 class="text-lg font-black text-ink">
-                                    Transactions
-                                </h2>
-                                <p class="text-sm font-semibold text-slate">
-                                    Admin scope shows all employee transactions.
-                                </p>
-                            </div>
                             <form
-                                class="grid gap-2 sm:grid-cols-4 xl:min-w-[720px]"
+                                class="grid gap-2 sm:grid-cols-4 xl:min-w-[760px]"
+                                :class="
+                                    activeTransactionSubsection === 'records'
+                                        ? 'sm:grid-cols-5 xl:min-w-[920px]'
+                                        : ''
+                                "
                                 @submit.prevent="refreshTransactions"
                             >
                                 <label>
+                                    <span class="bank-label">Search</span>
+                                    <input
+                                        v-model="transactionSearch"
+                                        type="search"
+                                        class="bank-input py-2.5"
+                                        placeholder="Ref, customer, status"
+                                    />
+                                </label>
+                                <label
+                                    v-if="
+                                        activeTransactionSubsection ===
+                                        'records'
+                                    "
+                                >
                                     <span class="bank-label">Type</span>
                                     <select
                                         v-model="transactionFilters.type"
@@ -3918,7 +4086,7 @@ async function sendBroadcastTest(): Promise<void> {
                                 </thead>
                                 <tbody class="divide-y divide-line">
                                     <tr
-                                        v-for="transaction in transactions"
+                                        v-for="transaction in paginatedTransactions"
                                         :key="transaction.id"
                                     >
                                         <td
@@ -3999,8 +4167,72 @@ async function sendBroadcastTest(): Promise<void> {
                                             </Link>
                                         </td>
                                     </tr>
+                                    <tr v-if="filteredTransactions.length === 0">
+                                        <td
+                                            colspan="9"
+                                            class="px-4 py-8 text-center text-sm font-semibold text-slate"
+                                        >
+                                            No transactions match your search.
+                                        </td>
+                                    </tr>
                                 </tbody>
                             </table>
+                        </div>
+                        <div
+                            class="mt-4 grid items-center gap-3 text-sm font-semibold text-slate md:grid-cols-3"
+                        >
+                            <span>
+                                Showing
+                                {{
+                                    filteredTransactions.length
+                                        ? (transactionPage - 1) *
+                                              transactionPageSize +
+                                          1
+                                        : 0
+                                }}
+                                to
+                                {{
+                                    Math.min(
+                                        transactionPage * transactionPageSize,
+                                        filteredTransactions.length,
+                                    )
+                                }}
+                                of {{ filteredTransactions.length }} entries
+                            </span>
+                            <label
+                                class="flex items-center justify-center gap-2"
+                            >
+                                <span>Show</span>
+                                <select
+                                    v-model.number="transactionPageSize"
+                                    class="bank-input w-20 py-2"
+                                >
+                                    <option :value="10">10</option>
+                                    <option :value="25">25</option>
+                                    <option :value="50">50</option>
+                                    <option :value="100">100</option>
+                                </select>
+                                <span>entries</span>
+                            </label>
+                            <div class="flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    class="bank-button bank-button-secondary px-4 py-2"
+                                    :disabled="transactionPage <= 1"
+                                    @click="transactionPage--"
+                                >
+                                    Previous
+                                </button>
+                                <span>{{ transactionPage }} / {{ transactionPageCount }}</span>
+                                <button
+                                    type="button"
+                                    class="bank-button bank-button-secondary px-4 py-2"
+                                    :disabled="transactionPage >= transactionPageCount"
+                                    @click="transactionPage++"
+                                >
+                                    Next
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -4011,15 +4243,6 @@ async function sendBroadcastTest(): Promise<void> {
                         <div
                             class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between"
                         >
-                            <div>
-                                <h2 class="text-lg font-black text-ink">
-                                    Activity Logs
-                                </h2>
-                                <p class="text-sm font-semibold text-slate">
-                                    Audit records from admin changes and money
-                                    movements.
-                                </p>
-                            </div>
                             <form
                                 class="grid gap-2 sm:grid-cols-5 xl:min-w-[840px]"
                                 @submit.prevent="refreshActivityLogs"
@@ -4090,7 +4313,7 @@ async function sendBroadcastTest(): Promise<void> {
                                 </thead>
                                 <tbody class="divide-y divide-line">
                                     <tr
-                                        v-for="log in activityLogs"
+                                        v-for="log in paginatedActivityLogs"
                                         :key="log.id"
                                     >
                                         <td
@@ -4124,22 +4347,92 @@ async function sendBroadcastTest(): Promise<void> {
                                 </tbody>
                             </table>
                         </div>
+                        <div
+                            class="mt-4 grid items-center gap-3 text-sm font-semibold text-slate md:grid-cols-3"
+                        >
+                            <span>
+                                Showing
+                                {{
+                                    activityLogs.length
+                                        ? (activityPage - 1) *
+                                              activityPageSize +
+                                          1
+                                        : 0
+                                }}
+                                to
+                                {{
+                                    Math.min(
+                                        activityPage * activityPageSize,
+                                        activityLogs.length,
+                                    )
+                                }}
+                                of {{ activityLogs.length }} entries
+                            </span>
+                            <label
+                                class="flex items-center justify-center gap-2"
+                            >
+                                <span>Show</span>
+                                <select
+                                    v-model.number="activityPageSize"
+                                    class="bank-input w-20 py-2"
+                                >
+                                    <option :value="10">10</option>
+                                    <option :value="25">25</option>
+                                    <option :value="50">50</option>
+                                    <option :value="100">100</option>
+                                </select>
+                                <span>entries</span>
+                            </label>
+                            <div class="flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    class="bank-button bank-button-secondary px-4 py-2"
+                                    :disabled="activityPage <= 1"
+                                    @click="activityPage--"
+                                >
+                                    Previous
+                                </button>
+                                <span>{{ activityPage }} / {{ activityPageCount }}</span>
+                                <button
+                                    type="button"
+                                    class="bank-button bank-button-secondary px-4 py-2"
+                                    :disabled="activityPage >= activityPageCount"
+                                    @click="activityPage++"
+                                >
+                                    Next
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </template>
             </section>
 
             <section
                 v-if="activeTab === 'vault'"
-                class="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]"
+                class="grid min-w-0 gap-5 overflow-x-hidden"
             >
-                <div class="space-y-5">
+                <div class="contents">
                     <div
-                        class="rounded-xl border border-line bg-card p-5 shadow-sm"
+                        class="order-1 min-w-0 rounded-xl border border-line bg-card p-5 shadow-sm"
                     >
                         <h2 class="text-lg font-black text-ink">Main Vault</h2>
                         <p class="money mt-2 text-3xl font-black text-ink">
                             {{ money(vaultInventory?.main_vault_total) }}
                         </p>
+                        <div class="mt-4 grid gap-3 sm:grid-cols-2">
+                            <div class="rounded-lg bg-mist p-3">
+                                <p class="text-xs font-bold text-slate">Employee Cash</p>
+                                <p class="money mt-1 font-black text-ink">
+                                    {{ money(vaultInventory?.total_employee_cash) }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg bg-mist p-3">
+                                <p class="text-xs font-bold text-slate">Total Physical Cash</p>
+                                <p class="money mt-1 font-black text-ink">
+                                    {{ money(vaultInventory?.grand_physical_total) }}
+                                </p>
+                            </div>
+                        </div>
                         <div
                             class="mt-4 overflow-hidden rounded-lg border border-line"
                         >
@@ -4170,43 +4463,18 @@ async function sendBroadcastTest(): Promise<void> {
                         </div>
                     </div>
 
-                    <div
-                        class="rounded-xl border border-line bg-card p-5 shadow-sm"
-                    >
-                        <h2 class="text-lg font-black text-ink">System</h2>
-                        <dl class="mt-4 space-y-2 text-sm">
-                            <div
-                                class="flex items-center justify-between rounded-lg bg-mist px-3 py-2"
-                            >
-                                <dt class="font-bold text-slate">Name</dt>
-                                <dd class="font-black text-ink">
-                                    {{
-                                        systemStatus?.name ?? 'Ngwe Lwe System'
-                                    }}
-                                </dd>
-                            </div>
-                            <div
-                                class="flex items-center justify-between rounded-lg bg-mist px-3 py-2"
-                            >
-                                <dt class="font-bold text-slate">Status</dt>
-                                <dd class="font-black text-ink">
-                                    {{ systemStatus?.status ?? '-' }}
-                                </dd>
-                            </div>
-                        </dl>
-                    </div>
                 </div>
 
-                <div class="space-y-5">
+                <div class="contents">
                     <div
-                        class="rounded-xl border border-line bg-card p-5 shadow-sm"
+                        class="order-2 min-w-0 rounded-xl border border-line bg-card p-5 shadow-sm"
                     >
                         <h2 class="text-lg font-black text-ink">Cash Floats</h2>
                         <div
-                            class="mt-4 overflow-auto rounded-lg border border-line"
+                            class="mt-4 max-w-full overflow-hidden rounded-lg border border-line"
                         >
                             <table
-                                class="w-full min-w-[720px] text-left text-sm"
+                                class="w-full table-fixed text-left text-sm"
                             >
                                 <thead
                                     class="bg-mist text-xs text-slate uppercase"
@@ -4231,13 +4499,13 @@ async function sendBroadcastTest(): Promise<void> {
                                         >
                                             #{{ float.id }}
                                         </td>
-                                        <td class="px-4 py-3 text-slate">
+                                        <td class="break-words px-3 py-3 text-slate">
                                             {{
                                                 float.employee_name ??
                                                 `Employee #${float.employee_id}`
                                             }}
                                         </td>
-                                        <td class="px-4 py-3 text-slate">
+                                        <td class="break-words px-3 py-3 text-slate">
                                             {{ float.issued_by_name ?? '-' }}
                                         </td>
                                         <td
@@ -4254,64 +4522,12 @@ async function sendBroadcastTest(): Promise<void> {
                         </div>
                     </div>
 
-                    <div
-                        class="rounded-xl border border-line bg-card p-5 shadow-sm"
-                    >
-                        <h2 class="text-lg font-black text-ink">Vault Log</h2>
-                        <div
-                            class="mt-4 overflow-auto rounded-lg border border-line"
-                        >
-                            <table
-                                class="w-full min-w-[860px] text-left text-sm"
-                            >
-                                <thead
-                                    class="bg-mist text-xs text-slate uppercase"
-                                >
-                                    <tr>
-                                        <th class="px-4 py-3">Time</th>
-                                        <th class="px-4 py-3">Type</th>
-                                        <th class="px-4 py-3">Note</th>
-                                        <th class="px-4 py-3 text-right">
-                                            Qty
-                                        </th>
-                                        <th class="px-4 py-3">By</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-line">
-                                    <tr v-for="log in vaultLogs" :key="log.id">
-                                        <td
-                                            class="px-4 py-3 text-xs font-semibold text-slate"
-                                        >
-                                            {{ dateTime(log.created_at) }}
-                                        </td>
-                                        <td
-                                            class="px-4 py-3 font-bold text-ink"
-                                        >
-                                            {{ log.txn_type }}
-                                        </td>
-                                        <td class="px-4 py-3 text-slate">
-                                            {{ log.note ?? '-' }}
-                                        </td>
-                                        <td
-                                            class="money px-4 py-3 text-right text-slate"
-                                        >
-                                            {{ money(log.denomination) }} x
-                                            {{ log.quantity }}
-                                        </td>
-                                        <td class="px-4 py-3 text-slate">
-                                            {{ log.performed_by_name ?? '-' }}
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
                 </div>
             </section>
 
             <section
                 v-if="activeTab === 'reports'"
-                class="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]"
+                class="grid gap-5"
             >
                 <div class="space-y-5">
                     <div
@@ -4393,135 +4609,6 @@ async function sendBroadcastTest(): Promise<void> {
                         </form>
                     </div>
 
-                    <div
-                        class="rounded-xl border border-line bg-card p-5 shadow-sm"
-                    >
-                        <h2 class="text-lg font-black text-ink">
-                            Reconciliation History
-                        </h2>
-                        <div
-                            class="mt-4 overflow-auto rounded-lg border border-line"
-                        >
-                            <table
-                                class="w-full min-w-[760px] text-left text-sm"
-                            >
-                                <thead
-                                    class="bg-mist text-xs text-slate uppercase"
-                                >
-                                    <tr>
-                                        <th class="px-4 py-3">Date</th>
-                                        <th class="px-4 py-3">Closed By</th>
-                                        <th class="px-4 py-3 text-right">
-                                            Cash
-                                        </th>
-                                        <th class="px-4 py-3 text-right">
-                                            Digital
-                                        </th>
-                                        <th class="px-4 py-3 text-right">
-                                            Grand
-                                        </th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-line">
-                                    <tr
-                                        v-for="row in reconciliations"
-                                        :key="row.id"
-                                    >
-                                        <td
-                                            class="px-4 py-3 font-bold text-ink"
-                                        >
-                                            {{ row.recon_date ?? '-' }}
-                                        </td>
-                                        <td class="px-4 py-3 text-slate">
-                                            {{ row.closed_by_name ?? '-' }}
-                                        </td>
-                                        <td
-                                            class="money px-4 py-3 text-right text-slate"
-                                        >
-                                            {{ money(row.total_cash) }}
-                                        </td>
-                                        <td
-                                            class="money px-4 py-3 text-right text-slate"
-                                        >
-                                            {{ money(row.total_digital) }}
-                                        </td>
-                                        <td
-                                            class="money px-4 py-3 text-right font-bold text-ink"
-                                        >
-                                            {{ money(row.grand_total) }}
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="space-y-5">
-                    <div
-                        class="rounded-xl border border-line bg-card p-5 shadow-sm"
-                    >
-                        <h2 class="text-lg font-black text-ink">
-                            Admin Password
-                        </h2>
-                        <form
-                            class="mt-4 grid gap-3"
-                            @submit.prevent="changePassword"
-                        >
-                            <label>
-                                <span class="bank-label">Old Password</span>
-                                <input
-                                    v-model="passwordForm.old_password"
-                                    type="password"
-                                    class="bank-input"
-                                    required
-                                />
-                            </label>
-                            <label>
-                                <span class="bank-label">New Password</span>
-                                <input
-                                    v-model="passwordForm.new_password"
-                                    type="password"
-                                    minlength="8"
-                                    class="bank-input"
-                                    required
-                                />
-                            </label>
-                            <button
-                                type="submit"
-                                class="bank-button bank-button-primary"
-                                :disabled="busy !== ''"
-                            >
-                                Change Password
-                            </button>
-                        </form>
-                    </div>
-
-                    <div
-                        class="rounded-xl border border-line bg-card p-5 shadow-sm"
-                    >
-                        <h2 class="text-lg font-black text-ink">
-                            Server Tools
-                        </h2>
-                        <div class="mt-4 grid gap-3">
-                            <button
-                                type="button"
-                                class="bank-button bank-button-secondary"
-                                :disabled="busy !== ''"
-                                @click="sendBroadcastTest"
-                            >
-                                Broadcast Test
-                            </button>
-                            <button
-                                type="button"
-                                class="bank-button bank-button-danger"
-                                :disabled="busy !== ''"
-                                @click="createBackup"
-                            >
-                                Create Backup
-                            </button>
-                        </div>
-                    </div>
                 </div>
             </section>
         </div>

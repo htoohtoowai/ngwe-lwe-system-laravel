@@ -31,21 +31,24 @@ class CashierOperationsPageTest extends TestCase
         [$cashier, $token] = $this->userWithToken('cashier');
 
         foreach ([
-            '/cashier' => 'teller-entry-notifications',
-            '/cashier/teller-entry-notifications' => 'teller-entry-notifications',
-            '/cashier/main-vault-denomination-stock' => 'main-vault-denomination-stock',
-            '/cashier/morning-issue' => 'morning-issue',
-            '/cashier/end-of-day' => 'end-of-day',
-            '/cashier/teller-entry-history' => 'teller-entry-history',
-            '/cashier/main-vault-audit-log' => 'main-vault-audit-log',
-        ] as $path => $section) {
+            '/cashier' => 'cashier/Notifications',
+            '/cashier/teller-entry-notifications' => 'cashier/Notifications',
+            '/cashier/main-vault-denomination-stock' => 'cashier/VaultStock',
+            '/cashier/morning-issue' => 'cashier/MorningIssue',
+            '/cashier/end-of-day' => 'cashier/EndOfDay',
+            '/cashier/teller-entry-history' => 'cashier/history/All',
+            '/cashier/teller-entry-history-cash-in' => 'cashier/history/CashIn',
+            '/cashier/teller-entry-history-cash-out' => 'cashier/history/CashOut',
+            '/cashier/teller-entry-history-transfer' => 'cashier/history/Transfer',
+            '/cashier/teller-entry-history-exchange' => 'cashier/history/Exchange',
+            '/cashier/main-vault-audit-log' => 'cashier/VaultAuditLog',
+        ] as $path => $component) {
             $this->withHeader('Authorization', 'Bearer '.$token)
                 ->get($path)
                 ->assertOk()
                 ->assertInertia(fn (Assert $page) => $page
-                    ->component('cashier/Operations')
+                    ->component($component)
                     ->where('role', $cashier->role)
-                    ->where('section', $section)
                 );
         }
     }
@@ -104,13 +107,27 @@ class CashierOperationsPageTest extends TestCase
             ->get('/cashier')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('cashier/Operations')
+                ->component('cashier/Notifications')
                 ->has('pendingCashIns', 1)
                 ->where('pendingCashIns.0.id', $transaction->id)
                 ->where('pendingCashIns.0.creator_role', 'teller')
                 ->where('pendingCashIns.0.settlement_amount', '5000.00')
                 ->where('pendingCashIns.0.customer_fee', '0.00')
                 ->where('pendingCashIns.0.fee_payment_method', 'cash')
+            );
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/cashier/notifications/'.$transaction->id.'/read')
+            ->assertOk()
+            ->assertJsonPath('data.unread_count', 0);
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->get('/cashier')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('cashier/Notifications')
+                ->where('notificationCount', 0)
+                ->has('pendingCashIns', 1)
             );
     }
 

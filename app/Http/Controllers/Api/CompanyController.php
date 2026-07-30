@@ -86,9 +86,20 @@ class CompanyController extends Controller
 
     public function logo(Company $company): mixed
     {
-        abort_unless($company->logo_path !== null && Storage::disk('public')->exists($company->logo_path), 404, 'Logo not found.');
+        abort_unless($company->logo_path !== null, 404, 'Logo not found.');
 
-        return Storage::disk('public')->response($company->logo_path);
+        if (Storage::disk('public')->exists($company->logo_path)) {
+            return Storage::disk('public')->response($company->logo_path);
+        }
+
+        $seedLogo = database_path('seeders/company-logos/'.basename($company->logo_path));
+        abort_unless(
+            str_starts_with($company->logo_path, 'company-logos/') && is_file($seedLogo),
+            404,
+            'Logo not found.',
+        );
+
+        return response()->file($seedLogo);
     }
 
     public function update(CompanyRequest $request, Company $company): CompanyResource|JsonResponse

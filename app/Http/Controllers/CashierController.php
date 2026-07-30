@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CashFloatAssignment;
 use App\Models\Transaction;
+use App\Models\TransactionNotificationRead;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
 use App\Repositories\CashFloatRepository;
@@ -15,15 +16,34 @@ use Inertia\Response;
 
 class CashierController extends Controller
 {
-    private const DEFAULT_SECTION = 'teller-entry-notifications';
+    private const DEFAULT_SECTION = 'dashboard';
 
     private const SECTIONS = [
         self::DEFAULT_SECTION,
+        'teller-entry-notifications',
         'main-vault-denomination-stock',
         'morning-issue',
         'end-of-day',
         'teller-entry-history',
+        'teller-entry-history-cash-in',
+        'teller-entry-history-cash-out',
+        'teller-entry-history-transfer',
+        'teller-entry-history-exchange',
         'main-vault-audit-log',
+    ];
+
+    private const PAGE_COMPONENTS = [
+        'dashboard' => 'cashier/Dashboard',
+        'teller-entry-notifications' => 'cashier/Notifications',
+        'main-vault-denomination-stock' => 'cashier/VaultStock',
+        'morning-issue' => 'cashier/MorningIssue',
+        'end-of-day' => 'cashier/EndOfDay',
+        'teller-entry-history' => 'cashier/history/All',
+        'teller-entry-history-cash-in' => 'cashier/history/CashIn',
+        'teller-entry-history-cash-out' => 'cashier/history/CashOut',
+        'teller-entry-history-transfer' => 'cashier/history/Transfer',
+        'teller-entry-history-exchange' => 'cashier/history/Exchange',
+        'main-vault-audit-log' => 'cashier/VaultAuditLog',
     ];
 
     public function __construct(
@@ -40,14 +60,10 @@ class CashierController extends Controller
         $vault = $this->vault->getVaultBalance();
         $floatRows = $this->floats->list();
 
-        return Inertia::render('cashier/Operations', [
+        return Inertia::render(self::PAGE_COMPONENTS[$section], [
             'role' => $request->user()->role,
-            'section' => $section,
             'announcement' => 'Manage the main vault, Teller floats and end-of-day returns.',
-            'notificationCount' => Transaction::query()
-                ->where('transaction_type', 'cash_in')
-                ->where('status', 'PENDING_CASHIER_CONFIRM')
-                ->count(),
+            'notificationCount' => $this->unreadNotificationCount((int) $request->user()->id),
             'pendingCashIns' => $this->pendingCashIns(),
             'notes' => $this->notes(),
             'mainVault' => $this->stringify($vault),
@@ -106,6 +122,7 @@ class CashierController extends Controller
         return Inertia::render('cashier/Profile', [
             'role' => 'cashier',
             'announcement' => 'Keep your Cashier PIN private and update it regularly.',
+            'notificationCount' => $this->unreadNotificationCount((int) $request->user()->id),
             'user' => [
                 'id' => $request->user()->id,
                 'username' => $request->user()->username,
@@ -147,6 +164,19 @@ class CashierController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    private function unreadNotificationCount(int $userId): int
+    {
+        $readTransactionIds = TransactionNotificationRead::query()
+            ->where('user_id', $userId)
+            ->select('transaction_id');
+
+        return Transaction::query()
+            ->where('transaction_type', 'cash_in')
+            ->where('status', 'PENDING_CASHIER_CONFIRM')
+            ->whereNotIn('id', $readTransactionIds)
+            ->count();
     }
 
     private function cashInSettlementAmount(Transaction $transaction): string

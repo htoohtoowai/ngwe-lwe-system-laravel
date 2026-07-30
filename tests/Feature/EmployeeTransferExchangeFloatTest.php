@@ -162,7 +162,7 @@ class EmployeeTransferExchangeFloatTest extends TestCase
             ->assertCreated()
             ->assertJsonPath('data.currency', 'THB')
             ->assertJsonPath('data.exchange_rate', '145.0000')
-            ->assertJsonPath('data.customer_fee', '200.00');
+            ->assertJsonPath('data.customer_fee', '0.00');
 
         $this->assertSame('145000.00', $account->fresh()->balance);
 
@@ -194,6 +194,37 @@ class EmployeeTransferExchangeFloatTest extends TestCase
                 'exchange_payment_method' => 'account',
             ])
             ->assertCreated();
+    }
+
+    public function test_employee_thb_exchange_account_payment_does_not_require_or_deduct_denominations(): void
+    {
+        [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 20, 5_000 => 2]);
+        [$account, $serviceType] = $this->accountWithServiceType(0);
+        $this->fixedTier($serviceType->id);
+
+        ExchangeRate::query()->create([
+            'base_currency' => 'THB',
+            'quote_currency' => 'MMK',
+            'base_amount' => 1,
+            'buy_rate' => 145,
+            'sell_rate' => 148,
+        ]);
+
+        $activeFloat = app(CashFloatRepository::class)->activeForEmployee($employee->id);
+        $balanceBefore = $activeFloat->current_balance;
+
+        $this->withHeader('Authorization', 'Bearer '.$employeeToken)
+            ->postJson('/api/transactions/exchange', [
+                'account_id' => $account->id,
+                'amount' => 1_000,
+                'currency' => 'THB',
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'exchange_payment_method' => 'account',
+            ])
+            ->assertCreated();
+
+        $this->assertSame($balanceBefore, $activeFloat->fresh()->current_balance);
     }
 
     public function test_employee_thb_exchange_denom_total_mismatch_rejected(): void

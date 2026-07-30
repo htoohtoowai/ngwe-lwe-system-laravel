@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\Account;
 use App\Models\CommissionTier;
 use App\Models\Company;
 use App\Models\ExchangeRate;
@@ -72,10 +71,6 @@ class DatabaseSeeder extends Seeder
         [900_001, 1_000_000, 7_800, 1_560, 1_560],
     ];
 
-    private const DEFAULT_DEMO_COMMISSION_TIERS = [
-        [1, 999_999_999_999, 500, 100, 100],
-    ];
-
     /**
      * Seed the application's database.
      */
@@ -87,7 +82,6 @@ class DatabaseSeeder extends Seeder
 
         $this->call(MyanmarMasterDataSeeder::class);
         $this->seedSetupData();
-        $this->call(TransferScenarioSeeder::class);
 
         $admin = User::query()->where('username', 'admin')->first();
         if ($admin instanceof User) {
@@ -102,25 +96,10 @@ class DatabaseSeeder extends Seeder
 
     private function seedSetupData(): void
     {
-        $waveCompany = Company::query()->updateOrCreate(
-            ['name' => 'Demo Wave Money'],
-            [
-                'category' => 'Pay',
-                'is_active' => true,
-            ],
-        );
-
-        $kpayCompany = Company::query()->updateOrCreate(
-            ['name' => 'Demo KBZPay'],
-            [
-                'category' => 'Pay',
-                'is_active' => true,
-            ],
-        );
-
-        $serviceTypes = $this->seedServiceTypes($waveCompany, $kpayCompany);
-
-        $this->seedAccounts($serviceTypes);
+        $serviceTypes = collect([
+            'wave_wst' => $this->masterServiceType('Wave Money', 'WST'),
+            'kpay_wst' => $this->masterServiceType('KBZPay', 'WST'),
+        ]);
         $this->seedCommissionTiers($serviceTypes);
 
         ExchangeRate::query()->updateOrCreate(
@@ -136,121 +115,14 @@ class DatabaseSeeder extends Seeder
         );
     }
 
-    /**
-     * @return Collection<string, ServiceType>
-     */
-    private function seedServiceTypes(Company $waveCompany, Company $kpayCompany): Collection
+    private function masterServiceType(string $companyName, string $serviceName): ServiceType
     {
-        $serviceTypes = collect();
+        $company = Company::query()->where('name', $companyName)->firstOrFail();
 
-        foreach ([
-            'wave_wst' => ['company' => $waveCompany, 'name' => 'WST', 'operation' => 'CashIn'],
-            'cash_out' => ['company' => $waveCompany, 'name' => 'CashOut', 'operation' => 'CashOut'],
-            'transfer' => ['company' => $waveCompany, 'name' => 'Transfer', 'operation' => 'Transfer'],
-            'exchange' => ['company' => $waveCompany, 'name' => 'Exchange', 'operation' => 'Exchange'],
-            'kpay_wst' => ['company' => $kpayCompany, 'name' => 'WST', 'operation' => 'CashIn'],
-        ] as $key => $seed) {
-            $serviceTypes[$key] = ServiceType::query()->updateOrCreate(
-                [
-                    'company_id' => $seed['company']->id,
-                    'name' => $seed['name'],
-                ],
-                [
-                    'operation' => $seed['operation'],
-                    'is_active' => true,
-                ],
-            );
-        }
-
-        return $serviceTypes;
-    }
-
-    /**
-     * @param  Collection<string, ServiceType>  $serviceTypes
-     */
-    private function seedAccounts(Collection $serviceTypes): void
-    {
-        foreach ([
-            [
-                'service_type' => 'wave_wst',
-                'account_name' => 'Demo Wave Cash In',
-                'phone_number' => '09970000001',
-                'balance' => '5000000.00',
-                'is_fee_account' => false,
-            ],
-            [
-                'service_type' => 'kpay_wst',
-                'account_name' => 'Demo KBZPay Cash In',
-                'phone_number' => '09980000001',
-                'balance' => '3000000.00',
-                'is_fee_account' => false,
-            ],
-            [
-                'service_type' => 'cash_out',
-                'account_name' => 'Demo Wave Cash Out',
-                'phone_number' => '09970000002',
-                'balance' => '1000000.00',
-                'is_fee_account' => false,
-            ],
-            [
-                'service_type' => 'transfer',
-                'account_name' => 'Demo Transfer Source',
-                'phone_number' => '09970000003',
-                'balance' => '3000000.00',
-                'is_fee_account' => false,
-            ],
-            [
-                'service_type' => 'transfer',
-                'account_name' => 'Demo Transfer Target',
-                'phone_number' => '09970000004',
-                'balance' => '500000.00',
-                'is_fee_account' => false,
-            ],
-            [
-                'service_type' => 'exchange',
-                'account_name' => 'Demo Exchange Till',
-                'phone_number' => '09970000005',
-                'balance' => '1000000.00',
-                'is_fee_account' => false,
-            ],
-            [
-                'service_type' => 'wave_wst',
-                'account_name' => 'Demo Wave Fee Account',
-                'phone_number' => '09970000099',
-                'balance' => '0.00',
-                'is_fee_account' => true,
-            ],
-            [
-                'service_type' => 'kpay_wst',
-                'account_name' => 'Demo KBZPay Fee Account',
-                'phone_number' => '09980000099',
-                'balance' => '0.00',
-                'is_fee_account' => true,
-            ],
-        ] as $seed) {
-            /** @var ServiceType $serviceType */
-            $serviceType = $serviceTypes[$seed['service_type']];
-            $account = Account::query()->firstOrNew([
-                'service_type_id' => $serviceType->id,
-                'account_name' => $seed['account_name'],
-            ]);
-
-            if (! $account->exists) {
-                $account->balance = $seed['balance'];
-            }
-
-            $account->fill([
-                'phone_number' => $seed['phone_number'],
-                'commission_rate' => '0.0000',
-                'is_active' => true,
-                'is_fee_account' => $seed['is_fee_account'],
-            ]);
-            $account->save();
-        }
-
-        Account::query()
-            ->where('account_name', 'Demo Fee Account')
-            ->update(['is_active' => false]);
+        return ServiceType::query()
+            ->where('company_id', $company->id)
+            ->where('name', $serviceName)
+            ->firstOrFail();
     }
 
     /**
@@ -290,7 +162,7 @@ class DatabaseSeeder extends Seeder
         return match ($serviceTypeKey) {
             'wave_wst' => self::WAVE_WST_COMMISSION_TIERS,
             'kpay_wst' => self::KPAY_WST_COMMISSION_TIERS,
-            default => self::DEFAULT_DEMO_COMMISSION_TIERS,
+            default => [],
         };
     }
 

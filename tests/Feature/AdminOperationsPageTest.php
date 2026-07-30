@@ -63,21 +63,20 @@ class AdminOperationsPageTest extends TestCase
             );
 
         foreach ([
-            '/admin/companies' => 'companies',
-            '/admin/service-types' => 'service-types',
-            '/admin/exchange-rates' => 'exchange-rates',
-            '/admin/accounts' => 'accounts',
-            '/admin/fees' => 'fees',
-            '/admin/users' => 'users',
-            '/admin/transactions' => 'transactions',
-            '/admin/vault' => 'vault',
-            '/admin/reports' => 'reports',
-        ] as $path => $section) {
+            '/admin/companies' => ['companies', 'admin/Companies'],
+            '/admin/service-types' => ['service-types', 'admin/ServiceTypes'],
+            '/admin/exchange-rates' => ['exchange-rates', 'admin/ExchangeRates'],
+            '/admin/accounts' => ['accounts', 'admin/Accounts'],
+            '/admin/fees' => ['fees', 'admin/Fees'],
+            '/admin/users' => ['users', 'admin/Users'],
+            '/admin/vault' => ['vault', 'admin/Vault'],
+            '/admin/reports' => ['reports', 'admin/Reports'],
+        ] as $path => [$section, $component]) {
             $this->withHeader('Authorization', 'Bearer '.$token)
                 ->get($path)
                 ->assertOk()
                 ->assertInertia(fn (Assert $page) => $page
-                    ->component('admin/Operations')
+                    ->component($component)
                     ->where('role', $admin->role)
                     ->where('section', $section)
                 );
@@ -85,17 +84,28 @@ class AdminOperationsPageTest extends TestCase
 
         foreach ([
             '/admin/transactions' => 'records',
+            '/admin/transactions/cash-in' => 'cash-in',
+            '/admin/transactions/cash-out' => 'cash-out',
+            '/admin/transactions/transfer' => 'transfer',
+            '/admin/transactions/exchange' => 'exchange',
             '/admin/transactions/activity-logs' => 'activity-logs',
         ] as $path => $transactionSubsection) {
             $this->withHeader('Authorization', 'Bearer '.$token)
                 ->get($path)
                 ->assertOk()
                 ->assertInertia(fn (Assert $page) => $page
-                    ->component('admin/Operations')
+                    ->component(
+                        $transactionSubsection === 'activity-logs'
+                            ? 'admin/transactions/ActivityLogs'
+                            : match ($transactionSubsection) {
+                                'records' => 'admin/transactions/All',
+                                'cash-in' => 'admin/transactions/CashIn',
+                                'cash-out' => 'admin/transactions/CashOut',
+                                'transfer' => 'admin/transactions/Transfer',
+                                'exchange' => 'admin/transactions/Exchange',
+                            }
+                    )
                     ->where('role', $admin->role)
-                    ->where('section', 'transactions')
-                    ->where('mode', 'list')
-                    ->where('transactionSubsection', $transactionSubsection)
                 );
         }
 
@@ -228,6 +238,10 @@ class AdminOperationsPageTest extends TestCase
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->get('/api/companies/'.$companyId.'/logo')
+            ->assertOk();
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->get('/companies/'.$companyId.'/logo')
             ->assertOk();
 
         $serviceTypeId = $this->withHeader('Authorization', 'Bearer '.$token)

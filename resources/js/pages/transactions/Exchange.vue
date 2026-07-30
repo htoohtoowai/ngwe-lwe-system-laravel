@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import AccountTile from '@/components/bank/AccountTile.vue';
 import BigAmountInput from '@/components/bank/BigAmountInput.vue';
 import DenomDrawer from '@/components/bank/DenomDrawer.vue';
@@ -39,6 +39,7 @@ const props = withDefaults(
         completed?: {
             id: number;
             amount: string;
+            currency: 'MMK' | 'THB';
             fee_amount: string;
             status: string;
             created_at: string;
@@ -68,9 +69,60 @@ const submitting = ref(false);
 const errors = ref<Record<string, string>>({});
 const feePaymentMethod = ref<'cash' | 'account'>('cash');
 const feeAccountId = ref<number | null>(null);
+const historySearch = ref('');
+const historyDirection = ref<'all' | 'MMK' | 'THB'>('all');
+const historyStatus = ref('all');
+const historyDateFrom = ref('');
+const historyDateTo = ref('');
 const { t } = useLocale();
 
 const feeNum = computed(() => Number(props.fee ?? 0));
+const historyStatuses = computed(() =>
+    [...new Set(props.history.map((row) => row.status))].sort(),
+);
+const filteredHistory = computed(() => {
+    const query = historySearch.value.trim().toLowerCase();
+
+    return props.history.filter((row) => {
+        const reference = String(row.id).padStart(6, '0');
+        const matchesSearch =
+            query === '' ||
+            [
+                reference,
+                `#${reference}`,
+                row.customer_name,
+                row.customer_phone,
+                row.account_label,
+                row.to_account_label,
+                row.note,
+                row.amount,
+                row.currency,
+                row.exchange_rate,
+                row.status,
+            ].some((value) => String(value ?? '').toLowerCase().includes(query));
+        const matchesDirection =
+            historyDirection.value === 'all' ||
+            row.currency === historyDirection.value;
+        const matchesStatus =
+            historyStatus.value === 'all' ||
+            row.status === historyStatus.value;
+        const transactionDate = row.created_at?.slice(0, 10) ?? '';
+        const matchesDateFrom =
+            historyDateFrom.value === '' ||
+            transactionDate >= historyDateFrom.value;
+        const matchesDateTo =
+            historyDateTo.value === '' ||
+            transactionDate <= historyDateTo.value;
+
+        return (
+            matchesSearch &&
+            matchesDirection &&
+            matchesStatus &&
+            matchesDateFrom &&
+            matchesDateTo
+        );
+    });
+});
 const account = computed(() =>
     props.accounts.find((a) => a.id === accountId.value),
 );
@@ -101,6 +153,18 @@ const mmkSettlementAmount = computed(() =>
         ? Math.round((amount.value || 0) * Number(activeRate.value))
         : amount.value || 0,
 );
+const exchangeResultCurrency = computed<'MMK' | 'THB'>(() =>
+    currency.value === 'MMK' ? 'THB' : 'MMK',
+);
+const exchangeResultAmount = computed(() => {
+    if (currency.value === 'THB') {
+        return mmkSettlementAmount.value;
+    }
+
+    const rate = Number(activeRate.value);
+
+    return rate > 0 ? (amount.value || 0) / rate : 0;
+});
 const exchangeCustomerActionLabel = computed(() =>
     currency.value === 'THB'
         ? t('transaction.customerReceives')
@@ -111,15 +175,14 @@ const exchangeCustomerActionHint = computed(() =>
         ? `${currency.value} -> MMK`
         : t('transaction.cashReceivedCustomer'),
 );
-const exchangeCustomerActionAmount = computed(() => mmkSettlementAmount.value);
-const exchangeCustomerTotalDue = computed(
-    () => mmkSettlementAmount.value + feeNum.value,
-);
 const cashReceivedIsCash = computed(
     () => exchangePaymentDisplayMethod.value === 'cash',
 );
 const needsPayoutDenoms = computed(
-    () => props.role === 'teller' && currency.value === 'THB',
+    () =>
+        props.role === 'teller' &&
+        currency.value === 'THB' &&
+        cashReceivedIsCash.value,
 );
 const needsReceivedDenoms = computed(
     () =>
@@ -147,31 +210,25 @@ const ready = computed(
         !cashierLocked.value,
 );
 
-let feeTimer: ReturnType<typeof setTimeout>;
-watch([amount, accountId], ([nextAmount, nextAccount]) => {
-    clearTimeout(feeTimer);
-
-    if (nextAmount > 0 && nextAccount) {
-        feeTimer = setTimeout(
-            () =>
-                router.reload({
-                    only: ['fee'],
-                    data: { amount: nextAmount, account_id: nextAccount },
-                    headers: authHeaders(),
-                }),
-            350,
-        );
-    }
-});
-
 const money = (value: string | number) =>
     Number(value).toLocaleString(undefined, {
         maximumFractionDigits: currency.value === 'THB' ? 2 : 0,
+    });
+const resultMoney = (value: string | number) =>
+    Number(value).toLocaleString(undefined, {
+        maximumFractionDigits: exchangeResultCurrency.value === 'THB' ? 2 : 0,
     });
 const mmk = (value: string | number) => Number(value).toLocaleString();
 function selectExchangePayment(method: 'pay' | 'bank' | 'cash'): void {
     exchangePaymentDisplayMethod.value = method;
     exchangePaymentMethod.value = method === 'cash' ? 'cash' : 'account';
+}
+function clearHistoryFilters(): void {
+    historySearch.value = '';
+    historyDirection.value = 'all';
+    historyStatus.value = 'all';
+    historyDateFrom.value = '';
+    historyDateTo.value = '';
 }
 function authHeaders(): Record<string, string> {
     const token = readStoredToken();
@@ -228,11 +285,82 @@ function submit() {
             {{ t('transaction.exchange') }}
         </h1>
 
-        <TransactionHistoryTable
-            v-if="view === 'history'"
-            :rows="history"
-            :title="`${t('transaction.exchange')} ${t('common.history', 'History')}`"
-        />
+        <template v-if="view === 'history'">
+            <section
+                class="mt-5 rounded-2xl border border-line bg-card p-4"
+                aria-label="Exchange history filters"
+            >
+                <div
+                    class="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(14rem,2fr)_minmax(10rem,1fr)_minmax(10rem,1fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_auto]"
+                >
+                    <label class="min-w-0">
+                        <span class="bank-label">Search</span>
+                        <input
+                            v-model="historySearch"
+                            type="search"
+                            class="bank-input mt-1.5"
+                            placeholder="Reference, customer, phone, account"
+                        />
+                    </label>
+                    <label>
+                        <span class="bank-label">Direction</span>
+                        <select
+                            v-model="historyDirection"
+                            class="bank-input mt-1.5"
+                        >
+                            <option value="all">All directions</option>
+                            <option value="MMK">MMK → THB</option>
+                            <option value="THB">THB → MMK</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span class="bank-label">Status</span>
+                        <select
+                            v-model="historyStatus"
+                            class="bank-input mt-1.5"
+                        >
+                            <option value="all">All statuses</option>
+                            <option
+                                v-for="status in historyStatuses"
+                                :key="status"
+                                :value="status"
+                            >
+                                {{ status }}
+                            </option>
+                        </select>
+                    </label>
+                    <label>
+                        <span class="bank-label">From</span>
+                        <input
+                            v-model="historyDateFrom"
+                            type="date"
+                            class="bank-input mt-1.5"
+                        />
+                    </label>
+                    <label>
+                        <span class="bank-label">To</span>
+                        <input
+                            v-model="historyDateTo"
+                            type="date"
+                            class="bank-input mt-1.5"
+                        />
+                    </label>
+                    <button
+                        type="button"
+                        class="bank-button bank-button-secondary self-end rounded-pill px-4"
+                        @click="clearHistoryFilters"
+                    >
+                        Clear
+                    </button>
+                </div>
+            </section>
+
+            <TransactionHistoryTable
+                :rows="filteredHistory"
+                :title="`${t('transaction.exchange')} ${t('common.history', 'History')}`"
+                empty-text="No exchange transactions match these filters."
+            />
+        </template>
 
         <p
             v-if="view === 'entry' && floatLocked"
@@ -281,7 +409,9 @@ function submit() {
                     </dt>
                     <dd class="money text-lg font-bold">
                         {{ mmk(completed.amount) }}
-                        <span class="text-[11px] text-slate">MMK</span>
+                        <span class="text-[11px] text-slate">{{
+                            completed.currency
+                        }}</span>
                     </dd>
                 </div>
             </dl>
@@ -485,9 +615,11 @@ function submit() {
                         <p class="money text-sm font-bold">{{ mmk(activeRate) }}</p>
                     </div>
                     <div class="rounded-field bg-mist px-4 py-3">
-                        <p class="text-[13px] font-semibold text-slate">MMK</p>
+                        <p class="text-[13px] font-semibold text-slate">
+                            {{ exchangeResultCurrency }}
+                        </p>
                         <p class="money text-sm font-bold">
-                            {{ mmk(mmkSettlementAmount) }}
+                            {{ resultMoney(exchangeResultAmount) }}
                         </p>
                     </div>
                 </div>
@@ -637,14 +769,10 @@ function submit() {
                     <p
                         class="money text-right text-2xl font-black text-balance"
                     >
-                        {{
-                            mmk(
-                                currency === 'MMK'
-                                    ? exchangeCustomerTotalDue
-                                    : exchangeCustomerActionAmount,
-                            )
-                        }}
-                        <span class="text-xs text-slate">MMK</span>
+                        {{ resultMoney(exchangeResultAmount) }}
+                        <span class="text-xs text-slate">{{
+                            exchangeResultCurrency
+                        }}</span>
                     </p>
                 </div>
             </div>

@@ -147,7 +147,7 @@ class ExchangeRateAndTransactionTest extends TestCase
             ->assertJsonPath('data.transaction_type', 'exchange')
             ->assertJsonPath('data.currency', 'MMK')
             ->assertJsonPath('data.exchange_rate', '148.0000')
-            ->assertJsonPath('data.customer_fee', '300.00')
+            ->assertJsonPath('data.customer_fee', '0.00')
             ->assertJsonPath('data.balance_change', '100000.00');
 
         $this->assertSame('100000.00', $account->fresh()->balance);

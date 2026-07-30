@@ -73,6 +73,7 @@ class TransactionEntryController extends Controller
     {
         return Inertia::render('transactions/Exchange', [
             ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'exchange'),
+            'fee' => Money::normalize(0),
             'rate' => $this->rate(),
         ]);
     }
@@ -81,6 +82,7 @@ class TransactionEntryController extends Controller
     {
         return Inertia::render('transactions/Exchange', [
             ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'exchange', 'history'),
+            'fee' => Money::normalize(0),
             'rate' => $this->rate(),
         ]);
     }
@@ -203,7 +205,10 @@ class TransactionEntryController extends Controller
                 'company' => $account->serviceType?->company?->name ?? 'Account',
                 'company_id' => $account->serviceType?->company_id,
                 'company_category' => $account->serviceType?->company?->category,
-                'company_logo_url' => $this->companyLogoUrl($account->serviceType?->company?->logo_path),
+                'company_logo_url' => $this->companyLogoUrl(
+                    $account->serviceType?->company_id,
+                    $account->serviceType?->company?->logo_path,
+                ),
                 'service' => $account->serviceType?->name ?? 'Account',
                 'service_type_id' => $account->service_type_id,
                 'name' => $account->account_name,
@@ -229,7 +234,10 @@ class TransactionEntryController extends Controller
                 'company_id' => $serviceType->company_id,
                 'company' => $serviceType->company?->name ?? 'Account',
                 'company_category' => $serviceType->company?->category,
-                'company_logo_url' => $this->companyLogoUrl($serviceType->company?->logo_path),
+                'company_logo_url' => $this->companyLogoUrl(
+                    $serviceType->company_id,
+                    $serviceType->company?->logo_path,
+                ),
                 'name' => $serviceType->name,
                 'operation' => $serviceType->operation,
             ])
@@ -237,9 +245,11 @@ class TransactionEntryController extends Controller
             ->all();
     }
 
-    private function companyLogoUrl(?string $path): ?string
+    private function companyLogoUrl(?int $companyId, ?string $path): ?string
     {
-        return $path ? asset('storage/'.$path) : null;
+        return $companyId !== null && $path
+            ? route('companies.logo', ['company' => $companyId])
+            : null;
     }
 
     private function selectedFloat(Request $request): ?CashFloatAssignment
@@ -357,6 +367,7 @@ class TransactionEntryController extends Controller
         return [
             'id' => $transaction->id,
             'amount' => Money::normalize($transaction->amount ?? 0),
+            'currency' => $transaction->currency,
             'fee_amount' => Money::normalize($transaction->customer_fee ?? 0),
             'status' => $transaction->status,
             'created_at' => $transaction->created_at?->toDateTimeString() ?? now()->toDateTimeString(),

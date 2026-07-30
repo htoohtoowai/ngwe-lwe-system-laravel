@@ -14,6 +14,7 @@ use App\Models\CashFloatAssignment;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Repositories\AccountRepository;
+use App\Support\Money;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -77,7 +78,26 @@ class RealtimeBroadcastService
      */
     private function transactionPayload(Transaction $transaction): array
     {
-        return (new TransactionResource($transaction->refresh()))->resolve();
+        $transaction = $transaction->refresh()->load('creator');
+        $payload = (new TransactionResource($transaction))->resolve();
+
+        if ($transaction->transaction_type !== 'cash_in') {
+            return $payload;
+        }
+
+        $settlementDenominations = $transaction->creator?->role === 'teller'
+            ? ($transaction->handoff_denominations ?? [])
+            : ($transaction->received_denominations ?? []);
+
+        return array_merge($payload, [
+            'teller' => $transaction->creator?->full_name
+                ?? $transaction->creator?->username
+                ?? 'Teller',
+            'creator_role' => $transaction->creator?->role,
+            'settlement_amount' => Money::normalize(
+                Money::denominationTotal($settlementDenominations),
+            ),
+        ]);
     }
 
     /**

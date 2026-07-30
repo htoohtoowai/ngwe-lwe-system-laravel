@@ -61,6 +61,7 @@ type NavIcon =
     | 'settings';
 type NavChild = {
     label: string;
+    labelMm?: string;
     href: string;
     exactOnly?: boolean;
 };
@@ -77,55 +78,70 @@ type NavItem = {
 const NAV: NavItem[] = [
     {
         label: 'Overview',
-        labelMm: 'အနှစ်ချုပ်',
+        labelMm: 'လုပ်ငန်းအနှစ်ချုပ်',
         href: '/dashboard',
         icon: 'overview',
         roles: ['teller'],
         section: 'Banking',
     },
     {
-        label: 'Teller entry notifications',
-        labelMm: 'Teller စာရင်းသွင်း အသိပေးချက်များ',
+        label: 'Dashboard',
+        labelMm: 'လုပ်ငန်းအနှစ်ချုပ်',
         href: '/cashier',
+        icon: 'overview',
+        roles: ['cashier'],
+        section: 'Banking',
+    },
+    {
+        label: 'Pending Cash In',
+        labelMm: 'စစ်ဆေးရန်ငွေသွင်း',
+        href: '/cashier/teller-entry-notifications',
         icon: 'transactions',
         roles: ['cashier'],
         section: 'Banking',
     },
     {
-        label: 'Main vault denomination stock',
-        labelMm: 'ပင်မငွေတိုက် ငွေစက္ကူလက်ကျန်',
+        label: 'Vault Stock',
+        labelMm: 'ငွေတိုက်လက်ကျန်',
         href: '/cashier/main-vault-denomination-stock',
         icon: 'vault',
         roles: ['cashier'],
         section: 'Banking',
     },
     {
-        label: 'Morning issue',
-        labelMm: 'မနက်ပိုင်းငွေထုတ်ပေးခြင်း',
+        label: 'Issue Float',
+        labelMm: 'ကောင်တာငွေထုတ်ပေး',
         href: '/cashier/morning-issue',
         icon: 'floats',
         roles: ['cashier'],
         section: 'Banking',
     },
     {
-        label: 'End-of-day',
-        labelMm: 'နေ့ကုန်စာရင်းပိတ်',
+        label: 'Close Floats',
+        labelMm: 'နေ့ကုန်ငွေပြန်စစ်',
         href: '/cashier/end-of-day',
         icon: 'reconcile',
         roles: ['cashier'],
         section: 'Banking',
     },
     {
-        label: 'Teller entry history',
-        labelMm: 'Teller စာရင်းသွင်းမှတ်တမ်း',
+        label: 'Teller History',
+        labelMm: 'ကောင်တာမှတ်တမ်း',
         href: '/cashier/teller-entry-history',
         icon: 'reports',
         roles: ['cashier'],
         section: 'Banking',
+        children: [
+            { label: 'All', labelMm: 'အားလုံး', href: '/cashier/teller-entry-history' },
+            { label: 'Cash In', labelMm: 'ငွေသွင်း', href: '/cashier/teller-entry-history-cash-in' },
+            { label: 'Cash Out', labelMm: 'ငွေထုတ်', href: '/cashier/teller-entry-history-cash-out' },
+            { label: 'Transfer', labelMm: 'ငွေလွှဲ', href: '/cashier/teller-entry-history-transfer' },
+            { label: 'Exchange', labelMm: 'ငွေလဲ', href: '/cashier/teller-entry-history-exchange' },
+        ],
     },
     {
-        label: 'Main vault audit log',
-        labelMm: 'ပင်မငွေတိုက် စစ်ဆေးမှတ်တမ်း',
+        label: 'Vault Log',
+        labelMm: 'ငွေတိုက်မှတ်တမ်း',
         href: '/cashier/main-vault-audit-log',
         icon: 'settings',
         roles: ['cashier'],
@@ -141,7 +157,7 @@ const NAV: NavItem[] = [
     },
     {
         label: 'Counter',
-        labelMm: 'ကောင်တာ',
+        labelMm: 'ငွေလုပ်ငန်းကောင်တာ',
         href: '/teller',
         icon: 'counter',
         roles: ['teller'],
@@ -149,7 +165,7 @@ const NAV: NavItem[] = [
     },
     {
         label: 'My Float',
-        labelMm: 'ကိုယ်ပိုင်ငွေသား',
+        labelMm: 'ကောင်တာငွေလက်ကျန်',
         href: '/teller/float',
         icon: 'floats',
         roles: ['teller'],
@@ -157,11 +173,13 @@ const NAV: NavItem[] = [
         children: [
             {
                 label: 'Current',
+                labelMm: 'လက်ရှိလက်ကျန်',
                 href: '/teller/float',
                 exactOnly: true,
             },
             {
                 label: 'History',
+                labelMm: 'လက်ကျန်မှတ်တမ်း',
                 href: '/teller/float/history',
             },
         ],
@@ -176,11 +194,13 @@ const NAV: NavItem[] = [
         children: [
             {
                 label: 'Entry',
+                labelMm: 'ငွေသွင်းစာရင်း',
                 href: '/transactions/cash-in',
                 exactOnly: true,
             },
             {
                 label: 'History',
+                labelMm: 'ငွေသွင်းမှတ်တမ်း',
                 href: '/transactions/cash-in/history',
             },
         ],
@@ -195,18 +215,20 @@ const NAV: NavItem[] = [
         children: [
             {
                 label: 'Entry',
+                labelMm: 'ငွေထုတ်စာရင်း',
                 href: '/transactions/cash-out',
                 exactOnly: true,
             },
             {
                 label: 'History',
+                labelMm: 'ငွေထုတ်မှတ်တမ်း',
                 href: '/transactions/cash-out/history',
             },
         ],
     },
     {
         label: 'Transfer',
-        labelMm: 'လွှဲပြောင်း',
+        labelMm: 'ငွေလွှဲ',
         href: '/transactions/transfer',
         icon: 'transfer',
         roles: ['teller'],
@@ -214,11 +236,13 @@ const NAV: NavItem[] = [
         children: [
             {
                 label: 'Entry',
+                labelMm: 'ငွေလွှဲစာရင်း',
                 href: '/transactions/transfer',
                 exactOnly: true,
             },
             {
                 label: 'History',
+                labelMm: 'ငွေလွှဲမှတ်တမ်း',
                 href: '/transactions/transfer/history',
             },
         ],
@@ -233,18 +257,20 @@ const NAV: NavItem[] = [
         children: [
             {
                 label: 'Entry',
+                labelMm: 'ငွေလဲစာရင်း',
                 href: '/transactions/exchange',
                 exactOnly: true,
             },
             {
                 label: 'History',
+                labelMm: 'ငွေလဲမှတ်တမ်း',
                 href: '/transactions/exchange/history',
             },
         ],
     },
     {
         label: 'Overview',
-        labelMm: 'အနှစ်ချုပ်',
+        labelMm: 'လုပ်ငန်းအနှစ်ချုပ်',
         href: '/admin',
         icon: 'overview',
         roles: ['admin'],
@@ -252,37 +278,40 @@ const NAV: NavItem[] = [
     },
     {
         label: 'Master Data',
-        labelMm: 'အခြေခံဒေတာ',
+        labelMm: 'စနစ်အခြေခံစာရင်း',
         href: '/admin/companies',
         icon: 'settings',
         roles: ['admin'],
         section: 'Admin',
         children: [
             {
-                label: 'Companies',
+                label: 'Providers',
+                labelMm: 'ဝန်ဆောင်မှုပေးသူ',
                 href: '/admin/companies',
             },
             {
-                label: 'Service Types',
+                label: 'Services',
+                labelMm: 'ဝန်ဆောင်မှု',
                 href: '/admin/service-types',
             },
             {
                 label: 'Exchange Rates',
+                labelMm: 'ငွေလဲနှုန်း',
                 href: '/admin/exchange-rates',
             },
         ],
     },
     {
-        label: 'Companies',
-        labelMm: 'ကုမ္ပဏီများ',
+        label: 'Providers',
+        labelMm: 'ဝန်ဆောင်မှုပေးသူ',
         href: '/admin/companies',
         icon: 'companies',
         roles: [],
         section: 'Admin',
     },
     {
-        label: 'Service Types',
-        labelMm: 'ဝန်ဆောင်မှုအမျိုးအစား',
+        label: 'Services',
+        labelMm: 'ဝန်ဆောင်မှု',
         href: '/admin/service-types',
         icon: 'services',
         roles: [],
@@ -298,23 +327,23 @@ const NAV: NavItem[] = [
     },
     {
         label: 'Accounts',
-        labelMm: 'အကောင့်များ',
+        labelMm: 'ငွေစာရင်းအကောင့်',
         href: '/admin/accounts',
         icon: 'accounts',
         roles: ['admin'],
         section: 'Admin',
     },
     {
-        label: 'Fees',
-        labelMm: 'ဝန်ဆောင်ခ',
+        label: 'Fee Rules',
+        labelMm: 'ဝန်ဆောင်ခနှုန်းထား',
         href: '/admin/fees',
         icon: 'fees',
         roles: ['admin'],
         section: 'Admin',
     },
     {
-        label: 'Users',
-        labelMm: 'အသုံးပြုသူများ',
+        label: 'Staff & Access',
+        labelMm: 'ဝန်ထမ်းနှင့်အသုံးပြုသူ',
         href: '/admin/users',
         icon: 'users',
         roles: ['admin'],
@@ -322,37 +351,67 @@ const NAV: NavItem[] = [
     },
     {
         label: 'Transactions',
-        labelMm: 'စာရင်းသွင်းမှုများ',
+        labelMm: 'ငွေလုပ်ငန်းမှတ်တမ်း',
         href: '/admin/transactions',
         icon: 'transactions',
         roles: ['admin'],
         section: 'Admin',
         children: [
             {
-                label: 'Transaction Records',
+                label: 'All Transactions',
+                labelMm: 'မှတ်တမ်းအားလုံး',
                 href: '/admin/transactions',
             },
             {
+                label: 'Cash In',
+                labelMm: 'ငွေသွင်း',
+                href: '/admin/transactions/cash-in',
+            },
+            {
+                label: 'Cash Out',
+                labelMm: 'ငွေထုတ်',
+                href: '/admin/transactions/cash-out',
+            },
+            {
+                label: 'Transfer',
+                labelMm: 'ငွေလွှဲ',
+                href: '/admin/transactions/transfer',
+            },
+            {
+                label: 'Exchange',
+                labelMm: 'ငွေလဲ',
+                href: '/admin/transactions/exchange',
+            },
+            {
                 label: 'Activity Logs',
+                labelMm: 'လုပ်ဆောင်ချက်မှတ်တမ်း',
                 href: '/admin/transactions/activity-logs',
             },
         ],
     },
     {
         label: 'Vault',
-        labelMm: 'ငွေတိုက်',
+        labelMm: 'ပင်မငွေတိုက်',
         href: '/admin/vault',
         icon: 'vault',
         roles: ['admin'],
         section: 'Admin',
+        children: [
+            { label: 'Overview', labelMm: 'ငွေတိုက်အနှစ်ချုပ်', href: '/admin/vault' },
+            { label: 'Vault Log', labelMm: 'ငွေတိုက်မှတ်တမ်း', href: '/admin/vault/log' },
+        ],
     },
     {
-        label: 'Reports',
-        labelMm: 'အစီရင်ခံစာ',
+        label: 'Closing & Reports',
+        labelMm: 'စာရင်းပိတ်နှင့်အစီရင်ခံစာ',
         href: '/admin/reports',
         icon: 'reports',
         roles: ['admin'],
         section: 'Admin',
+        children: [
+            { label: 'Daily Closing', labelMm: 'နေ့စဉ်စာရင်းပိတ်', href: '/admin/reports' },
+            { label: 'Reconciliation History', labelMm: 'စာရင်းညှိမှတ်တမ်း', href: '/admin/reports/reconciliations' },
+        ],
     },
 ];
 const iconPaths: Record<NavIcon, string[]> = {
@@ -458,7 +517,8 @@ const sectionLabel = (section: NavSection) =>
     );
 const navLabel = (item: NavItem) =>
     lang.value === 'mm' ? item.labelMm : item.label;
-const navChildLabel = (item: NavChild) => item.label;
+const navChildLabel = (item: NavChild) =>
+    lang.value === 'mm' ? (item.labelMm ?? item.label) : item.label;
 const roleLabel = computed(() => t(`role.${props.role}`));
 const displayName = computed(
     () => user.value?.full_name ?? user.value?.username ?? roleLabel.value,

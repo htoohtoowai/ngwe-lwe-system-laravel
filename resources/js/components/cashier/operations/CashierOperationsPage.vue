@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import DenomDrawer from '@/components/bank/DenomDrawer.vue';
 import PinSeal from '@/components/teller/PinSeal.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
@@ -72,11 +72,16 @@ type PendingCashIn = {
     created_at: string | null;
 };
 type CashierSection =
+    | 'dashboard'
     | 'teller-entry-notifications'
     | 'main-vault-denomination-stock'
     | 'morning-issue'
     | 'end-of-day'
     | 'teller-entry-history'
+    | 'teller-entry-history-cash-in'
+    | 'teller-entry-history-cash-out'
+    | 'teller-entry-history-transfer'
+    | 'teller-entry-history-exchange'
     | 'main-vault-audit-log';
 type BreadcrumbItem = {
     label: string;
@@ -100,14 +105,20 @@ const props = defineProps<{
 }>();
 
 const sectionLabels: Record<CashierSection, string> = {
+    dashboard: 'Cashier dashboard',
     'teller-entry-notifications': 'Teller entry notifications',
     'main-vault-denomination-stock': 'Main vault denomination stock',
     'morning-issue': 'Morning issue',
     'end-of-day': 'End-of-day',
     'teller-entry-history': 'Teller entry history',
+    'teller-entry-history-cash-in': 'Cash In history',
+    'teller-entry-history-cash-out': 'Cash Out history',
+    'teller-entry-history-transfer': 'Transfer history',
+    'teller-entry-history-exchange': 'Exchange history',
     'main-vault-audit-log': 'Main vault audit log',
 };
 const sectionDescriptions: Record<CashierSection, string> = {
+    dashboard: 'Main vault, Teller floats and pending work at a glance.',
     'teller-entry-notifications':
         'New Teller Cash In entries waiting for cashier review.',
     'main-vault-denomination-stock':
@@ -115,14 +126,23 @@ const sectionDescriptions: Record<CashierSection, string> = {
     'morning-issue': 'Issue counted cash float notes to one Teller.',
     'end-of-day': 'Verify Teller float returns and add cash back to the vault.',
     'teller-entry-history': 'Read-only Teller transaction history.',
+    'teller-entry-history-cash-in': 'Read-only Teller Cash In history.',
+    'teller-entry-history-cash-out': 'Read-only Teller Cash Out history.',
+    'teller-entry-history-transfer': 'Read-only Teller Transfer history.',
+    'teller-entry-history-exchange': 'Read-only Teller Exchange history.',
     'main-vault-audit-log': 'Every main vault denomination movement.',
 };
 const sectionPaths: Record<CashierSection, string> = {
-    'teller-entry-notifications': '/cashier',
+    dashboard: '/cashier',
+    'teller-entry-notifications': '/cashier/teller-entry-notifications',
     'main-vault-denomination-stock': '/cashier/main-vault-denomination-stock',
     'morning-issue': '/cashier/morning-issue',
     'end-of-day': '/cashier/end-of-day',
     'teller-entry-history': '/cashier/teller-entry-history',
+    'teller-entry-history-cash-in': '/cashier/teller-entry-history-cash-in',
+    'teller-entry-history-cash-out': '/cashier/teller-entry-history-cash-out',
+    'teller-entry-history-transfer': '/cashier/teller-entry-history-transfer',
+    'teller-entry-history-exchange': '/cashier/teller-entry-history-exchange',
     'main-vault-audit-log': '/cashier/main-vault-audit-log',
 };
 
@@ -144,6 +164,19 @@ const transactionSearch = ref('');
 const transactionType = ref('all');
 const transactionDateFrom = ref('');
 const transactionDateTo = ref('');
+const transactionPage = ref(1);
+const transactionPageSize = ref(25);
+const vaultLogSearch = ref('');
+const vaultLogType = ref('all');
+const vaultLogPage = ref(1);
+const vaultLogPageSize = ref(25);
+const pendingSearch = ref('');
+const pendingPage = ref(1);
+const pendingPageSize = ref(25);
+const floatSearch = ref('');
+const floatStatus = ref('pending');
+const livePendingCashIns = ref<PendingCashIn[]>([...props.pendingCashIns]);
+const unreadNotificationCount = ref(props.notificationCount ?? 0);
 const pendingReview = ref<PendingCashIn | null>(null);
 const pendingBusy = ref<number | null>(null);
 const pendingPinOpen = ref(false);
@@ -156,6 +189,9 @@ let stopRealtimeFallback: (() => void) | null = null;
 let realtimeConnected = false;
 
 const activeSection = computed(() => props.section);
+const isTransactionHistorySection = computed(() =>
+    activeSection.value.startsWith('teller-entry-history'),
+);
 const pageTitle = computed(() => sectionLabels[activeSection.value]);
 const pageDescription = computed(
     () => sectionDescriptions[activeSection.value],
@@ -264,11 +300,19 @@ const pendingReviewSettlementLabel = computed(() =>
 );
 const filteredTransactions = computed(() => {
     const query = transactionSearch.value.trim().toLowerCase();
+    const fixedType = {
+        'teller-entry-history-cash-in': 'cash_in',
+        'teller-entry-history-cash-out': 'cash_out',
+        'teller-entry-history-transfer': 'transfer',
+        'teller-entry-history-exchange': 'exchange',
+    }[activeSection.value] ?? null;
 
     return props.transactions.filter((transaction) => {
         const matchesType =
-            transactionType.value === 'all' ||
-            transaction.type === transactionType.value;
+            fixedType !== null
+                ? transaction.type === fixedType
+                : transactionType.value === 'all' ||
+                  transaction.type === transactionType.value;
         const haystack = [
             String(transaction.id),
             transaction.type,
@@ -293,6 +337,97 @@ const filteredTransactions = computed(() => {
         );
     });
 });
+const transactionPageCount = computed(() =>
+    Math.max(1, Math.ceil(filteredTransactions.value.length / transactionPageSize.value)),
+);
+const paginatedTransactions = computed(() =>
+    filteredTransactions.value.slice(
+        (transactionPage.value - 1) * transactionPageSize.value,
+        transactionPage.value * transactionPageSize.value,
+    ),
+);
+const vaultLogTypes = computed(() => [...new Set(props.vaultLogs.map((log) => log.type))]);
+const filteredVaultLogs = computed(() => {
+    const query = vaultLogSearch.value.trim().toLowerCase();
+    return props.vaultLogs.filter((log) =>
+        (vaultLogType.value === 'all' || log.type === vaultLogType.value) &&
+        (!query || [log.id, log.type, log.note, log.performed_by, log.denomination, log.quantity]
+            .some((value) => String(value ?? '').toLowerCase().includes(query))),
+    );
+});
+const vaultLogPageCount = computed(() =>
+    Math.max(1, Math.ceil(filteredVaultLogs.value.length / vaultLogPageSize.value)),
+);
+const paginatedVaultLogs = computed(() =>
+    filteredVaultLogs.value.slice(
+        (vaultLogPage.value - 1) * vaultLogPageSize.value,
+        vaultLogPage.value * vaultLogPageSize.value,
+    ),
+);
+const filteredPendingCashIns = computed(() => {
+    const query = pendingSearch.value.trim().toLowerCase();
+    return livePendingCashIns.value.filter((entry) =>
+        !query || [entry.id, entry.customer_name, entry.teller, entry.amount]
+            .some((value) => String(value ?? '').toLowerCase().includes(query)),
+    );
+});
+const pendingCashInTotal = computed(() =>
+    livePendingCashIns.value.reduce((sum, entry) => sum + Number(entry.amount ?? 0), 0),
+);
+const pendingPageCount = computed(() =>
+    Math.max(1, Math.ceil(filteredPendingCashIns.value.length / pendingPageSize.value)),
+);
+const paginatedPendingCashIns = computed(() =>
+    filteredPendingCashIns.value.slice(
+        (pendingPage.value - 1) * pendingPageSize.value,
+        pendingPage.value * pendingPageSize.value,
+    ),
+);
+const pendingReconciliationFloats = computed(() =>
+    props.floats.filter((float) => float.status === 'PENDING_RECONCILIATION'),
+);
+const pendingReturnTotal = computed(() =>
+    pendingReconciliationFloats.value.reduce(
+        (sum, float) => sum + floatReturnTotal(float),
+        0,
+    ),
+);
+const filteredEndDayFloats = computed(() => {
+    const query = floatSearch.value.trim().toLowerCase();
+    return props.floats.filter((float) => {
+        const matchesStatus =
+            floatStatus.value === 'all' ||
+            (floatStatus.value === 'pending'
+                ? float.status === 'PENDING_RECONCILIATION'
+                : float.status !== 'PENDING_RECONCILIATION');
+        const matchesSearch =
+            !query ||
+            [float.id, float.employee_name, float.status]
+                .some((value) => String(value ?? '').toLowerCase().includes(query));
+        return matchesStatus && matchesSearch;
+    });
+});
+watch(
+    [transactionSearch, transactionType, transactionDateFrom, transactionDateTo, transactionPageSize],
+    () => (transactionPage.value = 1),
+);
+watch([vaultLogSearch, vaultLogType, vaultLogPageSize], () => (vaultLogPage.value = 1));
+watch([pendingSearch, pendingPageSize], () => (pendingPage.value = 1));
+watch(
+    () => props.pendingCashIns,
+    (rows) => {
+        livePendingCashIns.value = [...rows];
+    },
+);
+watch(
+    () => props.notificationCount,
+    (count) => {
+        unreadNotificationCount.value = count ?? 0;
+    },
+);
+watch(transactionPageCount, (count) => (transactionPage.value = Math.min(transactionPage.value, count)));
+watch(vaultLogPageCount, (count) => (vaultLogPage.value = Math.min(vaultLogPage.value, count)));
+watch(pendingPageCount, (count) => (pendingPage.value = Math.min(pendingPage.value, count)));
 
 function denominationTotal(denoms: Denoms): number {
     return Object.entries(denoms).reduce(
@@ -376,13 +511,47 @@ function reload() {
 
 const refreshCashierData = () => reload();
 
+function addRealtimePendingCashIn(payload: Record<string, unknown>): void {
+    const transaction = payload.transaction as Record<string, unknown> | undefined;
+
+    if (
+        !transaction ||
+        transaction.transaction_type !== 'cash_in' ||
+        transaction.status !== 'PENDING_CASHIER_CONFIRM'
+    ) {
+        return;
+    }
+
+    const id = Number(transaction.id);
+    if (livePendingCashIns.value.some((entry) => entry.id === id)) {
+        return;
+    }
+
+    livePendingCashIns.value.unshift({
+        id,
+        amount: String(transaction.amount ?? 0),
+        customer_name: (transaction.customer_name as string | null) ?? null,
+        teller: String(transaction.teller ?? 'Teller'),
+        creator_role: (transaction.creator_role as PendingCashIn['creator_role']) ?? null,
+        settlement_amount: String(transaction.settlement_amount ?? transaction.amount ?? 0),
+        customer_fee: String(transaction.customer_fee ?? 0),
+        fee_payment_method: (transaction.fee_payment_method as string | null) ?? null,
+        received_denominations: (transaction.received_denominations as Denoms) ?? {},
+        handoff_denominations: (transaction.handoff_denominations as Denoms) ?? {},
+        change_denominations: (transaction.change_denominations as Denoms) ?? {},
+        change_given: String(transaction.change_given ?? 0),
+        created_at: (transaction.created_at as string | null) ?? null,
+    });
+    unreadNotificationCount.value += 1;
+}
+
 onMounted(() => {
     const echo = createNgweLweEcho(readStoredToken());
 
     const handlers: RealtimeHandlers = {
         balance_update: refreshCashierData,
         new_transaction: refreshCashierData,
-        cash_in_pending: refreshCashierData,
+        cash_in_pending: addRealtimePendingCashIn,
         float_update: refreshCashierData,
         float_status_changed: refreshCashierData,
     };
@@ -546,9 +715,22 @@ async function confirmReturn(pin: string) {
     }
 }
 
-function openCashInReview(entry: PendingCashIn) {
+async function openCashInReview(entry: PendingCashIn) {
     pendingReview.value = entry;
     pendingPinError.value = null;
+
+    try {
+        const response = await apiRequest<{ data?: { unread_count?: number } }>(
+            `/api/cashier/notifications/${entry.id}/read`,
+            {
+                method: 'POST',
+                token: readStoredToken(),
+            },
+        );
+        unreadNotificationCount.value = response.data?.unread_count ?? 0;
+    } catch {
+        // Review remains available if the read receipt cannot be stored.
+    }
 }
 
 function closeCashInReview() {
@@ -627,7 +809,7 @@ function statusLabel(status: string): string {
     <BankLayout
         :role="role"
         :announcement="announcement"
-        :notification-count="notificationCount"
+        :notification-count="unreadNotificationCount"
     >
         <header
             class="mb-4 flex flex-col gap-2 border-b border-line pb-3 sm:flex-row sm:items-center sm:justify-between"
@@ -687,37 +869,116 @@ function statusLabel(status: string): string {
             {{ notice }}
         </div>
 
+        <section v-if="activeSection === 'dashboard'" class="space-y-5">
+            <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <Link
+                    href="/cashier/main-vault-denomination-stock"
+                    :headers="authHeaders()"
+                    class="rounded-2xl border border-line bg-card p-5 shadow-sm transition hover:border-brand/30 hover:shadow-md"
+                >
+                    <p class="text-xs font-black text-slate uppercase">Main vault balance</p>
+                    <p class="money mt-3 text-2xl font-black text-ink">{{ formatMoney(vaultTotal) }} MMK</p>
+                    <p class="mt-2 text-xs font-bold text-brand">View denomination stock →</p>
+                </Link>
+                <Link
+                    href="/cashier/teller-entry-notifications"
+                    :headers="authHeaders()"
+                    class="rounded-2xl border border-line bg-card p-5 shadow-sm transition hover:border-brand/30 hover:shadow-md"
+                >
+                    <p class="text-xs font-black text-slate uppercase">Pending Cash In</p>
+                    <p class="mt-3 text-2xl font-black text-ink">{{ livePendingCashIns.length }}</p>
+                    <p class="money mt-2 text-xs font-bold text-brand">{{ formatMoney(pendingCashInTotal) }} MMK awaiting review →</p>
+                </Link>
+                <Link
+                    href="/cashier/morning-issue"
+                    :headers="authHeaders()"
+                    class="rounded-2xl border border-line bg-card p-5 shadow-sm transition hover:border-brand/30 hover:shadow-md"
+                >
+                    <p class="text-xs font-black text-slate uppercase">Open Teller floats</p>
+                    <p class="mt-3 text-2xl font-black text-ink">{{ floats.filter((row) => row.status !== 'closed').length }}</p>
+                    <p class="mt-2 text-xs font-bold text-brand">Issue or review floats →</p>
+                </Link>
+                <Link
+                    href="/cashier/end-of-day"
+                    :headers="authHeaders()"
+                    class="rounded-2xl border border-line bg-card p-5 shadow-sm transition hover:border-brand/30 hover:shadow-md"
+                >
+                    <p class="text-xs font-black text-slate uppercase">Returns to reconcile</p>
+                    <p class="mt-3 text-2xl font-black text-ink">{{ pendingReconciliationFloats.length }}</p>
+                    <p class="money mt-2 text-xs font-bold text-brand">{{ formatMoney(pendingReturnTotal) }} MMK expected →</p>
+                </Link>
+            </div>
+
+            <div class="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,.65fr)]">
+                <section class="overflow-hidden rounded-2xl border border-line bg-card shadow-sm">
+                    <header class="flex items-center justify-between border-b border-line px-5 py-4">
+                        <h2 class="font-black text-ink">Recent Teller transactions</h2>
+                        <Link href="/cashier/teller-entry-history" :headers="authHeaders()" class="text-xs font-black text-brand">View all →</Link>
+                    </header>
+                    <div class="divide-y divide-line">
+                        <div v-for="transaction in transactions.slice(0, 6)" :key="transaction.id" class="flex items-center justify-between gap-4 px-5 py-3">
+                            <div class="min-w-0">
+                                <p class="truncate text-sm font-black text-ink">#{{ transaction.id }} · {{ statusLabel(transaction.type) }}</p>
+                                <p class="truncate text-xs font-semibold text-slate">{{ transaction.teller }} · {{ formatDate(transaction.created_at) }}</p>
+                            </div>
+                            <p class="money shrink-0 text-sm font-black text-ink">{{ formatMoney(transaction.amount) }} MMK</p>
+                        </div>
+                        <p v-if="!transactions.length" class="px-5 py-8 text-center text-sm font-semibold text-slate">No Teller transactions yet.</p>
+                    </div>
+                </section>
+
+                <section class="rounded-2xl border border-line bg-card p-5 shadow-sm">
+                    <h2 class="font-black text-ink">Quick actions</h2>
+                    <div class="mt-4 grid gap-2">
+                        <Link href="/cashier/teller-entry-notifications" :headers="authHeaders()" class="rounded-xl bg-brand px-4 py-3 text-sm font-black text-white">Review pending Cash In</Link>
+                        <Link href="/cashier/morning-issue" :headers="authHeaders()" class="rounded-xl bg-mist px-4 py-3 text-sm font-black text-ink">Issue Teller float</Link>
+                        <Link href="/cashier/end-of-day" :headers="authHeaders()" class="rounded-xl bg-mist px-4 py-3 text-sm font-black text-ink">Reconcile end-of-day return</Link>
+                    </div>
+                </section>
+            </div>
+        </section>
+
         <section
             v-if="activeSection === 'teller-entry-notifications'"
             class="mb-6 overflow-hidden rounded-2xl border border-brand/25 bg-card shadow-sm"
         >
             <header
-                class="flex flex-wrap items-center justify-between gap-3 border-b border-brand/15 bg-brand-soft/45 px-4 py-4 sm:px-6"
+                class="grid gap-4 border-b border-brand/15 bg-brand-soft/45 px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center sm:px-6"
             >
                 <div>
                     <div class="flex items-center gap-2">
                         <span
                             class="grid size-8 place-items-center rounded-full bg-brand text-xs font-black text-white"
-                            >{{ pendingCashIns.length }}</span
+                            >{{ livePendingCashIns.length }}</span
                         >
                         <h2 class="text-lg font-black">
-                            Teller entry notifications
+                            Pending Cash In reviews
                         </h2>
                     </div>
                     <p class="mt-1 text-xs text-slate">
-                        New Teller Cash In entries stay here until the Cashier
-                        reviews the exact handoff.
+                        Verify the Teller handoff before posting cash to the main vault.
                     </p>
                 </div>
-                <span
-                    class="rounded-pill bg-brand px-3 py-1.5 text-xs font-black text-white"
-                    >{{
-                        pendingCashIns.length ? 'Action required' : 'All clear'
-                    }}</span
-                >
+                <div class="flex flex-wrap items-center gap-2">
+                    <div class="rounded-xl border border-brand/15 bg-card px-4 py-2">
+                        <p class="text-[10px] font-black text-slate uppercase">Pending total</p>
+                        <p class="money text-sm font-black text-ink">{{ formatMoney(pendingCashInTotal) }} MMK</p>
+                    </div>
+                    <span class="rounded-pill bg-brand px-3 py-2 text-xs font-black text-white">
+                        {{ livePendingCashIns.length ? 'Action required' : 'All clear' }}
+                    </span>
+                </div>
             </header>
-            <div v-if="pendingCashIns.length" class="overflow-x-auto">
-                <table class="w-full min-w-[980px] text-left text-sm">
+            <div v-if="livePendingCashIns.length" class="border-b border-line px-4 py-3 sm:px-6">
+                <input
+                    v-model="pendingSearch"
+                    type="search"
+                    class="bank-input max-w-lg"
+                    placeholder="Search reference, customer or teller"
+                />
+            </div>
+            <div v-if="livePendingCashIns.length" class="overflow-x-auto">
+                <table class="w-full min-w-[760px] text-left text-sm">
                     <thead
                         class="border-b border-line bg-mist/45 text-[11px] tracking-wide text-slate uppercase"
                     >
@@ -725,16 +986,14 @@ function statusLabel(status: string): string {
                             <th class="px-4 py-3 sm:px-6">Reference</th>
                             <th class="px-4 py-3">Teller</th>
                             <th class="px-4 py-3 text-right">Cash In</th>
-                            <th class="px-4 py-3">Customer received</th>
                             <th class="px-4 py-3">Cashier handoff</th>
-                            <th class="px-4 py-3">Change</th>
                             <th class="px-4 py-3">Time</th>
                             <th class="px-4 py-3 sm:px-6">Action</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-line">
                         <tr
-                            v-for="entry in pendingCashIns"
+                            v-for="entry in paginatedPendingCashIns"
                             :key="entry.id"
                             class="hover:bg-mist/35"
                         >
@@ -750,29 +1009,11 @@ function statusLabel(status: string): string {
                             <td class="money px-4 py-3 text-right font-black">
                                 {{ formatMoney(entry.amount) }} MMK
                             </td>
-                            <td class="px-4 py-3 text-xs text-slate">
-                                {{
-                                    denominationSummary(
-                                        entry.received_denominations,
-                                    )
-                                }}
-                            </td>
                             <td class="px-4 py-3 text-xs font-bold">
                                 {{
                                     denominationSummary(
                                         entry.handoff_denominations,
                                     )
-                                }}
-                            </td>
-                            <td class="px-4 py-3 text-xs text-held">
-                                {{
-                                    entry.change_given === '0.00'
-                                        ? '—'
-                                        : formatMoney(entry.change_given) +
-                                          ' MMK · ' +
-                                          denominationSummary(
-                                              entry.change_denominations,
-                                          )
                                 }}
                             </td>
                             <td class="px-4 py-3 text-xs text-slate">
@@ -793,9 +1034,19 @@ function statusLabel(status: string): string {
                                 </button>
                             </td>
                         </tr>
+                        <tr v-if="!paginatedPendingCashIns.length">
+                            <td colspan="6" class="px-6 py-10 text-center text-slate">
+                                No matching Teller entry.
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
+            <footer v-if="livePendingCashIns.length" class="grid items-center gap-3 border-t border-line px-4 py-4 text-sm font-semibold text-slate md:grid-cols-3 sm:px-6">
+                <span>Showing {{ filteredPendingCashIns.length ? (pendingPage - 1) * pendingPageSize + 1 : 0 }} to {{ Math.min(pendingPage * pendingPageSize, filteredPendingCashIns.length) }} of {{ filteredPendingCashIns.length }} entries</span>
+                <label class="flex items-center justify-center gap-2">Show <select v-model.number="pendingPageSize" class="bank-input w-20 py-2"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select> entries</label>
+                <div class="flex justify-end gap-2"><button type="button" class="bank-button bank-button-secondary px-3 py-2" :disabled="pendingPage <= 1" @click="pendingPage--">Previous</button><span class="self-center">{{ pendingPage }} / {{ pendingPageCount }}</span><button type="button" class="bank-button bank-button-secondary px-3 py-2" :disabled="pendingPage >= pendingPageCount" @click="pendingPage++">Next</button></div>
+            </footer>
             <p
                 v-else
                 class="px-6 py-8 text-center text-sm font-semibold text-balance"
@@ -939,25 +1190,47 @@ function statusLabel(status: string): string {
                 v-if="activeSection === 'end-of-day'"
                 class="rounded-2xl border border-line bg-card shadow-sm"
             >
-                <header class="border-b border-line px-4 py-4 sm:px-6">
-                    <p
-                        class="text-xs font-black tracking-wide text-balance uppercase"
-                    >
-                        End-of-day
-                    </p>
-                    <h2 class="mt-1 text-lg font-black">
-                        Teller reconciliation
-                    </h2>
-                    <p class="mt-1 text-xs text-slate">
-                        Confirm only the denomination total physically received
-                        back.
-                    </p>
+                <header class="grid gap-4 border-b border-line px-4 py-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end sm:px-6">
+                    <div>
+                        <p class="text-xs font-black tracking-wide text-balance uppercase">End-of-day</p>
+                        <h2 class="mt-1 text-lg font-black">Teller reconciliation</h2>
+                        <p class="mt-1 text-xs text-slate">
+                            Verify the physical notes returned by each Teller before closing the float.
+                        </p>
+                    </div>
+                    <div class="grid gap-2 sm:grid-cols-[16rem_auto]">
+                        <input
+                            v-model="floatSearch"
+                            type="search"
+                            class="bank-input"
+                            placeholder="Search Teller or float"
+                        />
+                        <select v-model="floatStatus" class="bank-input">
+                            <option value="pending">Pending returns</option>
+                            <option value="completed">Completed / other</option>
+                            <option value="all">All floats</option>
+                        </select>
+                    </div>
                 </header>
+                <div class="grid gap-3 border-b border-line bg-mist/25 p-4 sm:grid-cols-3 sm:p-6">
+                    <div class="rounded-xl border border-line bg-card p-4">
+                        <p class="text-xs font-bold text-slate">Pending returns</p>
+                        <p class="money mt-1 text-xl font-black text-ink">{{ pendingReconciliationFloats.length }}</p>
+                    </div>
+                    <div class="rounded-xl border border-line bg-card p-4">
+                        <p class="text-xs font-bold text-slate">Expected return</p>
+                        <p class="money mt-1 text-xl font-black text-balance">{{ formatMoney(pendingReturnTotal) }} MMK</p>
+                    </div>
+                    <div class="rounded-xl border border-line bg-card p-4">
+                        <p class="text-xs font-bold text-slate">All floats</p>
+                        <p class="money mt-1 text-xl font-black text-ink">{{ floats.length }}</p>
+                    </div>
+                </div>
                 <div class="divide-y divide-line">
                     <div
-                        v-for="float in floats"
+                        v-for="float in filteredEndDayFloats"
                         :key="float.id"
-                        class="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6"
+                        class="grid gap-4 px-4 py-4 transition hover:bg-mist/30 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center sm:px-6"
                     >
                         <div class="min-w-0">
                             <p class="truncate font-bold">
@@ -969,15 +1242,7 @@ function statusLabel(status: string): string {
                             <p
                                 class="mt-1 text-xs tracking-wide text-slate uppercase"
                             >
-                                {{ statusLabel(float.status) }} · issued
-                                {{ formatMoney(float.total_amount) }} MMK
-                            </p>
-                            <p
-                                v-if="float.status === 'PENDING_RECONCILIATION'"
-                                class="mt-1 text-xs font-semibold text-balance"
-                            >
-                                Returned:
-                                {{ formatMoney(floatReturnTotal(float)) }} MMK
+                                {{ statusLabel(float.status) }}
                             </p>
                             <details class="mt-2 text-xs text-slate">
                                 <summary
@@ -1001,39 +1266,42 @@ function statusLabel(status: string): string {
                                 </p>
                             </details>
                         </div>
+                        <div class="grid grid-cols-2 gap-3 text-sm md:min-w-64">
+                            <div class="rounded-lg bg-mist p-3">
+                                <p class="text-xs font-bold text-slate">Issued</p>
+                                <p class="money mt-1 font-black text-ink">{{ formatMoney(float.total_amount) }} MMK</p>
+                            </div>
+                            <div class="rounded-lg bg-mist p-3">
+                                <p class="text-xs font-bold text-slate">Returned</p>
+                                <p class="money mt-1 font-black text-balance">{{ formatMoney(floatReturnTotal(float)) }} MMK</p>
+                            </div>
+                        </div>
                         <button
                             v-if="float.status === 'PENDING_RECONCILIATION'"
                             type="button"
-                            class="rounded-pill border border-ink px-3 py-2 text-xs font-bold text-ink hover:bg-ink hover:text-white"
+                            class="bank-button bank-button-primary whitespace-nowrap"
                             @click="openReturn(float)"
                         >
                             Verify return
                         </button>
                     </div>
                     <p
-                        v-if="!floats.length"
+                        v-if="!filteredEndDayFloats.length"
                         class="px-6 py-10 text-center text-sm text-slate"
                     >
-                        No Teller floats recorded yet.
+                        No matching Teller floats.
                     </p>
                 </div>
             </section>
         </section>
 
         <section
-            v-if="activeSection === 'teller-entry-history'"
+            v-if="isTransactionHistorySection"
             class="rounded-2xl border border-line bg-card shadow-sm"
         >
             <header
-                class="flex flex-wrap items-end justify-between gap-3 border-b border-line px-4 py-4 sm:px-6"
+                class="flex flex-wrap items-end justify-end gap-3 border-b border-line px-4 py-4 sm:px-6"
             >
-                <div>
-                    <h2 class="text-lg font-black">Teller entry history</h2>
-                    <p class="mt-1 text-xs text-slate">
-                        Read-only table; Teller creates the transaction and
-                        Cashier monitors the record.
-                    </p>
-                </div>
                 <div
                     class="grid w-full gap-2 sm:w-auto sm:grid-cols-[16rem_auto_auto_auto]"
                 >
@@ -1044,6 +1312,7 @@ function statusLabel(status: string): string {
                         class="h-10 min-w-0 flex-1 rounded-xl border border-line bg-mist px-3 text-xs outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 sm:w-64"
                     />
                     <select
+                        v-if="activeSection === 'teller-entry-history'"
                         v-model="transactionType"
                         class="h-10 rounded-xl border border-line bg-mist px-3 text-xs font-bold outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
                     >
@@ -1084,7 +1353,7 @@ function statusLabel(status: string): string {
                     </thead>
                     <tbody class="divide-y divide-line">
                         <tr
-                            v-for="transaction in filteredTransactions"
+                            v-for="transaction in paginatedTransactions"
                             :key="transaction.id"
                         >
                             <td class="px-4 py-3 font-bold sm:px-6">
@@ -1114,7 +1383,7 @@ function statusLabel(status: string): string {
                                 {{ formatDate(transaction.created_at) }}
                             </td>
                         </tr>
-                        <tr v-if="!filteredTransactions.length">
+                        <tr v-if="!paginatedTransactions.length">
                             <td
                                 colspan="7"
                                 class="px-6 py-10 text-center text-sm text-slate"
@@ -1125,6 +1394,11 @@ function statusLabel(status: string): string {
                     </tbody>
                 </table>
             </div>
+            <footer class="grid items-center gap-3 border-t border-line px-4 py-4 text-sm font-semibold text-slate md:grid-cols-3 sm:px-6">
+                <span>Showing {{ filteredTransactions.length ? (transactionPage - 1) * transactionPageSize + 1 : 0 }} to {{ Math.min(transactionPage * transactionPageSize, filteredTransactions.length) }} of {{ filteredTransactions.length }} entries</span>
+                <label class="flex items-center justify-center gap-2">Show <select v-model.number="transactionPageSize" class="bank-input w-20 py-2"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select> entries</label>
+                <div class="flex justify-end gap-2"><button type="button" class="bank-button bank-button-secondary px-3 py-2" :disabled="transactionPage <= 1" @click="transactionPage--">Previous</button><span class="self-center">{{ transactionPage }} / {{ transactionPageCount }}</span><button type="button" class="bank-button bank-button-secondary px-3 py-2" :disabled="transactionPage >= transactionPageCount" @click="transactionPage++">Next</button></div>
+            </footer>
         </section>
 
         <section
@@ -1137,6 +1411,13 @@ function statusLabel(status: string): string {
                     Every note movement is recorded with its operator and
                     reason.
                 </p>
+                <div class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <input v-model="vaultLogSearch" type="search" class="bank-input" placeholder="Search movement, note, operator or denomination" />
+                    <select v-model="vaultLogType" class="bank-input">
+                        <option value="all">All movements</option>
+                        <option v-for="type in vaultLogTypes" :key="type" :value="type">{{ statusLabel(type) }}</option>
+                    </select>
+                </div>
             </header>
             <div class="overflow-x-auto">
                 <table class="min-w-full text-left text-sm">
@@ -1152,7 +1433,7 @@ function statusLabel(status: string): string {
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-line">
-                        <tr v-for="log in vaultLogs" :key="log.id">
+                        <tr v-for="log in paginatedVaultLogs" :key="log.id">
                             <td class="px-4 py-3 text-xs text-slate sm:px-6">
                                 {{ formatDate(log.created_at) }}
                             </td>
@@ -1167,7 +1448,7 @@ function statusLabel(status: string): string {
                                 {{ log.performed_by || 'Cashier' }}
                             </td>
                         </tr>
-                        <tr v-if="!vaultLogs.length">
+                        <tr v-if="!paginatedVaultLogs.length">
                             <td
                                 colspan="5"
                                 class="px-6 py-10 text-center text-sm text-slate"
@@ -1178,6 +1459,11 @@ function statusLabel(status: string): string {
                     </tbody>
                 </table>
             </div>
+            <footer class="grid items-center gap-3 border-t border-line px-4 py-4 text-sm font-semibold text-slate md:grid-cols-3 sm:px-6">
+                <span>Showing {{ filteredVaultLogs.length ? (vaultLogPage - 1) * vaultLogPageSize + 1 : 0 }} to {{ Math.min(vaultLogPage * vaultLogPageSize, filteredVaultLogs.length) }} of {{ filteredVaultLogs.length }} entries</span>
+                <label class="flex items-center justify-center gap-2">Show <select v-model.number="vaultLogPageSize" class="bank-input w-20 py-2"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select> entries</label>
+                <div class="flex justify-end gap-2"><button type="button" class="bank-button bank-button-secondary px-3 py-2" :disabled="vaultLogPage <= 1" @click="vaultLogPage--">Previous</button><span class="self-center">{{ vaultLogPage }} / {{ vaultLogPageCount }}</span><button type="button" class="bank-button bank-button-secondary px-3 py-2" :disabled="vaultLogPage >= vaultLogPageCount" @click="vaultLogPage++">Next</button></div>
+            </footer>
         </section>
 
         <div

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CashDenominationLog;
 use App\Models\Transaction;
+use App\Models\TransactionNotificationRead;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
 use App\Support\Money;
@@ -13,6 +14,35 @@ use Illuminate\Http\Request;
 
 class CashierController extends Controller
 {
+    public function markNotificationRead(Request $request, Transaction $transaction): JsonResponse
+    {
+        $this->guardCashier($request);
+        abort_unless(
+            $transaction->transaction_type === 'cash_in' &&
+            $transaction->status === 'PENDING_CASHIER_CONFIRM',
+            422,
+            'Only pending Cash In notifications can be marked as read.',
+        );
+
+        TransactionNotificationRead::query()->updateOrCreate(
+            ['user_id' => $request->user()->id, 'transaction_id' => $transaction->id],
+            ['read_at' => now()],
+        );
+
+        $readTransactionIds = TransactionNotificationRead::query()
+            ->where('user_id', $request->user()->id)
+            ->select('transaction_id');
+        $unreadCount = Transaction::query()
+            ->where('transaction_type', 'cash_in')
+            ->where('status', 'PENDING_CASHIER_CONFIRM')
+            ->whereNotIn('id', $readTransactionIds)
+            ->count();
+
+        return response()->json([
+            'message' => 'Notification marked as read.',
+            'data' => ['unread_count' => $unreadCount],
+        ]);
+    }
     public function __construct(private readonly CashDenominationRepository $vault) {}
 
     public function employees(Request $request): JsonResponse

@@ -8,6 +8,7 @@ import { readStoredToken, removeStoredToken } from '@/lib/auth-token';
 defineProps<{
     role: 'cashier';
     announcement?: string | null;
+    notificationCount?: number;
     user: {
         id: number;
         username: string;
@@ -95,7 +96,7 @@ async function savePin() {
 </script>
 
 <template>
-    <BankLayout :role="role" :announcement="announcement">
+    <BankLayout :role="role" :announcement="announcement" :notification-count="notificationCount">
         <header class="mb-6">
             <p
                 class="text-xs font-black tracking-[0.18em] text-brand uppercase"
