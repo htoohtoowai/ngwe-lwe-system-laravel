@@ -113,7 +113,7 @@ function autoFill() {
     >
         <header
             v-if="showTitle || !readonly"
-            class="flex items-center justify-between border-b border-line px-5 py-3.5"
+            class="flex flex-wrap items-center justify-between gap-2 border-b border-line px-3 py-3.5 sm:px-5"
         >
             <h3 v-if="showTitle" class="text-sm font-bold">
                 {{ label ?? t('component.notesCounted') }}
@@ -154,7 +154,7 @@ function autoFill() {
                         : '',
                     compact
                         ? 'grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-field border border-line px-3 py-2'
-                        : 'px-5 py-2.5',
+                        : 'gap-2 px-3 py-2.5 sm:gap-3 sm:px-5',
                 ]"
                 @click="!readonly && set(n, qty(n) + 1)"
             >
@@ -185,7 +185,7 @@ function autoFill() {
                     </span>
                 </div>
                 <template v-else>
-                    <span class="money w-20 shrink-0 text-sm font-bold">{{
+                    <span class="money w-14 shrink-0 text-sm font-bold sm:w-20">{{
                         n.toLocaleString()
                     }}</span>
                     <span
@@ -210,7 +210,7 @@ function autoFill() {
                         :aria-label="`− ${n.toLocaleString()}`"
                         :disabled="readonly || qty(n) === 0"
                         @click="set(n, qty(n) - 1)"
-                        class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
+                        class="bank-button grid size-10 min-h-10 place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
                     >
                         −
                     </button>
@@ -225,7 +225,7 @@ function autoFill() {
                         :aria-label="`${n.toLocaleString()} ${t('component.notesCounted')}`"
                         :aria-invalid="mismatch(n)"
                         @input="setFromInput(n, $event)"
-                        class="money h-9 w-12 rounded-field border border-line bg-mist px-1 text-center text-sm font-bold text-ink outline-none focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/25 sm:w-14"
+                        class="money h-10 w-12 rounded-field border border-line bg-mist px-1 text-center text-sm font-bold text-ink outline-none focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/25 sm:w-14"
                         :class="
                             mismatch(n) ? 'text-brand ring-2 ring-brand' : ''
                         "
@@ -235,7 +235,7 @@ function autoFill() {
                         :aria-label="`+ ${n.toLocaleString()}`"
                         :disabled="readonly || qty(n) >= capFor(n)"
                         @click="set(n, qty(n) + 1)"
-                        class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
+                        class="bank-button grid size-10 min-h-10 place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
                     >
                         +
                     </button>
@@ -243,7 +243,7 @@ function autoFill() {
 
                 <span
                     v-if="!compact"
-                    class="money w-28 shrink-0 text-right text-sm font-bold"
+                    class="money hidden w-28 shrink-0 text-right text-sm font-bold sm:block"
                     :class="qty(n) > 0 ? 'text-ink' : 'text-slate/40'"
                     >{{ lineTotal(n).toLocaleString() }}</span
                 >
@@ -251,7 +251,7 @@ function autoFill() {
         </ul>
 
         <footer
-            class="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-3.5"
+            class="flex flex-wrap items-center justify-between gap-3 border-t px-3 py-3.5 sm:px-5"
             :class="
                 target === null
                     ? 'border-line bg-mist/40'

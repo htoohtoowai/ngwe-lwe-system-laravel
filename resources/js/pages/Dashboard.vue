@@ -396,18 +396,18 @@ onBeforeUnmount(() => {
             </Link>
         </header>
 
-        <section class="mt-5 grid gap-3 sm:grid-cols-3">
-            <Link href="/teller/float" :headers="authHeaders()" class="rounded-2xl border border-line bg-card p-5 shadow-sm transition hover:border-brand/30">
+        <section class="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <Link href="/teller/float" :headers="authHeaders()" class="col-span-2 rounded-2xl border border-line bg-card p-4 shadow-sm transition hover:border-brand/30 sm:col-span-1 sm:p-5">
                 <p class="text-xs font-black text-slate uppercase">Available counter cash</p>
                 <p class="money mt-2 text-2xl font-black text-ink">{{ mmk(floats.reduce((sum, item) => sum + Number(item.amount), 0)) }} MMK</p>
                 <p class="mt-2 text-xs font-bold text-brand">View cash float →</p>
             </Link>
-            <div class="rounded-2xl border border-line bg-card p-5 shadow-sm">
+            <div class="rounded-2xl border border-line bg-card p-4 shadow-sm sm:p-5">
                 <p class="text-xs font-black text-slate uppercase">Recent entries</p>
                 <p class="mt-2 text-2xl font-black text-ink">{{ recent.length }}</p>
                 <p class="mt-2 text-xs font-semibold text-slate">Latest counter activity</p>
             </div>
-            <div class="rounded-2xl border border-line bg-card p-5 shadow-sm">
+            <div class="rounded-2xl border border-line bg-card p-4 shadow-sm sm:p-5">
                 <p class="text-xs font-black text-slate uppercase">Pending Cash In</p>
                 <p class="mt-2 text-2xl font-black text-ink">{{ notificationCount ?? 0 }}</p>
                 <p class="mt-2 text-xs font-semibold text-slate">Waiting for Cashier confirmation</p>

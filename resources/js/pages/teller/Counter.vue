@@ -162,7 +162,7 @@ onBeforeUnmount(() => {
                 class="rounded-counter border border-paper-edge bg-white lg:col-span-2"
             >
                 <header
-                    class="flex items-center justify-between border-b border-paper-edge px-5 py-4"
+                    class="flex items-center justify-between gap-3 border-b border-paper-edge px-4 py-4 sm:px-5"
                 >
                     <div>
                         <h1 class="font-display text-lg font-semibold">
@@ -178,34 +178,34 @@ onBeforeUnmount(() => {
                 </header>
 
                 <div
-                    class="grid grid-cols-2 divide-x divide-paper-edge border-b border-paper-edge sm:grid-cols-3"
+                    class="grid grid-cols-3 divide-x divide-paper-edge border-b border-paper-edge"
                 >
-                    <div class="px-5 py-4">
+                    <div class="min-w-0 px-3 py-4 sm:px-5">
                         <p class="field-label">{{ t('teller.issued') }}</p>
                         <MoneyText
                             :value="float?.issued_amount ?? 0"
-                            class="mt-1 block text-xl font-semibold"
+                            class="mt-1 block text-base font-semibold sm:text-xl"
                         />
                     </div>
-                    <div class="px-5 py-4">
+                    <div class="min-w-0 px-3 py-4 sm:px-5">
                         <p class="field-label">{{ t('teller.onHandNow') }}</p>
                         <MoneyText
                             :value="float?.current_balance ?? 0"
-                            class="mt-1 block text-xl font-semibold"
+                            class="mt-1 block text-base font-semibold sm:text-xl"
                         />
                     </div>
-                    <div class="px-5 py-4">
+                    <div class="min-w-0 px-3 py-4 sm:px-5">
                         <p class="field-label">
                             {{ t('teller.paidOutToday') }}
                         </p>
                         <MoneyText
                             :value="paidOutToday"
-                            class="mt-1 block text-xl font-semibold text-debit"
+                            class="mt-1 block text-base font-semibold text-debit sm:text-xl"
                         />
                     </div>
                 </div>
 
-                <ul class="grid grid-cols-2 gap-x-6 px-5 py-4 sm:grid-cols-3">
+                <ul class="grid grid-cols-2 gap-x-4 px-4 py-4 sm:grid-cols-3 sm:gap-x-6 sm:px-5">
                     <li
                         v-for="d in denominations"
                         :key="d.note"
@@ -257,14 +257,14 @@ onBeforeUnmount(() => {
             </section>
         </div>
 
-        <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Link
                 v-for="a in actions"
                 :key="a.href"
                 :href="locked ? '#' : a.href"
                 :aria-disabled="locked"
                 :headers="authHeaders()"
-                class="group rounded-counter border border-paper-edge bg-white p-4 transition"
+                class="group min-h-24 rounded-counter border border-paper-edge bg-white p-3 transition sm:p-4"
                 :class="
                     locked
                         ? 'pointer-events-none opacity-45'
@@ -290,7 +290,30 @@ onBeforeUnmount(() => {
             >
                 {{ t('teller.noRecentEntries') }}
             </p>
-            <table v-else class="w-full text-sm">
+            <template v-else>
+            <ul class="divide-y divide-paper-edge sm:hidden">
+                <li
+                    v-for="entry in recent"
+                    :key="entry.id"
+                    class="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 px-4 py-3"
+                >
+                    <div class="min-w-0">
+                        <p class="truncate text-sm font-semibold text-ink-900">
+                            #{{ entry.id }} · {{ entry.type.replaceAll('_', ' ') }}
+                        </p>
+                        <StateChip :status="entry.status" class="mt-1" />
+                    </div>
+                    <div class="text-right">
+                        <MoneyText :value="entry.amount" class="font-semibold" />
+                        <p class="mt-1 text-xs text-ink-700/60">
+                            {{ t('teller.fee') }}:
+                            <MoneyText :value="entry.fee_amount" />
+                        </p>
+                    </div>
+                </li>
+            </ul>
+            <div class="hidden overflow-x-auto sm:block">
+            <table class="w-full min-w-[40rem] text-sm">
                 <thead>
                     <tr class="border-b border-paper-edge text-left">
                         <th class="field-label px-5 py-2">
@@ -332,6 +355,8 @@ onBeforeUnmount(() => {
                     </tr>
                 </tbody>
             </table>
+            </div>
+            </template>
         </section>
     </BankLayout>
 </template>

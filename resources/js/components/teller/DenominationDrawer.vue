@@ -105,7 +105,7 @@ const mismatch = (n: number) =>
         :aria-label="label ?? t('component.notesCounted')"
     >
         <header
-            class="flex items-center justify-between border-b border-paper-edge px-4 py-2.5"
+            class="flex flex-wrap items-center justify-between gap-2 border-b border-paper-edge px-3 py-2.5 sm:px-4"
         >
             <div>
                 <h3 class="field-label">
@@ -138,7 +138,7 @@ const mismatch = (n: number) =>
             <li
                 v-for="n in notes"
                 :key="n"
-                class="flex items-center gap-3 px-4 py-2.5 transition"
+                class="flex items-center gap-2 px-3 py-2.5 transition sm:gap-3 sm:px-4"
                 :class="[
                     qty(n) > 0 ? 'bg-ink-100/40' : '',
                     mismatch(n) ? 'bg-debit/5' : '',
@@ -150,7 +150,7 @@ const mismatch = (n: number) =>
                 @click="!readonly && set(n, qty(n) + 1)"
             >
                 <span
-                    class="money w-24 shrink-0 text-sm font-semibold text-ink-900 tabular-nums"
+                    class="money w-16 shrink-0 text-sm font-semibold text-ink-900 tabular-nums sm:w-24"
                     >{{ n.toLocaleString() }}</span
                 >
 
@@ -174,7 +174,7 @@ const mismatch = (n: number) =>
                         type="button"
                         :disabled="readonly || qty(n) === 0"
                         @click="set(n, qty(n) - 1)"
-                        class="bank-button bank-button-secondary grid size-8 min-h-8 place-items-center rounded-counter p-0 disabled:opacity-30"
+                        class="bank-button bank-button-secondary grid size-10 min-h-10 place-items-center rounded-counter p-0 disabled:opacity-30"
                         :aria-label="`လျော့ရန် ${n.toLocaleString()}`"
                     >
                         -
@@ -190,14 +190,14 @@ const mismatch = (n: number) =>
                         :aria-label="`${n.toLocaleString()} denomination count`"
                         :aria-invalid="mismatch(n)"
                         @input="setFromInput(n, $event)"
-                        class="field-input money h-8 w-14 rounded-counter px-1 py-1 text-center text-sm"
+                        class="field-input money h-10 w-14 rounded-counter px-1 py-1 text-center text-sm"
                         :class="mismatch(n) ? 'border-debit text-debit' : ''"
                     />
                     <button
                         type="button"
                         :disabled="readonly || qty(n) >= capFor(n)"
                         @click="set(n, qty(n) + 1)"
-                        class="bank-button bank-button-secondary grid size-8 min-h-8 place-items-center rounded-counter p-0 disabled:opacity-30"
+                        class="bank-button bank-button-secondary grid size-10 min-h-10 place-items-center rounded-counter p-0 disabled:opacity-30"
                         :aria-label="`တိုးရန် ${n.toLocaleString()}`"
                     >
                         +
@@ -206,7 +206,7 @@ const mismatch = (n: number) =>
 
                 <MoneyText
                     :value="lineTotal(n)"
-                    class="w-32 shrink-0 text-right text-sm"
+                    class="w-20 shrink-0 text-right text-xs sm:w-32 sm:text-sm"
                     :class="qty(n) > 0 ? 'text-ink-900' : 'text-ink-300'"
                 />
             </li>
