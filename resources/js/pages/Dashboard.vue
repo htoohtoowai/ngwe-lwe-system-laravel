@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import LineChart from '@/components/bank/LineChart.vue';
 import PinSeal from '@/components/teller/PinSeal.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
 import { apiRequest } from '@/lib/api';
@@ -383,140 +382,35 @@ onBeforeUnmount(() => {
         :announcement="announcement"
         :notification-count="notificationCount"
     >
-        <p class="text-[13px] font-semibold text-slate">
-            {{ t('dashboard.title') }}
-        </p>
-
-        <!-- ===== Accounts ===== -->
-        <section class="mt-7">
-            <div class="flex items-center justify-between">
-                <h2 class="text-base font-bold sm:text-lg">
-                    {{ t('dashboard.accounts') }}
-                </h2>
-                <span class="text-xs font-bold text-slate">{{
-                    t('dashboard.liveBalances')
-                }}</span>
+        <header class="flex flex-col gap-3 border-b border-line pb-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+                <h1 class="text-xl font-black text-ink">{{ t('dashboard.title') }}</h1>
+                <p class="mt-1 text-sm font-semibold text-slate">Your counter balance and daily work at a glance.</p>
             </div>
-
-            <!-- company tabs -->
-            <div class="mt-3 flex gap-1 overflow-x-auto pb-1">
-                <button
-                    v-for="tab in tabs"
-                    :key="tab"
-                    type="button"
-                    @click="companyTab = tab"
-                    class="rounded-pill px-3.5 py-1.5 text-xs font-bold whitespace-nowrap transition"
-                    :class="
-                        companyTab === tab
-                            ? 'bg-card text-brand shadow-sm ring-1 ring-line'
-                            : 'text-slate hover:bg-mist'
-                    "
-                >
-                    {{ tab }}
-                </button>
-            </div>
-
-            <div
-                class="mt-3 overflow-hidden rounded-2xl border border-line bg-card shadow-sm"
+            <Link
+                href="/teller"
+                :headers="authHeaders()"
+                class="rounded-xl bg-brand px-4 py-2.5 text-center text-sm font-black text-white shadow-sm"
             >
-                <div
-                    class="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-mist/50 px-4 py-3 sm:px-5"
-                >
-                    <p class="text-xs font-semibold text-slate">
-                        {{ visibleAccounts.length }}
-                        {{ t('dashboard.totalAccounts') }}
-                    </p>
-                    <p class="money text-sm font-bold">
-                        {{ mmk(visibleAccountTotal) }}
-                        <span class="text-[10px] text-slate"
-                            >MMK {{ t('dashboard.totalBalance') }}</span
-                        >
-                    </p>
-                </div>
+                New transaction
+            </Link>
+        </header>
 
-                <div v-if="visibleAccounts.length" class="overflow-x-auto">
-                    <table class="w-full min-w-[720px] text-left text-sm">
-                        <thead
-                            class="border-b border-line text-[11px] tracking-wide text-slate uppercase"
-                        >
-                            <tr>
-                                <th class="w-12 px-4 py-3 font-bold sm:px-5">
-                                    #
-                                </th>
-                                <th class="px-4 py-3 font-bold">
-                                    {{ t('dashboard.accountName') }}
-                                </th>
-                                <th class="px-4 py-3 font-bold">
-                                    {{ t('dashboard.accountNumber') }}
-                                </th>
-                                <th class="px-4 py-3 font-bold">
-                                    {{ t('dashboard.service') }}
-                                </th>
-                                <th class="px-4 py-3 text-right font-bold">
-                                    {{ t('dashboard.balance') }}
-                                </th>
-                                <th class="px-4 py-3 text-center font-bold">
-                                    {{ t('dashboard.feeAccount') }}
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody class="divide-y divide-line">
-                            <tr
-                                v-for="(a, index) in visibleAccounts"
-                                :key="a.id"
-                                class="transition hover:bg-mist/50"
-                            >
-                                <td
-                                    class="px-4 py-3 text-xs font-bold text-slate sm:px-5"
-                                >
-                                    {{ index + 1 }}
-                                </td>
-                                <td class="px-4 py-3">
-                                    <p class="font-bold">{{ a.name }}</p>
-                                    <p class="text-[11px] text-slate">
-                                        ID #{{ a.id }}
-                                    </p>
-                                </td>
-                                <td class="money px-4 py-3 text-xs text-slate">
-                                    {{ a.number || '—' }}
-                                </td>
-                                <td class="px-4 py-3">
-                                    <span
-                                        class="rounded-pill bg-brand-soft px-2.5 py-1 text-[11px] font-bold text-brand"
-                                        >{{ a.company }}</span
-                                    >
-                                </td>
-                                <td
-                                    class="money px-4 py-3 text-right font-bold"
-                                >
-                                    {{ mmk(a.balance) }}
-                                    <span class="text-[10px] text-slate"
-                                        >MMK</span
-                                    >
-                                </td>
-                                <td class="px-4 py-3 text-center">
-                                    <span
-                                        class="rounded-pill px-2.5 py-1 text-[10px] font-bold"
-                                        :class="
-                                            a.is_fee_account
-                                                ? 'bg-balance/10 text-balance'
-                                                : 'bg-mist text-slate'
-                                        "
-                                    >
-                                        {{
-                                            a.is_fee_account
-                                                ? t('common.yes')
-                                                : t('common.no')
-                                        }}
-                                    </span>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <p v-else class="px-5 py-10 text-center text-sm text-slate">
-                    {{ t('dashboard.noAccounts') }}
-                </p>
+        <section class="mt-5 grid gap-3 sm:grid-cols-3">
+            <Link href="/teller/float" :headers="authHeaders()" class="rounded-2xl border border-line bg-card p-5 shadow-sm transition hover:border-brand/30">
+                <p class="text-xs font-black text-slate uppercase">Available counter cash</p>
+                <p class="money mt-2 text-2xl font-black text-ink">{{ mmk(floats.reduce((sum, item) => sum + Number(item.amount), 0)) }} MMK</p>
+                <p class="mt-2 text-xs font-bold text-brand">View cash float →</p>
+            </Link>
+            <div class="rounded-2xl border border-line bg-card p-5 shadow-sm">
+                <p class="text-xs font-black text-slate uppercase">Recent entries</p>
+                <p class="mt-2 text-2xl font-black text-ink">{{ recent.length }}</p>
+                <p class="mt-2 text-xs font-semibold text-slate">Latest counter activity</p>
+            </div>
+            <div class="rounded-2xl border border-line bg-card p-5 shadow-sm">
+                <p class="text-xs font-black text-slate uppercase">Pending Cash In</p>
+                <p class="mt-2 text-2xl font-black text-ink">{{ notificationCount ?? 0 }}</p>
+                <p class="mt-2 text-xs font-semibold text-slate">Waiting for Cashier confirmation</p>
             </div>
         </section>
 
@@ -790,62 +684,6 @@ onBeforeUnmount(() => {
             <p v-else class="px-6 py-10 text-center text-sm text-slate">
                 {{ t('dashboard.noPending') }}
             </p>
-        </section>
-
-        <!-- ===== Cash In vs. Cash Out ===== -->
-        <section
-            class="mt-7 rounded-2xl border border-line bg-card p-4 shadow-sm sm:p-6"
-        >
-            <div class="flex flex-wrap items-center gap-3">
-                <h2 class="text-lg font-bold tracking-tight sm:text-xl">
-                    {{ t('dashboard.cashFlow') }}
-                </h2>
-                <a
-                    href="/reports/daily/pdf"
-                    target="_blank"
-                    class="ml-auto flex items-center gap-1.5 rounded-pill border border-line px-3.5 py-1.5 text-xs font-bold text-slate transition hover:border-brand hover:text-brand"
-                >
-                    ↓ Download PDF
-                </a>
-            </div>
-
-            <div class="mt-4 flex flex-wrap items-center gap-3">
-                <!-- range tabs -->
-                <div class="ml-auto flex items-center gap-1 overflow-x-auto">
-                    <button
-                        v-for="r in RANGES"
-                        :key="r.key"
-                        type="button"
-                        @click="setRange(r.key)"
-                        class="rounded-pill px-3.5 py-1.5 text-xs font-bold whitespace-nowrap transition"
-                        :class="
-                            range === r.key
-                                ? 'bg-brand text-white'
-                                : 'text-slate hover:bg-mist'
-                        "
-                    >
-                        {{ t(r.labelKey) }}
-                    </button>
-                </div>
-            </div>
-
-            <div class="mt-4">
-                <LineChart
-                    :labels="chart.labels"
-                    :series="[
-                        {
-                            name: t('transaction.cashIn'),
-                            color: 'var(--color-balance)',
-                            points: chart.cashIn,
-                        },
-                        {
-                            name: t('transaction.cashOut'),
-                            color: 'var(--color-brand)',
-                            points: chart.cashOut,
-                        },
-                    ]"
-                />
-            </div>
         </section>
 
         <div

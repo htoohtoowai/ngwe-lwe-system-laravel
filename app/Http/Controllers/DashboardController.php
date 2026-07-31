@@ -110,7 +110,7 @@ class DashboardController extends Controller
             ->whereIn('status', ['ACTIVE', 'PENDING_RECEIPT', 'PENDING_RECONCILIATION'])
             ->orderByRaw("CASE WHEN status = 'ACTIVE' THEN 0 WHEN status = 'PENDING_RECEIPT' THEN 1 ELSE 2 END")
             ->orderByDesc('created_at')
-            ->limit($user->role === 'teller' ? 3 : 12)
+            ->limit($user->role === 'teller' ? 1 : 12)
             ->get()
             ->map(fn (CashFloatAssignment $float): array => [
                 'id' => $float->id,

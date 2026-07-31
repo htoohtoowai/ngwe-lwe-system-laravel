@@ -48,6 +48,19 @@ class CashFloatService
         $this->guardNonEmptyDenominations($denominations);
 
         $float = DB::transaction(function () use ($cashier, $employeeId, $denominations, $note): CashFloatAssignment {
+            User::query()->whereKey($employeeId)->lockForUpdate()->firstOrFail();
+
+            $hasOpenFloat = CashFloatAssignment::query()
+                ->where('employee_id', $employeeId)
+                ->whereIn('status', ['PENDING_RECEIPT', 'ACTIVE', 'PENDING_RECONCILIATION'])
+                ->exists();
+
+            if ($hasOpenFloat) {
+                throw new RuntimeException(
+                    'This Teller already has an open float. Close the current float before issuing another one.',
+                );
+            }
+
             $float = $this->floats->issue($employeeId, $cashier->id, $denominations, $note);
 
             $this->vault->recordBulk(

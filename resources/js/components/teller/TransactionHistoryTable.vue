@@ -3,14 +3,35 @@ import MoneyText from '@/components/teller/MoneyText.vue';
 import StateChip from '@/components/teller/StateChip.vue';
 import { useLocale } from '@/lib/i18n';
 import type { TransactionHistoryRow } from '@/types/domain';
+import { computed, ref, watch } from 'vue';
 
-defineProps<{
+const props = defineProps<{
     rows: TransactionHistoryRow[];
     title: string;
     emptyText?: string;
 }>();
 
 const { t } = useLocale();
+const perPage = ref(25);
+const currentPage = ref(1);
+const pageCount = computed(() =>
+    Math.max(1, Math.ceil(props.rows.length / perPage.value)),
+);
+const paginatedRows = computed(() => {
+    const start = (currentPage.value - 1) * perPage.value;
+
+    return props.rows.slice(start, start + perPage.value);
+});
+const firstRecord = computed(() =>
+    props.rows.length ? (currentPage.value - 1) * perPage.value + 1 : 0,
+);
+const lastRecord = computed(() =>
+    Math.min(currentPage.value * perPage.value, props.rows.length),
+);
+
+watch([perPage, () => props.rows.length], () => {
+    currentPage.value = Math.min(currentPage.value, pageCount.value);
+});
 
 function refNo(id: number): string {
     return `#${String(id).padStart(6, '0')}`;
@@ -85,7 +106,7 @@ function customerText(row: TransactionHistoryRow): string {
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-line">
-                    <tr v-for="row in rows" :key="row.id" class="align-top">
+                    <tr v-for="row in paginatedRows" :key="row.id" class="align-top">
                         <td class="money px-4 py-3 font-black">
                             {{ refNo(row.id) }}
                         </td>
@@ -127,5 +148,49 @@ function customerText(row: TransactionHistoryRow): string {
                 </tbody>
             </table>
         </div>
+
+        <footer
+            v-if="rows.length"
+            class="mt-4 grid items-center gap-3 px-4 pb-4 text-sm font-semibold text-slate md:grid-cols-3"
+        >
+            <span>
+                Showing {{ firstRecord }} to {{ lastRecord }} of
+                {{ rows.length }} entries
+            </span>
+            <label class="flex items-center justify-center gap-2">
+                {{ t('common.show', 'Show') }}
+                <select
+                    v-model.number="perPage"
+                    class="bank-input w-20 py-2"
+                    @change="currentPage = 1"
+                >
+                    <option :value="10">10</option>
+                    <option :value="25">25</option>
+                    <option :value="50">50</option>
+                    <option :value="100">100</option>
+                </select>
+                {{ t('common.entries', 'entries') }}
+            </label>
+
+            <div class="flex justify-end gap-2">
+                <button
+                    type="button"
+                    class="bank-button bank-button-secondary px-3 py-2"
+                    :disabled="currentPage === 1"
+                    @click="currentPage--"
+                >
+                    {{ t('common.previous', 'Previous') }}
+                </button>
+                <span class="self-center">{{ currentPage }} / {{ pageCount }}</span>
+                <button
+                    type="button"
+                    class="bank-button bank-button-secondary px-3 py-2"
+                    :disabled="currentPage === pageCount"
+                    @click="currentPage++"
+                >
+                    {{ t('common.next', 'Next') }}
+                </button>
+            </div>
+        </footer>
     </section>
 </template>

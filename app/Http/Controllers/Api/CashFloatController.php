@@ -94,6 +94,8 @@ class CashFloatController extends Controller
             );
         } catch (InvalidArgumentException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 409);
         }
 
         return (new CashFloatResource($float))->response()->setStatusCode(201);

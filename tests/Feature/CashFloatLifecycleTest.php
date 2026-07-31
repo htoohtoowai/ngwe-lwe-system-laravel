@@ -76,6 +76,34 @@ class CashFloatLifecycleTest extends TestCase
             ->assertStatus(422);
     }
 
+    public function test_cashier_cannot_issue_a_second_open_float_to_the_same_teller(): void
+    {
+        [$cashier, $cashierToken] = $this->userWithToken('cashier');
+        $employee = $this->activeEmployee();
+
+        $this->seedVaultBalance([10_000 => 10], $cashier);
+        $this->issueFloat($cashier, $employee, [10_000 => 2]);
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/cash-floats', [
+                'employee_id' => $employee->id,
+                'denominations' => [10_000 => 1],
+            ])
+            ->assertConflict()
+            ->assertJsonPath(
+                'message',
+                'This Teller already has an open float. Close the current float before issuing another one.',
+            );
+
+        $this->assertSame(
+            1,
+            CashFloatAssignment::query()
+                ->where('employee_id', $employee->id)
+                ->whereIn('status', ['PENDING_RECEIPT', 'ACTIVE', 'PENDING_RECONCILIATION'])
+                ->count(),
+        );
+    }
+
     public function test_employee_cannot_issue_float(): void
     {
         [, $employeeToken] = $this->userWithToken('teller');

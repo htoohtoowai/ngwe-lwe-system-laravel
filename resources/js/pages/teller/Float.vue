@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { router, usePage } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import DenominationDrawer from '@/components/teller/DenominationDrawer.vue';
 import MoneyText from '@/components/teller/MoneyText.vue';
 import PinSeal from '@/components/teller/PinSeal.vue';
@@ -88,6 +88,26 @@ let realtimeConnected = false;
 const status = computed(() => props.float?.status ?? 'CLOSED');
 const historyOnly = computed(() => props.view === 'history');
 const rows = computed(() => props.floats);
+const historyPerPage = ref(25);
+const historyPage = ref(1);
+const historyPageCount = computed(() =>
+    Math.max(1, Math.ceil(rows.value.length / historyPerPage.value)),
+);
+const paginatedRows = computed(() => {
+    const start = (historyPage.value - 1) * historyPerPage.value;
+
+    return rows.value.slice(start, start + historyPerPage.value);
+});
+const historyFirstRecord = computed(() =>
+    rows.value.length ? (historyPage.value - 1) * historyPerPage.value + 1 : 0,
+);
+const historyLastRecord = computed(() =>
+    Math.min(historyPage.value * historyPerPage.value, rows.value.length),
+);
+
+watch([historyPerPage, () => rows.value.length], () => {
+    historyPage.value = Math.min(historyPage.value, historyPageCount.value);
+});
 const pendingRows = computed(() =>
     rows.value.filter((float) => float.status === 'PENDING_RECEIPT'),
 );
@@ -625,7 +645,7 @@ onBeforeUnmount(() => {
                     </thead>
                     <tbody class="divide-y divide-paper-edge">
                         <tr
-                            v-for="floatRow in rows"
+                            v-for="floatRow in paginatedRows"
                             :key="floatRow.id"
                             class="align-middle"
                             :class="
@@ -697,6 +717,50 @@ onBeforeUnmount(() => {
                     </tbody>
                 </table>
             </div>
+            <footer
+                v-if="rows.length"
+                class="mt-4 grid items-center gap-3 px-4 pb-4 text-sm font-semibold text-slate md:grid-cols-3"
+            >
+                <span>
+                    Showing {{ historyFirstRecord }} to
+                    {{ historyLastRecord }} of {{ rows.length }} entries
+                </span>
+                <label class="flex items-center justify-center gap-2">
+                    {{ t('common.show', 'Show') }}
+                    <select
+                        v-model.number="historyPerPage"
+                        class="bank-input w-20 py-2"
+                        @change="historyPage = 1"
+                    >
+                        <option :value="10">10</option>
+                        <option :value="25">25</option>
+                        <option :value="50">50</option>
+                        <option :value="100">100</option>
+                    </select>
+                    {{ t('common.entries', 'entries') }}
+                </label>
+                <div class="flex justify-end gap-2">
+                    <button
+                        type="button"
+                        class="bank-button bank-button-secondary px-3 py-2"
+                        :disabled="historyPage === 1"
+                        @click="historyPage--"
+                    >
+                        {{ t('common.previous', 'Previous') }}
+                    </button>
+                    <span class="self-center">
+                        {{ historyPage }} / {{ historyPageCount }}
+                    </span>
+                    <button
+                        type="button"
+                        class="bank-button bank-button-secondary px-3 py-2"
+                        :disabled="historyPage === historyPageCount"
+                        @click="historyPage++"
+                    >
+                        {{ t('common.next', 'Next') }}
+                    </button>
+                </div>
+            </footer>
         </section>
 
         <div
