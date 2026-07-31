@@ -741,6 +741,19 @@ async function signOut() {
                     </Link>
 
                     <!-- language -->
+                    <button
+                        type="button"
+                        class="grid size-10 place-items-center rounded-full border border-line bg-card text-[10px] font-black text-brand shadow-sm transition hover:border-brand/30 hover:bg-brand-soft focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none sm:hidden"
+                        :aria-label="t('common.language')"
+                        :title="
+                            lang === 'en'
+                                ? t('language.myanmar')
+                                : t('language.english')
+                        "
+                        @click="setLang(lang === 'en' ? 'mm' : 'en')"
+                    >
+                        {{ lang === 'en' ? 'မြန်မာ' : 'EN' }}
+                    </button>
                     <div
                         class="hidden items-center rounded-pill border border-line bg-card p-0.5 text-[11px] font-bold shadow-sm sm:flex"
                         :aria-label="t('common.language')"
