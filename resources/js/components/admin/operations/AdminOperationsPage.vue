@@ -243,6 +243,7 @@ const closeNotes = ref('');
 const companyLogoFile = ref<File | null>(null);
 const companyLogoInput = ref<HTMLInputElement | null>(null);
 const companyLogoUrls = ref<Record<number, string>>({});
+const companyPendingDelete = ref<Company | null>(null);
 
 const dailySummary = ref<Summary | null>(null);
 const companies = ref<Company[]>([]);
@@ -280,20 +281,43 @@ function pagedList<T>(rows: T[]): T[] {
 }
 
 const filteredCompanies = computed(() => filteredList(companies.value));
+const activeCompanies = computed(() =>
+    companies.value.filter((company) => company.is_active),
+);
+const selectableServiceTypes = computed(() =>
+    serviceTypes.value.filter(
+        (serviceType) =>
+            serviceType.is_active && serviceType.company?.is_active !== false,
+    ),
+);
+const selectableAccounts = computed(() =>
+    accounts.value.filter(
+        (account) =>
+            account.is_active &&
+            account.service_type?.is_active !== false &&
+            account.service_type?.company?.is_active !== false,
+    ),
+);
 const filteredServiceTypes = computed(() => filteredList(serviceTypes.value));
 const filteredExchangeRates = computed(() => filteredList(exchangeRates.value));
 const filteredAccounts = computed(() => filteredList(accounts.value));
 const filteredUsers = computed(() => filteredList(users.value));
-const filteredTiers = computed(() =>
-    filteredList(
+const filteredTiers = computed(() => {
+    const selectableIds = new Set(
+        selectableServiceTypes.value.map((serviceType) => serviceType.id),
+    );
+    const visibleTiers = commissionTiers.value.filter((tier) =>
+        selectableIds.has(tier.service_type_id),
+    );
+
+    return filteredList(
         tierServiceTypeId.value === null
-            ? commissionTiers.value
-            : commissionTiers.value.filter(
-                  (tier) =>
-                      tier.service_type_id === tierServiceTypeId.value,
+            ? visibleTiers
+            : visibleTiers.filter(
+                  (tier) => tier.service_type_id === tierServiceTypeId.value,
               ),
-    ),
-);
+    );
+});
 const currentAdminList = computed(() => {
     if (activeTab.value === 'companies') return filteredCompanies.value;
     if (activeTab.value === 'service-types') return filteredServiceTypes.value;
@@ -617,8 +641,9 @@ const breadcrumbItems = computed<AdminBreadcrumbItem[]>(() => {
 watch(
     companies,
     (values) => {
-        if (serviceForm.value.company_id === null && values.length > 0) {
-            serviceForm.value.company_id = values[0].id;
+        const firstActiveCompany = values.find((company) => company.is_active);
+        if (serviceForm.value.company_id === null && firstActiveCompany) {
+            serviceForm.value.company_id = firstActiveCompany.id;
         }
 
         void refreshCompanyLogoUrls(values);
@@ -629,7 +654,11 @@ watch(
 watch(
     serviceTypes,
     (values) => {
-        const firstId = values[0]?.id ?? null;
+        const firstId = values.find(
+            (serviceType) =>
+                serviceType.is_active &&
+                serviceType.company?.is_active !== false,
+        )?.id ?? null;
 
         if (accountForm.value.service_type_id === null) {
             accountForm.value.service_type_id = firstId;
@@ -648,6 +677,17 @@ watch(
 
 watch(tierServiceTypeId, (value) => {
     tierForm.value.service_type_id = value;
+});
+
+watch(selectableServiceTypes, (values) => {
+    if (
+        tierServiceTypeId.value !== null &&
+        !values.some(
+            (serviceType) => serviceType.id === tierServiceTypeId.value,
+        )
+    ) {
+        tierServiceTypeId.value = null;
+    }
 });
 
 watch(
@@ -822,7 +862,7 @@ function resetCompanyForm(): void {
 
 function resetServiceForm(): void {
     serviceForm.value = {
-        company_id: companies.value[0]?.id ?? null,
+        company_id: activeCompanies.value[0]?.id ?? null,
         name: '',
         operation: 'CashIn',
         is_active: true,
@@ -831,7 +871,7 @@ function resetServiceForm(): void {
 
 function resetAccountForm(): void {
     accountForm.value = {
-        service_type_id: serviceTypes.value[0]?.id ?? null,
+        service_type_id: selectableServiceTypes.value[0]?.id ?? null,
         account_name: '',
         phone_number: '',
         balance: 0,
@@ -844,7 +884,7 @@ function resetAccountForm(): void {
 function resetTierForm(): void {
     tierForm.value = {
         service_type_id:
-            tierServiceTypeId.value ?? serviceTypes.value[0]?.id ?? null,
+            tierServiceTypeId.value ?? selectableServiceTypes.value[0]?.id ?? null,
         amount_from: 1,
         amount_to: 999999999,
         fee_amount_type: 'FIXED',
@@ -1325,6 +1365,30 @@ async function toggleCompany(company: Company): Promise<void> {
             body: { is_active: !company.is_active },
         });
         await refreshAll();
+    });
+}
+
+function openCompanyDeleteModal(company: Company): void {
+    companyPendingDelete.value = company;
+}
+
+function closeCompanyDeleteModal(): void {
+    if (busy.value === '') {
+        companyPendingDelete.value = null;
+    }
+}
+
+async function confirmCompanyDelete(): Promise<void> {
+    const company = companyPendingDelete.value;
+
+    if (!company) {
+        return;
+    }
+
+    await runAction('Company deleted.', async () => {
+        await request(`/api/companies/${company.id}`, { method: 'DELETE' });
+        await refreshAll();
+        companyPendingDelete.value = null;
     });
 }
 
@@ -2149,6 +2213,19 @@ async function sendBroadcastTest(): Promise<void> {
                                             >
                                                 Edit
                                             </Link>
+                                            <button
+                                                v-if="company.is_active"
+                                                type="button"
+                                                class="rounded-pill border border-brand/25 bg-brand-soft px-3 py-1 text-xs font-black text-brand"
+                                                :disabled="busy !== ''"
+                                                @click="
+                                                    openCompanyDeleteModal(
+                                                        company,
+                                                    )
+                                                "
+                                            >
+                                                Delete
+                                            </button>
                                         </div>
                                     </td>
                                     <td class="px-3 py-3 text-right">
@@ -2238,7 +2315,7 @@ async function sendBroadcastTest(): Promise<void> {
                                 required
                             >
                                 <option
-                                    v-for="company in companies"
+                                    v-for="company in activeCompanies"
                                     :key="company.id"
                                     :value="company.id"
                                 >
@@ -2252,7 +2329,7 @@ async function sendBroadcastTest(): Promise<void> {
                                 v-model.trim="serviceForm.name"
                                 class="bank-input"
                                 required
-                                placeholder="WST, P2P, KPay"
+                                placeholder="WST, P2P"
                             />
                         </label>
                         <label>
@@ -2707,7 +2784,7 @@ async function sendBroadcastTest(): Promise<void> {
                                 required
                             >
                                 <option
-                                    v-for="serviceType in serviceTypes"
+                                    v-for="serviceType in selectableServiceTypes"
                                     :key="serviceType.id"
                                     :value="serviceType.id"
                                 >
@@ -2910,7 +2987,7 @@ async function sendBroadcastTest(): Promise<void> {
                                         Select account
                                     </option>
                                     <option
-                                        v-for="account in accounts"
+                                        v-for="account in selectableAccounts"
                                         :key="account.id"
                                         :value="account.id"
                                     >
@@ -3108,7 +3185,7 @@ async function sendBroadcastTest(): Promise<void> {
                             class="bank-input"
                         >
                             <option
-                                v-for="serviceType in serviceTypes"
+                                v-for="serviceType in selectableServiceTypes"
                                 :key="serviceType.id"
                                 :value="serviceType.id"
                             >
@@ -3374,7 +3451,7 @@ async function sendBroadcastTest(): Promise<void> {
                                 >
                                     <option :value="null">Service Type</option>
                                     <option
-                                        v-for="serviceType in serviceTypes"
+                                        v-for="serviceType in selectableServiceTypes"
                                         :key="serviceType.id"
                                         :value="serviceType.id"
                                     >
@@ -4612,5 +4689,54 @@ async function sendBroadcastTest(): Promise<void> {
                 </div>
             </section>
         </div>
+
+        <Teleport to="body">
+            <div
+                v-if="companyPendingDelete"
+                class="fixed inset-0 z-[80] grid place-items-center bg-ink/60 p-4 backdrop-blur-sm"
+                @click.self="closeCompanyDeleteModal"
+            >
+                <section
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="company-delete-title"
+                    class="w-full max-w-md rounded-2xl border border-line bg-card p-5 shadow-2xl sm:p-6"
+                >
+                    <h2
+                        id="company-delete-title"
+                        class="text-lg font-black text-ink"
+                    >
+                        Delete company?
+                    </h2>
+                    <p class="mt-2 text-sm font-semibold leading-6 text-slate">
+                        <strong class="text-ink">{{
+                            companyPendingDelete.name
+                        }}</strong>
+                        will be marked inactive and removed from selection lists.
+                        Existing records will be kept.
+                    </p>
+                    <div
+                        class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
+                    >
+                        <button
+                            type="button"
+                            class="bank-button bank-button-secondary"
+                            :disabled="busy !== ''"
+                            @click="closeCompanyDeleteModal"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            class="bank-button bank-button-danger"
+                            :disabled="busy !== ''"
+                            @click="confirmCompanyDelete"
+                        >
+                            {{ busy === 'Company deleted.' ? 'Deleting…' : 'Delete company' }}
+                        </button>
+                    </div>
+                </section>
+            </div>
+        </Teleport>
     </BankLayout>
 </template>

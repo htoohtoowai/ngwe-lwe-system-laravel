@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Account;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Validator;
 
 class AccountRequest extends FormRequest
 {
@@ -24,6 +26,30 @@ class AccountRequest extends FormRequest
             'is_active' => ['sometimes', 'boolean'],
             'is_fee_account' => ['sometimes', 'boolean'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            if ($validator->errors()->isNotEmpty()) {
+                return;
+            }
+
+            $account = $this->route('account');
+            $duplicate = Account::query()
+                ->where('service_type_id', $this->input('service_type_id', $account?->service_type_id))
+                ->where('account_name', $this->input('account_name', $account?->account_name))
+                ->where('phone_number', $this->input('phone_number', $account?->phone_number))
+                ->when($account, fn ($query) => $query->where('id', '!=', $account->id))
+                ->exists();
+
+            if ($duplicate) {
+                $validator->errors()->add(
+                    'phone_number',
+                    'This service type, account name, and account number already exist.'
+                );
+            }
+        });
     }
 
     protected function prepareForValidation(): void

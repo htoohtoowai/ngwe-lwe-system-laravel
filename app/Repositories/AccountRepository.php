@@ -23,7 +23,11 @@ class AccountRepository
                 $query->whereHas('serviceType', fn ($serviceTypeQuery) => $serviceTypeQuery->where('company_id', $companyId));
             })
             ->when($feeOnly, fn ($query) => $query->where('is_fee_account', true))
-            ->when(! $includeInactive, fn ($query) => $query->where('is_active', true))
+            ->when(! $includeInactive, fn ($query) => $query
+                ->where('is_active', true)
+                ->whereHas('serviceType', fn ($serviceQuery) => $serviceQuery
+                    ->where('is_active', true)
+                    ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true))))
             ->orderBy('account_name')
             ->get();
     }
@@ -32,6 +36,9 @@ class AccountRepository
     {
         return Account::query()
             ->where('is_active', true)
+            ->whereHas('serviceType', fn ($serviceQuery) => $serviceQuery
+                ->where('is_active', true)
+                ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true)))
             ->with('serviceType.company')
             ->orderBy('account_name')
             ->get();
@@ -42,6 +49,9 @@ class AccountRepository
         return Account::query()
             ->where('is_fee_account', true)
             ->where('is_active', true)
+            ->whereHas('serviceType', fn ($serviceQuery) => $serviceQuery
+                ->where('is_active', true)
+                ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true)))
             ->orderBy('account_name')
             ->get();
     }
@@ -50,6 +60,9 @@ class AccountRepository
     {
         return Account::query()
             ->where('is_active', true)
+            ->whereHas('serviceType', fn ($serviceQuery) => $serviceQuery
+                ->where('is_active', true)
+                ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true)))
             ->find($id);
     }
 

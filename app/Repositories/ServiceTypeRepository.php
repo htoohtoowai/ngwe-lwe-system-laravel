@@ -11,7 +11,9 @@ class ServiceTypeRepository
     {
         return ServiceType::query()
             ->when($companyId !== null, fn ($query) => $query->where('company_id', $companyId))
-            ->when(! $includeInactive, fn ($query) => $query->where('is_active', true))
+            ->when(! $includeInactive, fn ($query) => $query
+                ->where('is_active', true)
+                ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true)))
             ->with('company')
             ->orderBy('name')
             ->get();
@@ -22,6 +24,7 @@ class ServiceTypeRepository
         return ServiceType::query()
             ->where('company_id', $companyId)
             ->where('is_active', true)
+            ->whereHas('company', fn ($query) => $query->where('is_active', true))
             ->orderBy('name')
             ->get();
     }

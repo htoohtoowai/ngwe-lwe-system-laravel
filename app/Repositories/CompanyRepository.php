@@ -11,6 +11,7 @@ class CompanyRepository
     {
         return Company::query()
             ->when(! $includeInactive, fn ($query) => $query->where('is_active', true))
+            ->orderByDesc('is_active')
             ->orderBy('name')
             ->get();
     }

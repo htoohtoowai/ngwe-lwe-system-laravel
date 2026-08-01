@@ -227,6 +227,7 @@ class TransactionEntryController extends Controller
         return ServiceType::query()
             ->with('company')
             ->where('is_active', true)
+            ->whereHas('company', fn ($query) => $query->where('is_active', true))
             ->orderBy('name')
             ->get()
             ->map(fn (ServiceType $serviceType): array => [
