@@ -151,6 +151,36 @@ class NgweLweSetupApiTest extends TestCase
             ->assertJsonPath('data.is_fee_account', true);
     }
 
+    public function test_service_types_list_active_records_before_inactive_records(): void
+    {
+        $token = $this->tokenForRole('admin');
+        $company = Company::query()->create([
+            'name' => 'Wave Money',
+            'category' => 'Pay',
+        ]);
+
+        ServiceType::query()->create([
+            'company_id' => $company->id,
+            'name' => 'A Inactive',
+            'operation' => 'CashIn',
+            'is_active' => false,
+        ]);
+        ServiceType::query()->create([
+            'company_id' => $company->id,
+            'name' => 'B Active',
+            'operation' => 'CashOut',
+            'is_active' => true,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/service-types?include_inactive=1')
+            ->assertOk()
+            ->assertJsonPath('data.0.name', 'B Active')
+            ->assertJsonPath('data.0.is_active', true)
+            ->assertJsonPath('data.1.name', 'A Inactive')
+            ->assertJsonPath('data.1.is_active', false);
+    }
+
     public function test_account_service_name_and_number_combination_must_be_unique(): void
     {
         $token = $this->tokenForRole('admin');

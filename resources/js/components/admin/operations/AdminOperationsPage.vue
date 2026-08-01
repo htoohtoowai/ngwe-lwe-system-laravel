@@ -244,6 +244,8 @@ const companyLogoFile = ref<File | null>(null);
 const companyLogoInput = ref<HTMLInputElement | null>(null);
 const companyLogoUrls = ref<Record<number, string>>({});
 const companyPendingDelete = ref<Company | null>(null);
+const serviceTypePendingDelete = ref<ServiceType | null>(null);
+const accountPendingDelete = ref<Account | null>(null);
 
 const dailySummary = ref<Summary | null>(null);
 const companies = ref<Company[]>([]);
@@ -1430,6 +1432,33 @@ async function toggleServiceType(serviceType: ServiceType): Promise<void> {
     });
 }
 
+function openServiceTypeDeleteModal(serviceType: ServiceType): void {
+    serviceTypePendingDelete.value = serviceType;
+}
+
+function closeServiceTypeDeleteModal(): void {
+    if (busy.value === '') {
+        serviceTypePendingDelete.value = null;
+    }
+}
+
+async function confirmServiceTypeDelete(): Promise<void> {
+    const serviceType = serviceTypePendingDelete.value;
+
+    if (!serviceType) {
+        return;
+    }
+
+    await runAction('Service type deleted.', async () => {
+        await request(`/api/service-types/${serviceType.id}`, {
+            method: 'DELETE',
+        });
+        await refreshAll();
+        serviceTypePendingDelete.value = null;
+        visitAdmin('service-types');
+    });
+}
+
 async function saveAccount(): Promise<void> {
     if (accountForm.value.service_type_id === null) {
         error.value = 'Select a service type first.';
@@ -1463,6 +1492,31 @@ async function toggleAccount(account: Account): Promise<void> {
             body: { is_active: !account.is_active },
         });
         await refreshAll();
+    });
+}
+
+function openAccountDeleteModal(account: Account): void {
+    accountPendingDelete.value = account;
+}
+
+function closeAccountDeleteModal(): void {
+    if (busy.value === '') {
+        accountPendingDelete.value = null;
+    }
+}
+
+async function confirmAccountDelete(): Promise<void> {
+    const account = accountPendingDelete.value;
+
+    if (!account) {
+        return;
+    }
+
+    await runAction('Account deleted.', async () => {
+        await request(`/api/accounts/${account.id}`, { method: 'DELETE' });
+        await refreshAll();
+        accountPendingDelete.value = null;
+        visitAdmin('accounts');
     });
 }
 
@@ -2372,6 +2426,21 @@ async function sendBroadcastTest(): Promise<void> {
                         class="mt-4 rounded-lg border border-line bg-mist p-4"
                     >
                         <template v-if="currentServiceType">
+                            <div class="mb-4 flex justify-end">
+                                <button
+                                    v-if="currentServiceType.is_active"
+                                    type="button"
+                                    class="bank-button bank-button-danger py-2"
+                                    :disabled="busy !== ''"
+                                    @click="
+                                        openServiceTypeDeleteModal(
+                                            currentServiceType,
+                                        )
+                                    "
+                                >
+                                    Delete
+                                </button>
+                            </div>
                             <dl class="grid gap-3 text-sm sm:grid-cols-2">
                                 <div>
                                     <dt class="font-bold text-slate">
@@ -2470,6 +2539,19 @@ async function sendBroadcastTest(): Promise<void> {
                                             >
                                                 Edit
                                             </Link>
+                                            <button
+                                                v-if="serviceType.is_active"
+                                                type="button"
+                                                class="rounded-pill bg-[#d92d45] px-3 py-1 text-xs font-black text-white"
+                                                :disabled="busy !== ''"
+                                                @click="
+                                                    openServiceTypeDeleteModal(
+                                                        serviceType,
+                                                    )
+                                                "
+                                            >
+                                                Delete
+                                            </button>
                                         </div>
                                     </td>
                                     <td class="px-3 py-3 text-right">
@@ -2897,6 +2979,17 @@ async function sendBroadcastTest(): Promise<void> {
                                 >
                                     Edit
                                 </Link>
+                                <button
+                                    v-if="currentAccount?.is_active"
+                                    type="button"
+                                    class="bank-button bank-button-danger py-2"
+                                    :disabled="busy !== ''"
+                                    @click="
+                                        openAccountDeleteModal(currentAccount)
+                                    "
+                                >
+                                    Delete
+                                </button>
                             </div>
                         </div>
                         <template v-if="currentAccount">
@@ -3127,6 +3220,19 @@ async function sendBroadcastTest(): Promise<void> {
                                             >
                                                 Edit
                                             </Link>
+                                            <button
+                                                v-if="account.is_active"
+                                                type="button"
+                                                class="rounded-pill bg-[#d92d45] px-3 py-1 text-xs font-black text-white"
+                                                :disabled="busy !== ''"
+                                                @click="
+                                                    openAccountDeleteModal(
+                                                        account,
+                                                    )
+                                                "
+                                            >
+                                                Delete
+                                            </button>
                                         </div>
                                     </td>
                                     <td class="px-4 py-3 text-right">
@@ -4729,6 +4835,113 @@ async function sendBroadcastTest(): Promise<void> {
                             @click="confirmCompanyDelete"
                         >
                             {{ busy === 'Company deleted.' ? 'Deleting…' : 'Delete company' }}
+                        </button>
+                    </div>
+                </section>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div
+                v-if="serviceTypePendingDelete"
+                class="fixed inset-0 z-[80] grid place-items-center bg-ink/60 p-4 backdrop-blur-sm"
+                @click.self="closeServiceTypeDeleteModal"
+            >
+                <section
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="service-type-delete-title"
+                    class="w-full max-w-md rounded-2xl border border-line bg-card p-5 shadow-2xl sm:p-6"
+                >
+                    <h2
+                        id="service-type-delete-title"
+                        class="text-lg font-black text-ink"
+                    >
+                        Delete service type?
+                    </h2>
+                    <p class="mt-2 text-sm font-semibold leading-6 text-slate">
+                        <strong class="text-ink">{{
+                            serviceTypePendingDelete.name
+                        }}</strong>
+                        will be marked inactive and removed from selection lists.
+                        Existing accounts, fees and transactions will be kept.
+                    </p>
+                    <div
+                        class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
+                    >
+                        <button
+                            type="button"
+                            class="bank-button bank-button-secondary"
+                            :disabled="busy !== ''"
+                            @click="closeServiceTypeDeleteModal"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            class="bank-button bank-button-danger"
+                            :disabled="busy !== ''"
+                            @click="confirmServiceTypeDelete"
+                        >
+                            {{
+                                busy === 'Service type deleted.'
+                                    ? 'Deleting...'
+                                    : 'Delete service type'
+                            }}
+                        </button>
+                    </div>
+                </section>
+            </div>
+        </Teleport>
+
+        <Teleport to="body">
+            <div
+                v-if="accountPendingDelete"
+                class="fixed inset-0 z-[80] grid place-items-center bg-ink/60 p-4 backdrop-blur-sm"
+                @click.self="closeAccountDeleteModal"
+            >
+                <section
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="account-delete-title"
+                    class="w-full max-w-md rounded-2xl border border-line bg-card p-5 shadow-2xl sm:p-6"
+                >
+                    <h2
+                        id="account-delete-title"
+                        class="text-lg font-black text-ink"
+                    >
+                        Delete account?
+                    </h2>
+                    <p class="mt-2 text-sm font-semibold leading-6 text-slate">
+                        <strong class="text-ink">{{
+                            accountPendingDelete.account_name
+                        }}</strong>
+                        will be marked inactive and removed from selection lists.
+                        Existing balances, adjustments and transactions will be
+                        kept.
+                    </p>
+                    <div
+                        class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
+                    >
+                        <button
+                            type="button"
+                            class="bank-button bank-button-secondary"
+                            :disabled="busy !== ''"
+                            @click="closeAccountDeleteModal"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            class="bank-button bank-button-danger"
+                            :disabled="busy !== ''"
+                            @click="confirmAccountDelete"
+                        >
+                            {{
+                                busy === 'Account deleted.'
+                                    ? 'Deleting...'
+                                    : 'Delete account'
+                            }}
                         </button>
                     </div>
                 </section>

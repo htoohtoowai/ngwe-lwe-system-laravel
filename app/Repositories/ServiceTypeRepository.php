@@ -15,6 +15,7 @@ class ServiceTypeRepository
                 ->where('is_active', true)
                 ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true)))
             ->with('company')
+            ->orderByDesc('is_active')
             ->orderBy('name')
             ->get();
     }
