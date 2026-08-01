@@ -1111,6 +1111,10 @@ function serviceLabel(serviceType: ServiceType | null | undefined): string {
     return `${companyName(serviceType)} / ${serviceType.name}`;
 }
 
+function serviceOptionLabel(serviceType: ServiceType): string {
+    return `${serviceLabel(serviceType)} (${serviceType.operation})`;
+}
+
 function accountLabel(account: Account | null | undefined): string {
     if (!account) {
         return '-';
@@ -2870,7 +2874,7 @@ async function sendBroadcastTest(): Promise<void> {
                                     :key="serviceType.id"
                                     :value="serviceType.id"
                                 >
-                                    {{ serviceLabel(serviceType) }}
+                                    {{ serviceOptionLabel(serviceType) }}
                                 </option>
                             </select>
                         </label>
