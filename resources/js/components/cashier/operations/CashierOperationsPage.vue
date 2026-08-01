@@ -1044,7 +1044,7 @@ function statusLabel(status: string): string {
             </div>
             <footer v-if="livePendingCashIns.length" class="grid items-center gap-3 border-t border-line px-4 py-4 text-sm font-semibold text-slate md:grid-cols-3 sm:px-6">
                 <span>Showing {{ filteredPendingCashIns.length ? (pendingPage - 1) * pendingPageSize + 1 : 0 }} to {{ Math.min(pendingPage * pendingPageSize, filteredPendingCashIns.length) }} of {{ filteredPendingCashIns.length }} entries</span>
-                <label class="flex items-center justify-center gap-2">Show <select v-model.number="pendingPageSize" class="bank-input w-20 py-2"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select> entries</label>
+                <label class="bank-page-size justify-self-center">Show <select v-model.number="pendingPageSize" class="bank-page-size-select"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select> entries</label>
                 <div class="flex justify-end gap-2"><button type="button" class="bank-button bank-button-secondary px-3 py-2" :disabled="pendingPage <= 1" @click="pendingPage--">Previous</button><span class="self-center">{{ pendingPage }} / {{ pendingPageCount }}</span><button type="button" class="bank-button bank-button-secondary px-3 py-2" :disabled="pendingPage >= pendingPageCount" @click="pendingPage++">Next</button></div>
             </footer>
             <p
@@ -1396,7 +1396,7 @@ function statusLabel(status: string): string {
             </div>
             <footer class="grid items-center gap-3 border-t border-line px-4 py-4 text-sm font-semibold text-slate md:grid-cols-3 sm:px-6">
                 <span>Showing {{ filteredTransactions.length ? (transactionPage - 1) * transactionPageSize + 1 : 0 }} to {{ Math.min(transactionPage * transactionPageSize, filteredTransactions.length) }} of {{ filteredTransactions.length }} entries</span>
-                <label class="flex items-center justify-center gap-2">Show <select v-model.number="transactionPageSize" class="bank-input w-20 py-2"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select> entries</label>
+                <label class="bank-page-size justify-self-center">Show <select v-model.number="transactionPageSize" class="bank-page-size-select"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select> entries</label>
                 <div class="flex justify-end gap-2"><button type="button" class="bank-button bank-button-secondary px-3 py-2" :disabled="transactionPage <= 1" @click="transactionPage--">Previous</button><span class="self-center">{{ transactionPage }} / {{ transactionPageCount }}</span><button type="button" class="bank-button bank-button-secondary px-3 py-2" :disabled="transactionPage >= transactionPageCount" @click="transactionPage++">Next</button></div>
             </footer>
         </section>
@@ -1461,7 +1461,7 @@ function statusLabel(status: string): string {
             </div>
             <footer class="grid items-center gap-3 border-t border-line px-4 py-4 text-sm font-semibold text-slate md:grid-cols-3 sm:px-6">
                 <span>Showing {{ filteredVaultLogs.length ? (vaultLogPage - 1) * vaultLogPageSize + 1 : 0 }} to {{ Math.min(vaultLogPage * vaultLogPageSize, filteredVaultLogs.length) }} of {{ filteredVaultLogs.length }} entries</span>
-                <label class="flex items-center justify-center gap-2">Show <select v-model.number="vaultLogPageSize" class="bank-input w-20 py-2"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select> entries</label>
+                <label class="bank-page-size justify-self-center">Show <select v-model.number="vaultLogPageSize" class="bank-page-size-select"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select> entries</label>
                 <div class="flex justify-end gap-2"><button type="button" class="bank-button bank-button-secondary px-3 py-2" :disabled="vaultLogPage <= 1" @click="vaultLogPage--">Previous</button><span class="self-center">{{ vaultLogPage }} / {{ vaultLogPageCount }}</span><button type="button" class="bank-button bank-button-secondary px-3 py-2" :disabled="vaultLogPage >= vaultLogPageCount" @click="vaultLogPage++">Next</button></div>
             </footer>
         </section>

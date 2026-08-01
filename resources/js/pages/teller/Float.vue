@@ -725,11 +725,11 @@ onBeforeUnmount(() => {
                     Showing {{ historyFirstRecord }} to
                     {{ historyLastRecord }} of {{ rows.length }} entries
                 </span>
-                <label class="flex items-center justify-center gap-2">
+                <label class="bank-page-size justify-self-center">
                     {{ t('common.show', 'Show') }}
                     <select
                         v-model.number="historyPerPage"
-                        class="bank-input w-20 py-2"
+                        class="bank-page-size-select"
                         @change="historyPage = 1"
                     >
                         <option :value="10">10</option>

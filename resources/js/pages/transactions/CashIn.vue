@@ -145,6 +145,22 @@ const cashInServiceTypes = computed(() =>
             ['WST', 'Pay_To_Pay', 'P2P'].includes(serviceType.name),
     ),
 );
+const cashInServiceTypeIds = computed(
+    () => new Set(cashInServiceTypes.value.map((serviceType) => serviceType.id)),
+);
+const cashInAccountCounts = computed(() => {
+    const counts = new Map<string, number>();
+
+    for (const account of props.accounts) {
+        if (!cashInServiceTypeIds.value.has(account.service_type_id)) {
+            continue;
+        }
+
+        counts.set(account.company, (counts.get(account.company) ?? 0) + 1);
+    }
+
+    return counts;
+});
 const companies = computed(() => {
     const unique = new Map<
         string,
@@ -175,6 +191,7 @@ const cashInServiceOptions = computed(() =>
 const visibleAccounts = computed(() =>
     props.accounts.filter(
         (account) =>
+            cashInServiceTypeIds.value.has(account.service_type_id) &&
             (!selectedCompany.value ||
                 account.company === selectedCompany.value) &&
             (selectedServiceTypeId.value === null ||
@@ -644,13 +661,7 @@ function submit() {
                                     <span
                                         class="mt-0.5 block text-[10px] text-slate"
                                     >
-                                        {{
-                                            props.accounts.filter(
-                                                (account) =>
-                                                    account.company ===
-                                                    company.name,
-                                            ).length
-                                        }}
+                                        {{ cashInAccountCounts.get(company.name) ?? 0 }}
                                         {{ t('transaction.accounts') }}
                                     </span>
                                 </span>

@@ -4276,13 +4276,11 @@ async function sendBroadcastTest(): Promise<void> {
                                 }}
                                 of {{ filteredTransactions.length }} entries
                             </span>
-                            <label
-                                class="flex items-center justify-center gap-2"
-                            >
+                            <label class="bank-page-size justify-self-center">
                                 <span>Show</span>
                                 <select
                                     v-model.number="transactionPageSize"
-                                    class="bank-input w-20 py-2"
+                                    class="bank-page-size-select"
                                 >
                                     <option :value="10">10</option>
                                     <option :value="25">25</option>
@@ -4445,13 +4443,11 @@ async function sendBroadcastTest(): Promise<void> {
                                 }}
                                 of {{ activityLogs.length }} entries
                             </span>
-                            <label
-                                class="flex items-center justify-center gap-2"
-                            >
+                            <label class="bank-page-size justify-self-center">
                                 <span>Show</span>
                                 <select
                                     v-model.number="activityPageSize"
-                                    class="bank-input w-20 py-2"
+                                    class="bank-page-size-select"
                                 >
                                     <option :value="10">10</option>
                                     <option :value="25">25</option>

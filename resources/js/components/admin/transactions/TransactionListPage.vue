@@ -127,7 +127,7 @@ onMounted(load);
             </div>
             <footer class="mt-4 grid items-center gap-3 text-sm font-semibold text-slate md:grid-cols-3">
                 <span>Showing {{ filtered.length ? (page - 1) * pageSize + 1 : 0 }} to {{ Math.min(page * pageSize, filtered.length) }} of {{ filtered.length }} entries</span>
-                <label class="flex items-center justify-center gap-2">Show <select v-model.number="pageSize" class="bank-input w-20 py-2"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select> entries</label>
+                <label class="bank-page-size justify-self-center">Show <select v-model.number="pageSize" class="bank-page-size-select"><option :value="10">10</option><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select> entries</label>
                 <div class="flex justify-end gap-2"><button class="bank-button bank-button-secondary px-3 py-2" :disabled="page <= 1" @click="page--">Previous</button><span class="self-center">{{ page }} / {{ pageCount }}</span><button class="bank-button bank-button-secondary px-3 py-2" :disabled="page >= pageCount" @click="page++">Next</button></div>
             </footer>
         </section>

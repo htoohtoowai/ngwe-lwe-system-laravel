@@ -44,6 +44,19 @@ class AccountRepository
             ->get();
     }
 
+    public function activeForOperation(string $operation): Collection
+    {
+        return Account::query()
+            ->where('is_active', true)
+            ->whereHas('serviceType', fn ($serviceQuery) => $serviceQuery
+                ->where('is_active', true)
+                ->whereIn('operation', [$operation, 'All'])
+                ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true)))
+            ->with('serviceType.company')
+            ->orderBy('account_name')
+            ->get();
+    }
+
     public function feeAccounts(): Collection
     {
         return Account::query()

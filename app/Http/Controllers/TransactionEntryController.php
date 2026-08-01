@@ -123,6 +123,12 @@ class TransactionEntryController extends Controller
     {
         $user = $request->user();
         $float = $user?->role === 'teller' ? $this->selectedFloat($request) : null;
+        $operation = match ($transactionType) {
+            'cash_in' => 'CashIn',
+            'cash_out' => 'CashOut',
+            'transfer' => 'Transfer',
+            'exchange' => 'Exchange',
+        };
 
         return [
             'role' => $user?->role,
@@ -138,8 +144,8 @@ class TransactionEntryController extends Controller
             'cashOutStock' => $user?->role === 'admin'
                 ? $this->cashDenominations->getAvailableBalance()
                 : ($float ? $this->floats->getDenominationBalance($float->id) : []),
-            'accounts' => $this->accountProps(),
-            'serviceTypes' => $this->serviceTypeProps(),
+            'accounts' => $this->accountProps($this->accounts->activeForOperation($operation)),
+            'serviceTypes' => $this->serviceTypeProps($operation),
             'feeAccounts' => $this->accountProps($this->accounts->feeAccounts()),
             'fee' => $this->fee($request, $feeMode),
             'commission' => $this->commission($request, $commissionDirection),
@@ -222,11 +228,12 @@ class TransactionEntryController extends Controller
     /**
      * @return array<int, array{id:int,company_id:int|null,company:string,company_category:string|null,company_logo_url:string|null,name:string,operation:string}>
      */
-    private function serviceTypeProps(): array
+    private function serviceTypeProps(string $operation): array
     {
         return ServiceType::query()
             ->with('company')
             ->where('is_active', true)
+            ->whereIn('operation', [$operation, 'All'])
             ->whereHas('company', fn ($query) => $query->where('is_active', true))
             ->orderBy('name')
             ->get()

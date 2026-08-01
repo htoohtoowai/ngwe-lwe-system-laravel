@@ -49,11 +49,11 @@ const emit = defineEmits<{
             Showing {{ total ? (page - 1) * pageSize + 1 : 0 }} to
             {{ Math.min(page * pageSize, total) }} of {{ total }} entries
         </span>
-        <label class="flex items-center justify-center gap-2">
+        <label class="bank-page-size justify-self-center">
             Show
             <select
                 :value="pageSize"
-                class="bank-input w-20 py-2"
+                class="bank-page-size-select"
                 @change="emit('update:pageSize', Number(($event.target as HTMLSelectElement).value))"
             >
                 <option :value="10">10</option>
