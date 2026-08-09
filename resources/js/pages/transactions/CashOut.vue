@@ -26,7 +26,6 @@ const props = withDefaults(
             id: number;
             company: string;
             company_id?: number | null;
-            company_category?: string | null;
             company_logo_url?: string | null;
             name: string;
             number?: string;
@@ -62,7 +61,6 @@ const props = withDefaults(
 
 const step = ref<'form' | 'review'>('form');
 const accountId = ref<number | null>(null);
-const creditAccountType = ref<'pay' | 'bank'>('pay');
 const selectedCreditCompany = ref('');
 const amount = ref(0);
 const description = ref('');
@@ -72,10 +70,13 @@ const submitting = ref(false);
 const errors = ref<Record<string, string>>({});
 const feePaymentMethod = ref<FeePaymentMethod>('cash');
 const feeAccountId = ref<number | null>(null);
+const showCashDenoms = ref(true);
+const showFeeDenoms = ref(true);
 const historySearch = ref('');
 const historyStatus = ref('all');
 const historyDateFrom = ref('');
 const historyDateTo = ref('');
+const failedCompanyLogos = ref<Set<string>>(new Set());
 const { t } = useLocale();
 
 const feeNum = computed(() => Number(props.fee ?? 0));
@@ -99,10 +100,13 @@ const filteredHistory = computed(() => {
                 row.note,
                 row.amount,
                 row.status,
-            ].some((value) => String(value ?? '').toLowerCase().includes(query));
+            ].some((value) =>
+                String(value ?? '')
+                    .toLowerCase()
+                    .includes(query),
+            );
         const matchesStatus =
-            historyStatus.value === 'all' ||
-            row.status === historyStatus.value;
+            historyStatus.value === 'all' || row.status === historyStatus.value;
         const transactionDate = row.created_at?.slice(0, 10) ?? '';
         const matchesDateFrom =
             historyDateFrom.value === '' ||
@@ -112,10 +116,7 @@ const filteredHistory = computed(() => {
             transactionDate <= historyDateTo.value;
 
         return (
-            matchesSearch &&
-            matchesStatus &&
-            matchesDateFrom &&
-            matchesDateTo
+            matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo
         );
     });
 });
@@ -130,15 +131,7 @@ const creditCompanies = computed(() => {
     >();
 
     for (const candidate of props.accounts) {
-        const category = (candidate.company_category ?? 'Both')
-            .trim()
-            .toLowerCase();
-
-        if (
-            !candidate.company ||
-            unique.has(candidate.company) ||
-            (category !== creditAccountType.value && category !== 'both')
-        ) {
+        if (!candidate.company || unique.has(candidate.company)) {
             continue;
         }
 
@@ -153,11 +146,7 @@ const creditCompanies = computed(() => {
 });
 const creditAccounts = computed(() =>
     props.accounts.filter(
-        (candidate) =>
-            candidate.company === selectedCreditCompany.value &&
-            ['both', creditAccountType.value].includes(
-                (candidate.company_category ?? 'Both').trim().toLowerCase(),
-            ),
+        (candidate) => candidate.company === selectedCreditCompany.value,
     ),
 );
 const denomTotal = computed(() =>
@@ -208,6 +197,67 @@ const ready = computed(
         !floatLocked.value &&
         !cashierLocked.value,
 );
+const readyIssue = computed(() => {
+    if (floatLocked.value) {
+        return t('transaction.floatLocked');
+    }
+
+    if (cashierLocked.value) {
+        return t('transaction.cashierLocked');
+    }
+
+    if (accountId.value === null) {
+        return t(
+            'transaction.selectAccountBeforeContinue',
+            'Choose the account to credit.',
+        );
+    }
+
+    if (amount.value <= 0) {
+        return t('transaction.enterAmountBeforeContinue', 'Enter an amount.');
+    }
+
+    if (needsCashDenoms.value && denomTotal.value !== amount.value) {
+        return t(
+            'transaction.cashOutDenominationHint',
+            'Count the cash paid to the customer until it matches the amount.',
+        );
+    }
+
+    if (needsCashFeeDenoms.value && feeDenomTotal.value !== feeNum.value) {
+        return t('transaction.cashFeeReceivedHint');
+    }
+
+    return t(
+        'transaction.completeRequiredFields',
+        'Complete the required fields.',
+    );
+});
+
+function companyKey(company: { id: number | null; name: string }): string {
+    return company.id !== null ? `id:${company.id}` : `name:${company.name}`;
+}
+
+function hasCompanyLogo(company: {
+    id: number | null;
+    name: string;
+    logoUrl: string | null;
+}): boolean {
+    return Boolean(
+        company.logoUrl && !failedCompanyLogos.value.has(companyKey(company)),
+    );
+}
+
+function markCompanyLogoFailed(company: {
+    id: number | null;
+    name: string;
+    logoUrl: string | null;
+}): void {
+    failedCompanyLogos.value = new Set([
+        ...failedCompanyLogos.value,
+        companyKey(company),
+    ]);
+}
 
 watch(creditCompanies, (nextCompanies) => {
     if (
@@ -219,7 +269,7 @@ watch(creditCompanies, (nextCompanies) => {
     }
 });
 
-watch([creditAccountType, selectedCreditCompany], () => {
+watch(selectedCreditCompany, () => {
     if (
         !creditAccounts.value.some(
             (candidate) => candidate.id === accountId.value,
@@ -452,7 +502,7 @@ function submit() {
 
         <section
             v-else-if="view === 'entry' && step === 'form'"
-            class="bank-form-shell mt-5 max-w-3xl"
+            class="bank-form-shell mt-5 max-w-5xl p-5 sm:p-6"
             :class="
                 floatLocked || cashierLocked
                     ? 'pointer-events-none opacity-50'
@@ -463,211 +513,279 @@ function submit() {
                 {{ t('transaction.enterCashOutDetails') }}
             </h2>
 
-            <section
-                class="mt-4 rounded-field border border-line bg-mist/25 p-4"
-                aria-labelledby="cash-out-credit-company-title"
-            >
-                <div class="flex items-start justify-between gap-3">
+            <div class="mt-4 space-y-4">
+                <section
+                    class="space-y-2"
+                    aria-labelledby="cash-out-credit-company-title"
+                >
                     <div>
                         <h3
                             id="cash-out-credit-company-title"
-                            class="text-sm font-black text-ink"
+                            class="text-xs font-black text-slate"
                         >
                             {{ t('transaction.cashOutCreditCompany') }}
                         </h3>
-                        <p class="mt-1 text-xs text-slate">
+                        <p class="mt-0.5 text-[11px] text-slate">
                             {{ t('transaction.cashOutCreditCompanyHint') }}
                         </p>
                     </div>
-                    <span class="text-xs font-bold text-brand">{{
-                        t('component.required')
-                    }}</span>
+
+                    <div
+                        class="flex gap-2 overflow-x-auto pb-1.5"
+                        role="radiogroup"
+                        aria-label="Company to credit"
+                    >
+                        <button
+                            v-for="company in creditCompanies"
+                            :key="company.id ?? company.name"
+                            type="button"
+                            role="radio"
+                            :aria-checked="
+                                selectedCreditCompany === company.name
+                            "
+                            :aria-label="company.name"
+                            :title="company.name"
+                            class="group flex min-h-12 shrink-0 items-center gap-2 rounded-field border px-2.5 py-1.5 text-left transition"
+                            :class="[
+                                selectedCreditCompany === company.name
+                                    ? 'border-brand bg-brand-soft text-brand shadow-sm ring-2 ring-brand/15'
+                                    : 'border-line bg-mist/40 text-ink hover:border-brand/40 hover:bg-brand-soft/40',
+                                hasCompanyLogo(company)
+                                    ? 'min-w-16 justify-center'
+                                    : 'min-w-36',
+                            ]"
+                            @click="selectedCreditCompany = company.name"
+                        >
+                            <span
+                                v-if="hasCompanyLogo(company)"
+                                class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-card text-xs font-black shadow-sm"
+                                :class="
+                                    selectedCreditCompany === company.name
+                                        ? 'border-brand/25'
+                                        : ''
+                                "
+                            >
+                                <img
+                                    :src="company.logoUrl ?? ''"
+                                    :alt="`${company.name} logo`"
+                                    class="size-full object-contain p-0.5"
+                                    @error="markCompanyLogoFailed(company)"
+                                />
+                            </span>
+                            <span v-else class="min-w-0">
+                                <span
+                                    class="block truncate text-xs font-black"
+                                    >{{ company.name }}</span
+                                >
+                            </span>
+                        </button>
+                    </div>
+
+                    <p
+                        v-if="creditCompanies.length === 0"
+                        class="rounded-field border border-dashed border-line px-3 py-3 text-xs font-semibold text-slate"
+                    >
+                        {{ t('transaction.noSystemAccount') }}
+                    </p>
+                </section>
+
+                <div
+                    class="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3"
+                >
+                    <AccountTile
+                        v-model="accountId"
+                        :accounts="creditAccounts"
+                        :label="t('transaction.cashOutAccountCredit')"
+                        compact
+                    />
+
+                    <BigAmountInput
+                        v-model="amount"
+                        :label="t('transaction.cashOutAmount')"
+                        required
+                        compact
+                    />
+
+                    <div>
+                        <p class="bank-label">{{ t('transaction.fee') }}</p>
+                        <div
+                            class="flex min-h-12 items-center justify-between gap-3 rounded-field border border-line bg-mist px-3 py-2"
+                        >
+                            <p class="text-sm font-bold text-ink">
+                                {{ t('transaction.commissionTier') }}
+                            </p>
+                            <p class="money text-base font-bold text-ink">
+                                {{ mmk(feeNum) }}
+                                <span class="text-[10px] text-slate">MMK</span>
+                            </p>
+                        </div>
+                    </div>
+
+                    <FeePaymentSelector
+                        class="md:col-span-2 xl:col-span-3"
+                        v-model="feePaymentMethod"
+                        v-model:fee-account-id="feeAccountId"
+                        :fee="feeNum"
+                        :fee-accounts="feeAccounts"
+                        account-included-in-transaction
+                        compact
+                    />
                 </div>
 
-                <div class="mt-3 max-w-md">
-                    <span class="bank-label">{{
-                        t('transaction.payBank')
-                    }}</span>
-                    <div class="mt-1.5 grid grid-cols-2 gap-2">
-                        <label
-                            class="bank-choice flex cursor-pointer items-center gap-2 rounded-field border bg-card px-3 py-2.5 transition"
-                            :class="
-                                creditAccountType === 'pay'
-                                    ? 'border-brand ring-1 ring-brand/20'
-                                    : 'border-line hover:border-ink/30'
-                            "
+                <div>
+                    <label class="bank-label" for="cash-out-description">{{
+                        t('transaction.description')
+                    }}</label>
+                    <div class="relative">
+                        <textarea
+                            id="cash-out-description"
+                            v-model="description"
+                            maxlength="250"
+                            rows="2"
+                            autocomplete="off"
+                            :placeholder="t('transaction.cashOut')"
+                            class="bank-input min-h-12 resize-none border border-line bg-mist px-3 py-2 pr-14"
+                            aria-describedby="cash-out-description-count"
+                        />
+                        <span
+                            id="cash-out-description-count"
+                            class="money pointer-events-none absolute right-3 bottom-2 text-[10px] text-slate"
                         >
-                            <input
-                                v-model="creditAccountType"
-                                type="radio"
-                                name="cash_out_credit_account_type"
-                                value="pay"
-                                class="accent-brand"
-                            />
-                            <span class="text-sm font-bold">Pay</span>
-                        </label>
-                        <label
-                            class="bank-choice flex cursor-pointer items-center gap-2 rounded-field border bg-card px-3 py-2.5 transition"
-                            :class="
-                                creditAccountType === 'bank'
-                                    ? 'border-brand ring-1 ring-brand/20'
-                                    : 'border-line hover:border-ink/30'
-                            "
-                        >
-                            <input
-                                v-model="creditAccountType"
-                                type="radio"
-                                name="cash_out_credit_account_type"
-                                value="bank"
-                                class="accent-brand"
-                            />
-                            <span class="text-sm font-bold">Bank</span>
-                        </label>
+                            {{ description.length }}/250
+                        </span>
                     </div>
                 </div>
 
-                <div
-                    class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
-                    role="radiogroup"
-                    aria-label="Company to credit"
+                <section
+                    v-if="needsCashDenoms"
+                    class="overflow-hidden rounded-field border border-brand/20 bg-card"
+                    aria-labelledby="cash-out-denomination-title"
                 >
                     <button
-                        v-for="company in creditCompanies"
-                        :key="company.id ?? company.name"
                         type="button"
-                        role="radio"
-                        :aria-checked="selectedCreditCompany === company.name"
-                        class="group flex min-h-16 items-center gap-2 rounded-xl border px-3 py-2 text-left transition"
-                        :class="[
-                            selectedCreditCompany === company.name
-                                ? 'border-brand bg-brand-soft text-brand shadow-sm ring-2 ring-brand/15'
-                                : 'border-line bg-card text-ink hover:border-brand/40 hover:bg-brand-soft/40',
-                            company.logoUrl ? 'justify-center' : '',
-                        ]"
-                        @click="selectedCreditCompany = company.name"
+                        class="flex w-full items-center justify-between gap-3 border-b border-line bg-brand-soft/55 px-3 py-2.5 text-left transition hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/35 sm:px-4"
+                        :aria-expanded="showCashDenoms"
+                        aria-controls="cash-out-denominations"
+                        @click="showCashDenoms = !showCashDenoms"
                     >
+                        <div class="flex min-w-0 items-center gap-2">
+                            <span
+                                class="grid size-6 shrink-0 place-items-center rounded-lg bg-brand text-[10px] font-black text-white"
+                                >01</span
+                            >
+                            <h3
+                                id="cash-out-denomination-title"
+                                class="truncate text-sm font-bold text-ink"
+                            >
+                                {{
+                                    role === 'admin'
+                                        ? t('transaction.notesMainVault')
+                                        : t('transaction.notesMyVault')
+                                }}
+                            </h3>
+                        </div>
+                        <div class="ml-auto shrink-0 text-right">
+                            <p
+                                class="text-[10px] font-bold tracking-wide text-slate uppercase"
+                            >
+                                {{ t('component.counted') }}
+                            </p>
+                            <p class="money text-base font-black text-brand">
+                                {{ mmk(denomTotal) }}
+                                <span class="text-[10px] text-slate">MMK</span>
+                            </p>
+                        </div>
                         <span
-                            v-if="company.logoUrl"
-                            class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl text-sm font-black"
-                            :class="
-                                selectedCreditCompany === company.name
-                                    ? 'bg-brand text-white'
-                                    : 'bg-white text-brand shadow-sm'
-                            "
+                            class="grid size-7 shrink-0 place-items-center rounded-full bg-card text-sm font-black text-slate shadow-sm"
+                            aria-hidden="true"
                         >
-                            <img
-                                :src="company.logoUrl"
-                                :alt="`${company.name} logo`"
-                                class="size-full object-contain p-1"
-                            />
-                        </span>
-                        <span v-else class="min-w-0">
-                            <span class="block truncate text-xs font-black">{{
-                                company.name
-                            }}</span>
+                            {{ showCashDenoms ? '⌃' : '⌄' }}
                         </span>
                     </button>
-                </div>
+                    <div
+                        v-show="showCashDenoms"
+                        id="cash-out-denominations"
+                        class="p-2.5 sm:p-3"
+                    >
+                        <DenomDrawer
+                            v-model="denoms"
+                            :notes="notes"
+                            :target="amount || 0"
+                            :stock="cashStock"
+                            :label="
+                                role === 'admin'
+                                    ? t('transaction.notesMainVault')
+                                    : t('transaction.notesMyVault')
+                            "
+                            id-prefix="cash-out-denomination"
+                            :show-title="false"
+                            compact
+                        />
+                    </div>
+                </section>
 
-                <p
-                    v-if="creditCompanies.length === 0"
-                    class="mt-3 rounded-field border border-dashed border-line px-3 py-3 text-xs font-semibold text-slate"
+                <section
+                    v-if="needsCashFeeDenoms"
+                    class="overflow-hidden rounded-field border border-held/20 bg-card"
+                    aria-labelledby="cash-out-fee-denomination-title"
                 >
-                    {{ t('transaction.noSystemAccount') }}
-                </p>
-
-                <AccountTile
-                    class="mt-3"
-                    v-model="accountId"
-                    :accounts="creditAccounts"
-                    :label="t('transaction.cashOutAccountCredit')"
-                />
-                <p class="mt-2 text-xs text-slate">
-                    {{ t('transaction.cashOutFilteredAccountHint') }}
-                </p>
-            </section>
-
-            <div class="mt-5">
-                <BigAmountInput
-                    v-model="amount"
-                    :label="t('transaction.cashOutAmount')"
-                />
-            </div>
-
-            <div
-                class="mt-4 flex items-center justify-between rounded-field bg-mist px-4 py-3"
-            >
-                <p class="text-[13px] font-semibold text-slate">
-                    {{ t('transaction.fee') }}
-                    <span class="font-normal"
-                        >({{ t('transaction.commissionTier') }})</span
+                    <button
+                        type="button"
+                        class="flex w-full items-center justify-between gap-3 border-b border-line bg-held/5 px-3 py-2.5 text-left transition hover:bg-held/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-held/35 sm:px-4"
+                        :aria-expanded="showFeeDenoms"
+                        aria-controls="cash-out-fee-denominations"
+                        @click="showFeeDenoms = !showFeeDenoms"
                     >
-                </p>
-                <p class="money text-sm font-bold">
-                    {{ mmk(feeNum) }}
-                    <span class="text-[10px] text-slate">MMK</span>
-                </p>
-            </div>
-
-            <div class="mt-4">
-                <FeePaymentSelector
-                    v-model="feePaymentMethod"
-                    v-model:fee-account-id="feeAccountId"
-                    :fee="feeNum"
-                    :fee-accounts="feeAccounts"
-                    account-included-in-transaction
-                />
-            </div>
-
-            <div class="mt-5">
-                <label class="bank-label" for="cash-out-description">{{
-                    t('transaction.description')
-                }}</label>
-                <div class="relative">
-                    <textarea
-                        id="cash-out-description"
-                        v-model="description"
-                        maxlength="250"
-                        autocomplete="off"
-                        :placeholder="t('transaction.cashOut')"
-                        class="bank-input resize-none pb-7"
-                        aria-describedby="cash-out-description-count"
-                    />
-                    <span
-                        id="cash-out-description-count"
-                        class="money pointer-events-none absolute right-3.5 bottom-2.5 text-[11px] text-slate"
+                        <div class="flex min-w-0 items-center gap-2">
+                            <span
+                                class="grid size-6 shrink-0 place-items-center rounded-lg bg-held text-[10px] font-black text-white"
+                                >02</span
+                            >
+                            <h3
+                                id="cash-out-fee-denomination-title"
+                                class="truncate text-sm font-bold text-ink"
+                            >
+                                {{ t('transaction.cashFeeReceivedNotes') }}
+                            </h3>
+                        </div>
+                        <div class="ml-auto shrink-0 text-right">
+                            <p
+                                class="text-[10px] font-bold tracking-wide text-slate uppercase"
+                            >
+                                {{ t('component.counted') }}
+                            </p>
+                            <p class="money text-base font-black text-held">
+                                {{ mmk(feeDenomTotal) }}
+                                <span class="text-[10px] text-slate">MMK</span>
+                            </p>
+                        </div>
+                        <span
+                            class="grid size-7 shrink-0 place-items-center rounded-full bg-card text-sm font-black text-slate shadow-sm"
+                            aria-hidden="true"
+                        >
+                            {{ showFeeDenoms ? '⌃' : '⌄' }}
+                        </span>
+                    </button>
+                    <div
+                        v-show="showFeeDenoms"
+                        id="cash-out-fee-denominations"
+                        class="p-2.5 sm:p-3"
                     >
-                        ({{ description.length }}/250)
-                    </span>
-                </div>
-            </div>
-
-            <div v-if="needsCashDenoms" class="mt-5">
-                <DenomDrawer
-                    v-model="denoms"
-                    :notes="notes"
-                    :target="amount || 0"
-                    :stock="cashStock"
-                    :label="
-                        role === 'admin'
-                            ? t('transaction.notesMainVault')
-                            : t('transaction.notesMyVault')
-                    "
-                />
-            </div>
-
-            <div v-if="needsCashFeeDenoms" class="mt-5">
-                <DenomDrawer
-                    v-model="feeDenoms"
-                    :notes="notes"
-                    :target="feeNum"
-                    :enforce-stock="false"
-                    :label="t('transaction.cashFeeReceivedNotes')"
-                    id-prefix="cash-out-fee-denomination"
-                />
-                <p class="mt-2 text-xs font-semibold text-slate">
-                    {{ t('transaction.cashFeeReceivedHint') }}
-                </p>
+                        <DenomDrawer
+                            v-model="feeDenoms"
+                            :notes="notes"
+                            :target="feeNum"
+                            :enforce-stock="false"
+                            :label="t('transaction.cashFeeReceivedNotes')"
+                            id-prefix="cash-out-fee-denomination"
+                            :show-title="false"
+                            compact
+                        />
+                        <p class="mt-2 text-xs font-semibold text-slate">
+                            {{ t('transaction.cashFeeReceivedHint') }}
+                        </p>
+                    </div>
+                </section>
             </div>
 
             <p
@@ -678,15 +796,32 @@ function submit() {
                 {{ msg }}
             </p>
 
-            <div class="mt-6 flex justify-end">
-                <button
-                    type="button"
-                    :disabled="!ready"
-                    @click="step = 'review'"
-                    class="bank-button bank-button-primary px-7"
+            <div class="mt-6 border-t border-line pt-4">
+                <div
+                    class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                    {{ t('common.continueReview') }}
-                </button>
+                    <p
+                        class="min-h-5 text-xs font-bold"
+                        :class="ready ? 'text-balance' : 'text-brand'"
+                    >
+                        {{
+                            ready
+                                ? t(
+                                      'transaction.readyForReview',
+                                      'Ready for review.',
+                                  )
+                                : readyIssue
+                        }}
+                    </p>
+                    <button
+                        type="button"
+                        :disabled="!ready"
+                        @click="step = 'review'"
+                        class="bank-button bank-button-primary w-full px-7 sm:w-auto"
+                    >
+                        {{ t('common.continueReview') }}
+                    </button>
+                </div>
             </div>
         </section>
 
@@ -706,14 +841,16 @@ function submit() {
             >
                 <div class="flex items-start justify-between gap-4">
                     <div>
-                        <p class="text-xs font-black uppercase text-balance">
+                        <p class="text-xs font-black text-balance uppercase">
                             {{ t('transaction.customerReceives') }}
                         </p>
                         <p class="mt-1 text-[13px] font-semibold text-slate">
                             {{ t('transaction.cashPaidCustomer') }}
                         </p>
                     </div>
-                    <p class="money text-right text-2xl font-black text-balance">
+                    <p
+                        class="money text-right text-2xl font-black text-balance"
+                    >
                         {{ mmk(customerCashPayout) }}
                         <span class="text-xs text-slate">MMK</span>
                     </p>
@@ -738,9 +875,9 @@ function submit() {
                     </dt>
                     <dd class="text-right font-bold">
                         {{ account?.name }}
-                        <span class="block text-[11px] font-medium text-slate"
-                            >{{ creditAccountType.toUpperCase() }} ·
-                            {{ account?.company }}</span
+                        <span
+                            class="block text-[11px] font-medium text-slate"
+                            >{{ account?.company }}</span
                         >
                     </dd>
                 </div>

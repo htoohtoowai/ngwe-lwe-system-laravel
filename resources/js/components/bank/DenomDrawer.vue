@@ -233,7 +233,9 @@ function autoFill() {
                         @input="setFromInput(n, $event)"
                         class="money rounded-field border border-line bg-mist px-1 text-center text-sm font-bold text-ink outline-none focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/25"
                         :class="[
-                            compact ? 'h-9 w-12' : 'h-10 w-12 sm:w-14',
+                            compact
+                                ? 'h-9 w-12 max-w-12 min-w-12 shrink-0'
+                                : 'h-10 w-12 max-w-14 min-w-12 shrink-0 sm:w-14',
                             mismatch(n) ? 'text-brand ring-2 ring-brand' : '',
                         ]"
                     />

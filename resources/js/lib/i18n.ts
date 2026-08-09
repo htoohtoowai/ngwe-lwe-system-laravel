@@ -238,7 +238,7 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.chooseCompanyFirst': 'Choose the service company first.',
         'transaction.cashOutCreditCompany': 'Company to credit',
         'transaction.cashOutCreditCompanyHint':
-            'Choose the pay/bank company, then choose the account that will receive the Cash Out credit.',
+            'Choose a company, then choose the account that will receive the Cash Out credit.',
         'transaction.cashOutFilteredAccountHint':
             'Only accounts under the selected company are shown.',
         'transaction.serviceType': 'Service type',
@@ -801,7 +801,7 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.chooseCompanyFirst': 'ဝန်ဆောင်မှုကုမ္ပဏီကို အရင်ရွေးပါ။',
         'transaction.cashOutCreditCompany': 'ငွေဝင်မည့် Company',
         'transaction.cashOutCreditCompanyHint':
-            'Pay/Bank company ကို အရင်ရွေးပြီး Cash Out credit ဝင်မည့်အကောင့်ကို ရွေးပါ။',
+            'Company ကို အရင်ရွေးပြီး Cash Out credit ဝင်မည့်အကောင့်ကို ရွေးပါ။',
         'transaction.cashOutFilteredAccountHint':
             'ရွေးထားတဲ့ company နဲ့ဆိုင်တဲ့ accounts တွေပဲ ပြပါမယ်။',
         'transaction.serviceType': 'ဝန်ဆောင်မှုအမျိုးအစား',
