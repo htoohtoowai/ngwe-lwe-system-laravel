@@ -143,12 +143,44 @@ class NgweLweSetupApiTest extends TestCase
                 'balance' => 1000.555,
                 'commission_rate' => 1.25,
                 'is_fee_account' => true,
+                'is_agent' => true,
             ])
             ->assertCreated()
             ->assertJsonPath('data.account_name', 'Wave Main')
             ->assertJsonPath('data.balance', '1000.56')
             ->assertJsonPath('data.commission_rate', '1.2500')
-            ->assertJsonPath('data.is_fee_account', true);
+            ->assertJsonPath('data.is_fee_account', true)
+            ->assertJsonPath('data.is_agent', true)
+            ->assertJsonPath('data.features.0', 'cash_in');
+    }
+
+    public function test_account_features_can_be_updated_without_resetting_balance(): void
+    {
+        $token = $this->tokenForRole('admin');
+        $company = Company::query()->create([
+            'name' => 'KBZ Pay',
+            'category' => 'Pay',
+        ]);
+        $serviceType = ServiceType::query()->create([
+            'company_id' => $company->id,
+            'name' => 'Cash In',
+            'operation' => 'CashIn',
+        ]);
+        $account = Account::query()->create([
+            'company_id' => $company->id,
+            'service_type_id' => $serviceType->id,
+            'account_name' => 'KBZ Cash In',
+            'phone_number' => '09999990000',
+            'balance' => 5000,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->patchJson('/api/accounts/'.$account->id, [
+                'features' => ['cash_in'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.balance', '5000.00')
+            ->assertJsonPath('data.features.0', 'cash_in');
     }
 
     public function test_service_types_list_active_records_before_inactive_records(): void

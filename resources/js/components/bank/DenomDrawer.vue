@@ -139,7 +139,9 @@ function autoFill() {
 
         <ul
             :class="
-                compact ? 'grid grid-cols-1 gap-2 p-3' : 'divide-y divide-line'
+                compact
+                    ? 'grid grid-cols-1 gap-1.5 p-2'
+                    : 'divide-y divide-line'
             "
         >
             <li
@@ -153,7 +155,7 @@ function autoFill() {
                         ? 'cursor-pointer select-none active:bg-mist'
                         : '',
                     compact
-                        ? 'grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-field border border-line px-3 py-2'
+                        ? 'grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-field border border-line px-2.5 py-1.5'
                         : 'gap-2 px-3 py-2.5 sm:gap-3 sm:px-5',
                 ]"
                 @click="!readonly && set(n, qty(n) + 1)"
@@ -178,16 +180,17 @@ function autoFill() {
                         >
                     </div>
                     <span
-                        class="money mt-1 block text-[11px] font-semibold"
+                        class="money mt-0.5 block text-[11px] font-semibold"
                         :class="qty(n) > 0 ? 'text-ink' : 'text-slate/45'"
                     >
                         {{ lineTotal(n).toLocaleString() }} MMK
                     </span>
                 </div>
                 <template v-else>
-                    <span class="money w-14 shrink-0 text-sm font-bold sm:w-20">{{
-                        n.toLocaleString()
-                    }}</span>
+                    <span
+                        class="money w-14 shrink-0 text-sm font-bold sm:w-20"
+                        >{{ n.toLocaleString() }}</span
+                    >
                     <span
                         v-if="stock"
                         class="hidden shrink-0 text-[11px] text-slate sm:block"
@@ -210,7 +213,8 @@ function autoFill() {
                         :aria-label="`− ${n.toLocaleString()}`"
                         :disabled="readonly || qty(n) === 0"
                         @click="set(n, qty(n) - 1)"
-                        class="bank-button grid size-10 min-h-10 place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
+                        class="bank-button grid place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
+                        :class="compact ? 'size-9 min-h-9' : 'size-10 min-h-10'"
                     >
                         −
                     </button>
@@ -218,24 +222,28 @@ function autoFill() {
                         :id="`${props.idPrefix}-${n}`"
                         :value="qty(n)"
                         :readonly="readonly"
-                        :max="Number.isFinite(capFor(n)) ? capFor(n) : undefined"
+                        :max="
+                            Number.isFinite(capFor(n)) ? capFor(n) : undefined
+                        "
                         min="0"
                         inputmode="numeric"
                         autocomplete="off"
                         :aria-label="`${n.toLocaleString()} ${t('component.notesCounted')}`"
                         :aria-invalid="mismatch(n)"
                         @input="setFromInput(n, $event)"
-                        class="money h-10 w-12 rounded-field border border-line bg-mist px-1 text-center text-sm font-bold text-ink outline-none focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/25 sm:w-14"
-                        :class="
-                            mismatch(n) ? 'text-brand ring-2 ring-brand' : ''
-                        "
+                        class="money rounded-field border border-line bg-mist px-1 text-center text-sm font-bold text-ink outline-none focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/25"
+                        :class="[
+                            compact ? 'h-9 w-12' : 'h-10 w-12 sm:w-14',
+                            mismatch(n) ? 'text-brand ring-2 ring-brand' : '',
+                        ]"
                     />
                     <button
                         type="button"
                         :aria-label="`+ ${n.toLocaleString()}`"
                         :disabled="readonly || qty(n) >= capFor(n)"
                         @click="set(n, qty(n) + 1)"
-                        class="bank-button grid size-10 min-h-10 place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
+                        class="bank-button grid place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
+                        :class="compact ? 'size-9 min-h-9' : 'size-10 min-h-10'"
                     >
                         +
                     </button>

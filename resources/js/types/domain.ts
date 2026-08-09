@@ -53,6 +53,7 @@ export type ServiceType = {
 
 export type Account = {
     id: number;
+    company_id: number | null;
     service_type_id: number;
     account_name: string;
     phone_number: string | null;
@@ -60,6 +61,8 @@ export type Account = {
     commission_rate: string | null;
     is_active: boolean;
     is_fee_account: boolean;
+    is_agent: boolean;
+    features?: string[];
     service_type?: ServiceType;
 };
 
@@ -169,9 +172,13 @@ export type ActivityLog = {
 
 export type CommissionTier = {
     id: number;
+    company_id?: number | null;
+    feature?: string | null;
     service_type_id: number;
     amount_from: string;
     amount_to: string;
+    fee_type?: 'FIXED' | 'PERCENTAGE';
+    fee_amount?: string;
     fee_amount_type: 'FIXED' | 'PERCENTAGE';
     fee_amount_deposit: string;
     fee_amount_withdraw: string;
@@ -179,6 +186,7 @@ export type CommissionTier = {
     comm_deposit: string;
     comm_withdraw: string;
     additional_fee_type: 'FIXED' | 'PERCENTAGE';
+    additional_fee_amount?: string;
     additional_fee_deposit_amount: string;
     additional_fee_withdraw_amount: string;
     is_active: boolean;
@@ -208,6 +216,7 @@ export type ReportAccountSnapshot = {
     company: string | null;
     balance: string;
     is_fee_account: boolean;
+    is_agent?: boolean;
 };
 
 export type ReportVaultSnapshot = {

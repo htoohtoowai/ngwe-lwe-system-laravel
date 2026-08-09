@@ -36,6 +36,7 @@ type ServiceType = {
 
 type Account = {
     id: number;
+    company_id?: number | null;
     service_type_id: number;
     account_name: string;
     phone_number: string;
@@ -43,6 +44,8 @@ type Account = {
     commission_rate: MoneyValue;
     is_active: boolean;
     is_fee_account: boolean;
+    is_agent: boolean;
+    features?: string[];
     service_type?: ServiceType | null;
 };
 
@@ -147,6 +150,7 @@ type AccountSnapshot = {
     company?: string | null;
     balance: MoneyValue;
     is_fee_account?: boolean;
+    is_agent?: boolean;
 };
 
 type Summary = {
@@ -342,6 +346,14 @@ const statusFilterOptions = [
     { value: 'true', label: 'Active' },
     { value: 'false', label: 'Inactive' },
 ];
+const accountFeatureOptions = [
+    { value: 'cash_in', label: 'Cash In' },
+    { value: 'cash_out', label: 'Cash Out' },
+    { value: 'send_money', label: 'Send Money' },
+    { value: 'receive_money', label: 'Receive Money' },
+    { value: 'transfer', label: 'Transfer' },
+    { value: 'exchange', label: 'Exchange' },
+];
 
 watch([adminListSearch, adminListFilter, adminListPageSize, activeTab], () => {
     adminListPage.value = 1;
@@ -364,7 +376,9 @@ const accountForm = ref({
     phone_number: '',
     balance: 0,
     commission_rate: 0,
+    features: ['cash_in'] as string[],
     is_fee_account: false,
+    is_agent: false,
     is_active: true,
 });
 const adjustForm = ref({
@@ -878,7 +892,9 @@ function resetAccountForm(): void {
         phone_number: '',
         balance: 0,
         commission_rate: 0,
+        features: ['cash_in'],
         is_fee_account: false,
+        is_agent: false,
         is_active: true,
     };
 }
@@ -980,7 +996,13 @@ function syncFormsFromRoute(): void {
             phone_number: currentAccount.value.phone_number,
             balance: numeric(currentAccount.value.balance),
             commission_rate: numeric(currentAccount.value.commission_rate),
+            features:
+                currentAccount.value.features &&
+                currentAccount.value.features.length > 0
+                    ? [...currentAccount.value.features]
+                    : ['cash_in'],
             is_fee_account: currentAccount.value.is_fee_account,
+            is_agent: currentAccount.value.is_agent,
             is_active: currentAccount.value.is_active,
         };
     } else if (activeTab.value === 'fees' && currentTier.value) {
@@ -1113,6 +1135,13 @@ function serviceLabel(serviceType: ServiceType | null | undefined): string {
 
 function serviceOptionLabel(serviceType: ServiceType): string {
     return `${serviceLabel(serviceType)} (${serviceType.operation})`;
+}
+
+function accountFeatureLabel(value: string): string {
+    return (
+        accountFeatureOptions.find((feature) => feature.value === value)
+            ?.label ?? transactionTypeLabel(value)
+    );
 }
 
 function accountLabel(account: Account | null | undefined): string {
@@ -2914,6 +2943,28 @@ async function sendBroadcastTest(): Promise<void> {
                                 class="bank-input"
                             />
                         </label>
+                        <fieldset
+                            class="grid gap-2 rounded-lg border border-line p-3 lg:col-span-2"
+                        >
+                            <legend class="px-1 text-xs font-black uppercase text-slate">
+                                Account Features
+                            </legend>
+                            <div class="flex flex-wrap items-center gap-4 text-sm font-bold text-ink">
+                                <label
+                                    v-for="feature in accountFeatureOptions"
+                                    :key="feature.value"
+                                    class="flex items-center gap-2"
+                                >
+                                    <input
+                                        v-model="accountForm.features"
+                                        type="checkbox"
+                                        :value="feature.value"
+                                        class="size-4 accent-brand"
+                                    />
+                                    {{ feature.label }}
+                                </label>
+                            </div>
+                        </fieldset>
                         <div
                             class="flex flex-wrap items-center gap-4 text-sm font-bold text-ink"
                         >
@@ -2924,6 +2975,14 @@ async function sendBroadcastTest(): Promise<void> {
                                     class="size-4 accent-brand"
                                 />
                                 Fee Account
+                            </label>
+                            <label class="flex items-center gap-2">
+                                <input
+                                    v-model="accountForm.is_agent"
+                                    type="checkbox"
+                                    class="size-4 accent-brand"
+                                />
+                                Agent Account
                             </label>
                             <label class="flex items-center gap-2">
                                 <input
@@ -3047,12 +3106,41 @@ async function sendBroadcastTest(): Promise<void> {
                                     </dd>
                                 </div>
                                 <div>
+                                    <dt class="font-bold text-slate">
+                                        Features
+                                    </dt>
+                                    <dd class="font-black text-ink">
+                                        {{
+                                            currentAccount.features
+                                                ?.map(accountFeatureLabel)
+                                                .join(', ') || 'None'
+                                        }}
+                                    </dd>
+                                </div>
+                                <div>
                                     <dt class="font-bold text-slate">Status</dt>
                                     <dd class="font-black text-ink">
                                         {{
                                             currentAccount.is_active
                                                 ? 'Active'
                                                 : 'Inactive'
+                                        }}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate">Flags</dt>
+                                    <dd class="font-black text-ink">
+                                        {{
+                                            [
+                                                currentAccount.is_agent
+                                                    ? 'Agent account'
+                                                    : '',
+                                                currentAccount.is_fee_account
+                                                    ? 'Fee account'
+                                                    : '',
+                                            ]
+                                                .filter(Boolean)
+                                                .join(', ') || 'None'
                                         }}
                                     </dd>
                                 </div>
@@ -3178,6 +3266,12 @@ async function sendBroadcastTest(): Promise<void> {
                                             class="text-xs font-black text-brand"
                                         >
                                             Fee account
+                                        </p>
+                                        <p
+                                            v-if="account.is_agent"
+                                            class="text-xs font-black text-balance"
+                                        >
+                                            Agent account
                                         </p>
                                     </td>
                                     <td class="px-4 py-3 text-slate">

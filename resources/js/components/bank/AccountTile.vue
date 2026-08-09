@@ -22,6 +22,7 @@ const props = defineProps<{
     mustCover?: number | null;
     /** ids to hide (e.g. the already-chosen source when picking destination) */
     exclude?: number[];
+    compact?: boolean;
 }>();
 
 const emit = defineEmits<{ 'update:modelValue': [number | null] }>();
@@ -71,21 +72,32 @@ function choose(id: number) {
 
         <!-- the tile -->
         <div
-            class="flex items-center gap-3 rounded-field bg-mist px-4 py-3.5 transition focus-within:ring-2 focus-within:ring-brand/35"
-            :class="insufficient ? 'ring-2 ring-brand' : ''"
+            class="flex items-center gap-3 rounded-field transition focus-within:ring-2 focus-within:ring-brand/35"
+            :class="[
+                compact
+                    ? 'min-h-12 border border-line bg-mist px-3 py-2'
+                    : 'bg-mist px-4 py-3.5',
+                insufficient ? 'ring-2 ring-brand' : '',
+            ]"
         >
             <template v-if="selected">
                 <div class="min-w-0 flex-1">
-                    <p class="truncate text-sm font-bold uppercase">
+                    <p
+                        class="truncate font-bold uppercase"
+                        :class="compact ? 'text-[13px]' : 'text-sm'"
+                    >
                         {{ selected.name }}
                     </p>
                     <p
-                        v-if="selected.number"
+                        v-if="selected.number && !compact"
                         class="money text-[11px] text-slate"
                     >
                         {{ selected.number }}
                     </p>
-                    <p class="money mt-0.5 text-sm font-bold text-balance">
+                    <p
+                        v-if="!compact"
+                        class="money mt-0.5 text-sm font-bold text-balance"
+                    >
                         {{ mmk(selected.balance) }}
                         <span class="text-[10px]">MMK</span>
                     </p>
@@ -103,7 +115,7 @@ function choose(id: number) {
                         : `${t('common.select')}: ${label}`
                 "
                 @click="open = true"
-                class="bank-button bank-button-secondary min-h-9 shrink-0 px-4 py-1.5 text-xs shadow-sm"
+                class="bank-button bank-button-secondary min-h-8 shrink-0 px-3 py-1 text-xs shadow-sm"
             >
                 {{ selected ? t('common.change') : t('common.select') }}
             </button>

@@ -133,6 +133,10 @@ class MyanmarMasterDataSeeder extends Seeder
                 ['name' => 'Bank Transfer'],
                 ['operation' => 'Transfer', 'is_active' => true],
             );
+            $company->serviceTypes()->updateOrCreate(
+                ['name' => 'Exchange'],
+                ['operation' => 'Exchange', 'is_active' => true],
+            );
         }
 
         if (in_array($company->category, ['Pay', 'Both'], true)) {
@@ -140,6 +144,7 @@ class MyanmarMasterDataSeeder extends Seeder
                 'WST' => 'CashIn',
                 'CashOut' => 'CashOut',
                 'Transfer' => 'Transfer',
+                'Exchange' => 'Exchange',
             ] as $name => $operation) {
                 $company->serviceTypes()->updateOrCreate(
                     ['name' => $name],

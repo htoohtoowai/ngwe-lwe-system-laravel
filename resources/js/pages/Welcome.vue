@@ -235,6 +235,7 @@ const accountForm = ref({
     balance: '0',
     commission_rate: '0',
     is_fee_account: false,
+    is_agent: false,
 });
 const rateForm = ref({
     base_currency: 'THB',
@@ -1157,6 +1158,7 @@ async function createAccount(): Promise<void> {
                 commission_rate:
                     optionalNumber(accountForm.value.commission_rate) ?? 0,
                 is_fee_account: accountForm.value.is_fee_account,
+                is_agent: accountForm.value.is_agent,
             },
         });
         accountForm.value.account_name = '';
@@ -3057,6 +3059,13 @@ function redirectToLogin(): void {
                                     type="checkbox"
                                 />
                                 Fee account
+                            </label>
+                            <label class="check-row">
+                                <input
+                                    v-model="accountForm.is_agent"
+                                    type="checkbox"
+                                />
+                                Agent account
                             </label>
                             <button
                                 type="submit"

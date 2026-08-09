@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\AccountFeature;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AccountRequest;
 use App\Http\Requests\BalanceAdjustRequest;
 use App\Http\Resources\AccountResource;
 use App\Models\Account;
+use App\Models\AccountFeatureAssignment;
 use App\Models\ActivityLog;
+use App\Models\ServiceType;
 use App\Repositories\AccountRepository;
 use App\Services\RealtimeBroadcastService;
 use App\Support\Money;
@@ -36,7 +39,15 @@ class AccountController extends Controller
 
     public function store(AccountRequest $request): JsonResponse
     {
-        $account = $this->accounts->create($this->normalizeMoneyFields($request->validated()));
+        $data = $this->normalizeAccountPayload($request->validated(), null, true);
+        $features = $this->extractFeaturePayload($data);
+
+        $account = DB::transaction(function () use ($data, $features): Account {
+            $account = $this->accounts->create($data);
+            $this->syncFeatures($account, $features);
+
+            return $account->refresh()->load(['company', 'serviceType.company', 'featureAssignments']);
+        });
 
         return (new AccountResource($account))
             ->response()
@@ -45,7 +56,7 @@ class AccountController extends Controller
 
     public function show(Account $account): AccountResource
     {
-        return new AccountResource($account->load('serviceType.company'));
+        return new AccountResource($account->load(['company', 'serviceType.company', 'featureAssignments']));
     }
 
     public function update(AccountRequest $request, Account $account): AccountResource|JsonResponse
@@ -56,7 +67,17 @@ class AccountController extends Controller
             return response()->json(['message' => 'No fields to update.'], 400);
         }
 
-        return new AccountResource($this->accounts->update($account, $this->normalizeMoneyFields($data)));
+        $data = $this->normalizeAccountPayload($data, $account, false);
+        $features = $this->extractFeaturePayload($data);
+
+        $account = DB::transaction(function () use ($account, $data, $features): Account {
+            $account = $this->accounts->update($account, $data);
+            $this->syncFeatures($account, $features);
+
+            return $account->refresh()->load(['company', 'serviceType.company', 'featureAssignments']);
+        });
+
+        return new AccountResource($account);
     }
 
     public function destroy(Account $account): AccountResource
@@ -108,7 +129,7 @@ class AccountController extends Controller
         ]);
     }
 
-    private function normalizeMoneyFields(array $data): array
+    private function normalizeMoneyFields(array $data, bool $withDefaults = true): array
     {
         foreach (['balance', 'commission_rate'] as $field) {
             if (array_key_exists($field, $data)) {
@@ -116,14 +137,75 @@ class AccountController extends Controller
             }
         }
 
-        if (! array_key_exists('balance', $data)) {
+        if ($withDefaults && ! array_key_exists('balance', $data)) {
             $data['balance'] = Money::normalize(0);
         }
 
-        if (! array_key_exists('commission_rate', $data)) {
+        if ($withDefaults && ! array_key_exists('commission_rate', $data)) {
             $data['commission_rate'] = Money::normalize(0, 4);
         }
 
         return $data;
+    }
+
+    private function normalizeAccountPayload(array $data, ?Account $account = null, bool $withDefaults = true): array
+    {
+        $data = $this->normalizeMoneyFields($data, $withDefaults);
+
+        if (! array_key_exists('company_id', $data)) {
+            $serviceTypeId = $data['service_type_id'] ?? $account?->service_type_id;
+            $companyId = $serviceTypeId !== null
+                ? ServiceType::query()->whereKey($serviceTypeId)->value('company_id')
+                : null;
+
+            if ($companyId !== null) {
+                $data['company_id'] = $companyId;
+            }
+        }
+
+        return $data;
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    private function extractFeaturePayload(array &$data): ?array
+    {
+        if (! array_key_exists('features', $data)) {
+            return null;
+        }
+
+        $features = array_values(array_unique($data['features']));
+        unset($data['features']);
+
+        return $features;
+    }
+
+    /**
+     * @param  list<string>|null  $features
+     */
+    private function syncFeatures(Account $account, ?array $features): void
+    {
+        if ($features === null) {
+            $serviceType = $account->service_type_id !== null
+                ? ServiceType::query()->find($account->service_type_id)
+                : null;
+            $features = array_map(
+                fn (AccountFeature $feature): string => $feature->value,
+                AccountFeature::fromLegacy($serviceType?->operation, $serviceType?->name)
+            );
+        }
+
+        AccountFeatureAssignment::query()
+            ->where('account_id', $account->id)
+            ->whereNotIn('feature', $features)
+            ->delete();
+
+        foreach ($features as $feature) {
+            AccountFeatureAssignment::query()->firstOrCreate([
+                'account_id' => $account->id,
+                'feature' => $feature,
+            ]);
+        }
     }
 }

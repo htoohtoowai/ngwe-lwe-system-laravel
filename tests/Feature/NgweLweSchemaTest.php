@@ -23,8 +23,10 @@ class NgweLweSchemaTest extends TestCase
             'companies',
             'service_types',
             'accounts',
+            'account_features',
             'transactions',
             'commission_tiers',
+            'transfer_fee_tiers',
             'exchange_rates',
             'daily_summary',
             'activity_logs',
@@ -45,6 +47,29 @@ class NgweLweSchemaTest extends TestCase
     {
         foreach (['username', 'pin_hash', 'full_name', 'role', 'is_active', 'auth_version'] as $column) {
             $this->assertTrue(Schema::hasColumn('users', $column), "Missing users.{$column}");
+        }
+    }
+
+    public function test_new_requirement_fee_schema_columns_are_available(): void
+    {
+        foreach (['company_id', 'is_agent'] as $column) {
+            $this->assertTrue(Schema::hasColumn('accounts', $column), "Missing accounts.{$column}");
+        }
+
+        foreach (['company_id', 'feature', 'fee_type', 'fee_amount', 'additional_fee_amount', 'comm_amount'] as $column) {
+            $this->assertTrue(Schema::hasColumn('commission_tiers', $column), "Missing commission_tiers.{$column}");
+        }
+
+        foreach (['account_id', 'feature'] as $column) {
+            $this->assertTrue(Schema::hasColumn('account_features', $column), "Missing account_features.{$column}");
+        }
+
+        foreach (['company_from_id', 'company_to_id', 'fee_type', 'fee_amount', 'additional_fee_amount'] as $column) {
+            $this->assertTrue(Schema::hasColumn('transfer_fee_tiers', $column), "Missing transfer_fee_tiers.{$column}");
+        }
+
+        foreach (['company_id', 'is_active'] as $column) {
+            $this->assertTrue(Schema::hasColumn('exchange_rates', $column), "Missing exchange_rates.{$column}");
         }
     }
 

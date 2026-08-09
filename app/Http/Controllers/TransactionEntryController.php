@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AccountFeature;
 use App\Exceptions\InsufficientBalanceException;
 use App\Exceptions\InsufficientFloatDenominationException;
 use App\Exceptions\InsufficientFloatException;
@@ -129,6 +130,11 @@ class TransactionEntryController extends Controller
             'transfer' => 'Transfer',
             'exchange' => 'Exchange',
         };
+        $feature = match ($transactionType) {
+            'cash_in' => AccountFeature::CashIn,
+            'cash_out' => AccountFeature::CashOut,
+            default => null,
+        };
 
         return [
             'role' => $user?->role,
@@ -144,16 +150,26 @@ class TransactionEntryController extends Controller
             'cashOutStock' => $user?->role === 'admin'
                 ? $this->cashDenominations->getAvailableBalance()
                 : ($float ? $this->floats->getDenominationBalance($float->id) : []),
-            'accounts' => $this->accountProps($this->accounts->activeForOperation($operation)),
-            'serviceTypes' => $this->serviceTypeProps($operation),
+            'accounts' => $this->accountProps(
+                $feature !== null
+                    ? $this->accounts->activeForFeature($feature, $operation)
+                    : $this->accounts->activeForOperation($operation)
+            ),
+            'sendMoneyAccounts' => $transactionType === 'transfer'
+                ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::SendMoney, 'Transfer'))
+                : [],
+            'receiveMoneyAccounts' => $transactionType === 'transfer'
+                ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::ReceiveMoney, 'Transfer'))
+                : [],
+            'serviceTypes' => $transactionType === 'cash_in' ? [] : $this->serviceTypeProps($operation),
             'feeAccounts' => $this->accountProps($this->accounts->feeAccounts()),
             'fee' => $this->fee($request, $feeMode),
             'commission' => $this->commission($request, $commissionDirection),
             'receiveCommission' => $transactionType === 'transfer'
-                ? $this->commissionForAccount($request, 'receive_account_id', TransactionFeeCalculator::COMMISSION_RECEIVE)
+                ? $this->commissionForAccount($request, 'receive_account_id', AccountFeature::ReceiveMoney, TransactionFeeCalculator::COMMISSION_RECEIVE)
                 : '0.00',
             'payoutCommission' => $transactionType === 'transfer'
-                ? $this->commissionForAccount($request, 'payout_account_id', TransactionFeeCalculator::COMMISSION_SEND)
+                ? $this->commissionForAccount($request, 'payout_account_id', AccountFeature::SendMoney, TransactionFeeCalculator::COMMISSION_SEND)
                 : '0.00',
             'requiresDenominations' => $user?->role === 'teller',
             'completed' => $this->pullCompleted($request),
@@ -201,22 +217,27 @@ class TransactionEntryController extends Controller
     }
 
     /**
-     * @return array<int, array{id:int,company:string,company_id:int|null,company_category:string|null,company_logo_url:string|null,service:string,service_type_id:int|null,name:string,number:string|null,balance:string}>
+     * @return array<int, array{id:int,company:string,company_id:int|null,company_category:string|null,company_logo_url:string|null,service:string,service_type_id:int|null,features:list<string>,name:string,number:string|null,balance:string}>
      */
     private function accountProps($accounts = null): array
     {
         return ($accounts ?? $this->accounts->active())
             ->map(fn (Account $account): array => [
                 'id' => $account->id,
-                'company' => $account->serviceType?->company?->name ?? 'Account',
-                'company_id' => $account->serviceType?->company_id,
-                'company_category' => $account->serviceType?->company?->category,
+                'company' => $account->company?->name ?? $account->serviceType?->company?->name ?? 'Account',
+                'company_id' => $account->company_id ?? $account->serviceType?->company_id,
+                'company_category' => $account->company?->category ?? $account->serviceType?->company?->category,
                 'company_logo_url' => $this->companyLogoUrl(
-                    $account->serviceType?->company_id,
-                    $account->serviceType?->company?->logo_path,
+                    $account->company_id ?? $account->serviceType?->company_id,
+                    $account->company?->logo_path ?? $account->serviceType?->company?->logo_path,
                 ),
                 'service' => $account->serviceType?->name ?? 'Account',
                 'service_type_id' => $account->service_type_id,
+                'features' => $account->featureAssignments
+                    ->pluck('feature')
+                    ->map(fn ($feature) => $feature instanceof \BackedEnum ? $feature->value : $feature)
+                    ->values()
+                    ->all(),
                 'name' => $account->account_name,
                 'number' => $account->phone_number,
                 'balance' => Money::normalize($account->balance ?? 0),
@@ -326,7 +347,7 @@ class TransactionEntryController extends Controller
         return $this->fees->commission($account, $amount, $direction);
     }
 
-    private function commissionForAccount(Request $request, string $accountKey, string $direction): string
+    private function commissionForAccount(Request $request, string $accountKey, AccountFeature $feature, string $legacyDirection): string
     {
         $amount = $request->float('amount');
         $accountId = $request->integer($accountKey);
@@ -338,7 +359,7 @@ class TransactionEntryController extends Controller
         $account = $this->accounts->find($accountId);
 
         return $account !== null && $account->is_active
-            ? $this->fees->commission($account, $amount, $direction)
+            ? $this->fees->commissionForFeature($account, $amount, $feature, $legacyDirection)
             : '0.00';
     }
 
@@ -348,10 +369,15 @@ class TransactionEntryController extends Controller
     private function rate(): array
     {
         $rate = $this->exchangeRates->getLatest('THB', 'MMK');
+        $baseAmount = (float) ($rate?->base_amount ?? 1);
+
+        if ($baseAmount <= 0) {
+            $baseAmount = 1.0;
+        }
 
         return [
-            'buy_rate' => $rate?->buy_rate ?? '0.0000',
-            'sell_rate' => $rate?->sell_rate ?? '0.0000',
+            'buy_rate' => Money::normalize($rate !== null ? (float) $rate->buy_rate / $baseAmount : 0, 4),
+            'sell_rate' => Money::normalize($rate !== null ? (float) $rate->sell_rate / $baseAmount : 0, 4),
         ];
     }
 

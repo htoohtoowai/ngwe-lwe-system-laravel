@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Account;
+use App\Models\AccountFeatureAssignment;
 use App\Models\CashFloatAssignment;
 use App\Models\CommissionTier;
 use App\Models\Company;
@@ -85,6 +86,55 @@ class CashInRoleFlowTest extends TestCase
         $this->assertSame('50000.00', $account->fresh()->balance);
     }
 
+    public function test_cash_in_page_uses_cash_in_feature_accounts(): void
+    {
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
+        [$account] = $this->accountWithBalance(50_000, operation: 'CashOut');
+
+        AccountFeatureAssignment::query()->create([
+            'account_id' => $account->id,
+            'feature' => 'cash_in',
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$tellerToken)
+            ->get('/transactions/cash-in')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('transactions/CashIn')
+                ->has('accounts', 1)
+                ->where('accounts.0.id', $account->id)
+                ->where('accounts.0.features.0', 'cash_in')
+            );
+    }
+
+    public function test_teller_submits_cash_in_through_web_inertia_route(): void
+    {
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
+        [$account, $serviceType] = $this->accountWithBalance(50_000);
+        $this->fixedTier($serviceType->id);
+
+        $this->from('/transactions/cash-in')
+            ->withHeader('Authorization', 'Bearer '.$tellerToken)
+            ->post('/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 5_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'amount_received' => 5_000,
+                'fee_payment_method' => 'cash',
+                'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
+            ])
+            ->assertRedirect('/transactions/cash-in')
+            ->assertSessionHas('completed');
+
+        $transaction = Transaction::query()->firstOrFail();
+
+        $this->assertSame('cash_in', $transaction->transaction_type);
+        $this->assertSame('PENDING_CASHIER_CONFIRM', $transaction->status);
+        $this->assertSame('45000.00', $account->fresh()->balance);
+    }
+
     public function test_cashier_reviews_pending_cash_in_on_dashboard_and_confirms_it(): void
     {
         [, $tellerToken] = $this->activeTellerWithEmptyFloat();
@@ -162,7 +212,7 @@ class CashInRoleFlowTest extends TestCase
     /**
      * @return array{0: Account, 1: ServiceType}
      */
-    private function accountWithBalance(int $balance): array
+    private function accountWithBalance(int $balance, string $operation = 'CashIn'): array
     {
         $company = Company::query()->create([
             'name' => 'Wave-'.uniqid('', true),
@@ -171,10 +221,11 @@ class CashInRoleFlowTest extends TestCase
         $serviceType = ServiceType::query()->create([
             'company_id' => $company->id,
             'name' => 'WST',
-            'operation' => 'CashIn',
+            'operation' => $operation,
             'is_active' => true,
         ]);
         $account = Account::query()->create([
+            'company_id' => $company->id,
             'service_type_id' => $serviceType->id,
             'account_name' => 'Wave Main',
             'phone_number' => '0900000000',

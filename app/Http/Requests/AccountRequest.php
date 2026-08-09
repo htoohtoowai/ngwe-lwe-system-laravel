@@ -2,8 +2,10 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\AccountFeature;
 use App\Models\Account;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class AccountRequest extends FormRequest
@@ -18,6 +20,7 @@ class AccountRequest extends FormRequest
         $isUpdate = $this->isMethod('patch') || $this->isMethod('put');
 
         return [
+            'company_id' => ['sometimes', 'nullable', 'integer', 'exists:companies,id'],
             'service_type_id' => [$isUpdate ? 'sometimes' : 'required', 'integer', 'exists:service_types,id'],
             'account_name' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:255'],
             'phone_number' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:255'],
@@ -25,6 +28,9 @@ class AccountRequest extends FormRequest
             'commission_rate' => ['sometimes', 'numeric', 'min:0'],
             'is_active' => ['sometimes', 'boolean'],
             'is_fee_account' => ['sometimes', 'boolean'],
+            'is_agent' => ['sometimes', 'boolean'],
+            'features' => ['sometimes', 'array'],
+            'features.*' => ['string', Rule::in(AccountFeature::values())],
         ];
     }
 

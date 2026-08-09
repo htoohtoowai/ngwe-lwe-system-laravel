@@ -73,11 +73,11 @@ class CommissionTierAndBalanceTest extends TestCase
             'amount_from' => 1,
             'amount_to' => 999_999_999_999,
             'fee_amount_type' => 'PERCENTAGE',
-            'fee_amount_deposit' => 0.01,
-            'fee_amount_withdraw' => 0.01,
+            'fee_amount_deposit' => 1,
+            'fee_amount_withdraw' => 1,
             'comm_type' => 'PERCENTAGE',
-            'comm_deposit' => 0.002,
-            'comm_withdraw' => 0.002,
+            'comm_deposit' => 0.2,
+            'comm_withdraw' => 0.2,
             'additional_fee_type' => 'FIXED',
             'additional_fee_deposit_amount' => 250,
             'additional_fee_withdraw_amount' => 250,
@@ -89,6 +89,7 @@ class CommissionTierAndBalanceTest extends TestCase
             'account_name' => 'Wave Ops',
             'phone_number' => '09000000001',
             'balance' => 0,
+            'is_agent' => true,
         ]);
 
         $calc = app(TransactionFeeCalculator::class);
@@ -97,6 +98,78 @@ class CommissionTierAndBalanceTest extends TestCase
         $this->assertSame('1300.00', $fees['customer_fee']);
         $this->assertSame('250.00', $fees['additional_fee']);
         $this->assertSame('200.00', $calc->commission($account, 100_000, TransactionFeeCalculator::COMMISSION_SEND));
+    }
+
+    public function test_cash_in_and_cash_out_use_deposit_and_withdraw_tier_percentages(): void
+    {
+        $serviceType = $this->serviceType();
+
+        CommissionTier::query()->create([
+            'service_type_id' => $serviceType->id,
+            'amount_from' => 1,
+            'amount_to' => 999_999_999_999,
+            'fee_amount_type' => 'PERCENTAGE',
+            'fee_amount_deposit' => 0.1,
+            'fee_amount_withdraw' => 0.2,
+            'comm_type' => 'PERCENTAGE',
+            'comm_deposit' => 0,
+            'comm_withdraw' => 0,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_deposit_amount' => 0,
+            'additional_fee_withdraw_amount' => 0,
+            'is_active' => true,
+        ]);
+
+        $account = Account::query()->create([
+            'service_type_id' => $serviceType->id,
+            'account_name' => 'KBZPay Cash IO',
+            'phone_number' => '09000000006',
+            'balance' => 0,
+        ]);
+
+        $calc = app(TransactionFeeCalculator::class);
+
+        $this->assertSame(
+            '100.00',
+            $calc->resolveFees($account, 100_000, TransactionFeeCalculator::MODE_CASH_IN)['customer_fee'],
+        );
+        $this->assertSame(
+            '200.00',
+            $calc->resolveFees($account, 100_000, TransactionFeeCalculator::MODE_CASH_OUT)['customer_fee'],
+        );
+    }
+
+    public function test_api_tier_lookup_uses_same_inclusive_boundary_as_transaction_calculator(): void
+    {
+        $serviceType = $this->serviceType();
+        $tier = CommissionTier::query()->create([
+            'service_type_id' => $serviceType->id,
+            'amount_from' => 1,
+            'amount_to' => 10_000,
+            'fee_amount_type' => 'FIXED',
+            'fee_amount_deposit' => 400,
+            'fee_amount_withdraw' => 500,
+            'comm_type' => 'FIXED',
+            'comm_deposit' => 80,
+            'comm_withdraw' => 90,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_deposit_amount' => 0,
+            'additional_fee_withdraw_amount' => 0,
+            'is_active' => true,
+        ]);
+        $user = User::factory()->create([
+            'username' => 'tier_lookup',
+            'role' => 'teller',
+            'is_active' => true,
+            'password' => Hash::make('password123'),
+        ]);
+        $token = app(NgweLweTokenService::class)->create($user);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/commission-tiers/lookup?service_type_id='.$serviceType->id.'&amount=10000')
+            ->assertOk()
+            ->assertJsonPath('data.id', $tier->id)
+            ->assertJsonPath('data.fee_amount_deposit', '400.0000');
     }
 
     public function test_debit_balance_rejects_overdraw(): void

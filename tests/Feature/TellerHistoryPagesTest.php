@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Account;
 use App\Models\CashFloatAssignment;
 use App\Models\Company;
+use App\Models\ExchangeRate;
 use App\Models\ServiceType;
 use App\Models\Transaction;
 use App\Models\User;
@@ -89,6 +90,28 @@ class TellerHistoryPagesTest extends TestCase
                     ->where('view', 'entry')
                 );
         }
+    }
+
+    public function test_exchange_entry_rate_props_are_normalized_by_base_amount(): void
+    {
+        [, $token] = $this->userWithToken('teller');
+        $this->accounts();
+        ExchangeRate::query()->create([
+            'base_currency' => 'THB',
+            'quote_currency' => 'MMK',
+            'base_amount' => 10,
+            'buy_rate' => 1450,
+            'sell_rate' => 1480,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->get('/transactions/exchange')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('transactions/Exchange')
+                ->where('rate.buy_rate', '145.0000')
+                ->where('rate.sell_rate', '148.0000')
+            );
     }
 
     public function test_teller_float_history_page_shows_own_floats_only(): void

@@ -11,6 +11,8 @@ const props = withDefaults(
         currencyClass?: string;
         readingCurrencyLabel?: string;
         chips?: number[];
+        required?: boolean;
+        compact?: boolean;
     }>(),
     {
         id: 'transaction-amount',
@@ -18,6 +20,8 @@ const props = withDefaults(
         currencyClass: 'font-bold text-slate',
         readingCurrencyLabel: 'ကျပ်',
         chips: () => [10_000, 50_000, 100_000, 500_000],
+        required: false,
+        compact: false,
     },
 );
 
@@ -64,12 +68,17 @@ function set(value: number): void {
 
 <template>
     <div>
-        <label class="bank-label bank-required" :for="id">{{
+        <label class="bank-label" :class="required ? 'bank-required' : ''" :for="id">{{
             label ?? t('component.enterAmount')
         }}</label>
 
         <div
-            class="flex items-center gap-3 rounded-field bg-mist px-5 py-4 transition focus-within:bg-white focus-within:ring-2 focus-within:ring-brand/40"
+            class="flex items-center gap-3 rounded-field border border-line transition focus-within:border-brand focus-within:bg-white focus-within:ring-2 focus-within:ring-brand/20"
+            :class="
+                compact
+                    ? 'min-h-12 bg-mist px-3 py-2'
+                    : 'bg-mist px-5 pb-3 pt-5'
+            "
         >
             <input
                 :id="id"
@@ -81,7 +90,8 @@ function set(value: number): void {
                 placeholder="0"
                 :aria-label="label ?? t('component.enterAmount')"
                 :aria-describedby="`${id}-reading`"
-                class="money min-w-0 flex-1 bg-transparent text-3xl font-bold text-ink outline-none placeholder:text-slate/40"
+                class="big-amount-input__control money min-w-0 flex-1 font-bold text-ink placeholder:text-slate/40"
+                :class="compact ? 'text-base' : 'text-3xl'"
                 @input="
                     set(
                         Number(
@@ -108,6 +118,7 @@ function set(value: number): void {
         </div>
 
         <p
+            v-if="!compact"
             :id="`${id}-reading`"
             aria-live="polite"
             class="mt-1.5 min-h-5 text-[13px] font-semibold"
@@ -119,7 +130,7 @@ function set(value: number): void {
             }}</span>
         </p>
 
-        <div class="flex flex-wrap gap-1.5">
+        <div v-if="!compact" class="flex flex-wrap gap-1.5">
             <button
                 v-for="chip in chips"
                 :key="chip"
@@ -133,3 +144,18 @@ function set(value: number): void {
         </div>
     </div>
 </template>
+
+<style scoped>
+.big-amount-input__control,
+.big-amount-input__control:hover,
+.big-amount-input__control:focus,
+.big-amount-input__control:focus-visible {
+    min-height: auto !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    outline: 0 !important;
+    padding: 0 !important;
+}
+</style>

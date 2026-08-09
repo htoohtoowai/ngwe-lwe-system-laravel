@@ -61,6 +61,42 @@ class TransactionEndpointsTest extends TestCase
         $this->assertNotNull(Transaction::query()->find($txnId));
     }
 
+    public function test_cash_in_account_paid_fee_credits_fee_account_without_debiting_source_fee(): void
+    {
+        [, $token] = $this->activeTellerWithEmptyFloat();
+        [$account, $serviceType] = $this->accountWithBalance(50_000);
+        $feeAccount = Account::query()->create([
+            'service_type_id' => $serviceType->id,
+            'account_name' => 'Fee Collection',
+            'phone_number' => '0911111111',
+            'balance' => 0,
+            'is_fee_account' => true,
+            'is_active' => true,
+        ]);
+        $this->fixedTier($serviceType->id, feeDeposit: 500);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 10_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'fee_payment_method' => 'account',
+                'fee_account_id' => $feeAccount->id,
+                'amount_received' => 10_000,
+                'received_denominations' => [10_000 => 1],
+                'handoff_denominations' => [10_000 => 1],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.customer_fee', '500.00')
+            ->assertJsonPath('data.fee_payment_method', 'account')
+            ->assertJsonPath('data.fee_account_id', $feeAccount->id)
+            ->assertJsonPath('data.balance_change', '-10000.00');
+
+        $this->assertSame('40000.00', $account->fresh()->balance);
+        $this->assertSame('500.00', $feeAccount->fresh()->balance);
+    }
+
     public function test_cash_in_accepts_reference_breakdown_aliases(): void
     {
         [, $token] = $this->activeTellerWithEmptyFloat();
@@ -102,6 +138,29 @@ class TransactionEndpointsTest extends TestCase
             ->assertJsonPath('data.balance_change', '-9750.00');
 
         $this->assertSame('40250.00', $account->fresh()->balance);
+    }
+
+    public function test_cash_in_does_not_credit_commission_to_non_agent_account(): void
+    {
+        [, $token] = $this->activeTellerWithEmptyFloat();
+        [$account, $serviceType] = $this->accountWithBalance(50_000);
+        $account->forceFill(['is_agent' => false])->save();
+        $this->fixedTier($serviceType->id, feeDeposit: 500, commDeposit: 250);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 10_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'received_denominations' => [10_000 => 1],
+                'handoff_denominations' => [10_000 => 1],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.commission_amount', '0.00')
+            ->assertJsonPath('data.balance_change', '-10000.00');
+
+        $this->assertSame('40000.00', $account->fresh()->balance);
     }
 
     public function test_cash_in_rejects_overdraw(): void
@@ -716,6 +775,7 @@ class TransactionEndpointsTest extends TestCase
             'account_name' => $name,
             'phone_number' => '0900000000',
             'balance' => $balance,
+            'is_agent' => true,
         ]);
 
         return [$account, $serviceType];

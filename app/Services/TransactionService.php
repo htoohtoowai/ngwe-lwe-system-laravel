@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\AccountFeature;
 use App\Exceptions\InsufficientBalanceException;
 use App\Exceptions\InsufficientVaultDenominationException;
 use App\Models\Account;
@@ -151,14 +152,12 @@ class TransactionService
         $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $amountReceived, $cashSettlementAmount, $fees, $feePayment, $commission, $fromCompanyId, $changeDue, $normalizedReceivedDenominations, $normalizedHandoffDenominations, $normalizedChangeDenominations): Transaction {
             try {
                 $this->accounts->debitBalance($account->id, $amount);
-                $this->debitFeeFromSourceIfNeeded($account, $feePayment, $fees['customer_fee']);
             } catch (InsufficientBalanceException $exception) {
                 throw $exception;
             }
 
             $cashInBalanceChange = Money::normalize(
-                -((float) $amount + ($feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0))
-                + (float) $commission,
+                -((float) $amount) + (float) $commission,
             );
 
             $txn = $this->transactions->create([
@@ -508,9 +507,9 @@ class TransactionService
         $feeReferenceAccount = $customerTransfer ? $toAccount : $fromAccount;
         $fees = $this->calculator->resolveFees($feeReferenceAccount, $amount, TransactionFeeCalculator::MODE_CASH_IN);
         $receiveCommission = $customerTransfer
-            ? $this->calculator->commission($toAccount, $amount, TransactionFeeCalculator::COMMISSION_RECEIVE)
+            ? $this->calculator->commissionForFeature($toAccount, $amount, AccountFeature::ReceiveMoney, TransactionFeeCalculator::COMMISSION_RECEIVE)
             : Money::normalize(0);
-        $payoutCommission = $this->calculator->commission($fromAccount, $amount, TransactionFeeCalculator::COMMISSION_SEND);
+        $payoutCommission = $this->calculator->commissionForFeature($fromAccount, $amount, AccountFeature::SendMoney, TransactionFeeCalculator::COMMISSION_SEND);
         $commission = Money::normalize((float) $receiveCommission + (float) $payoutCommission);
         $feePayment = $customerTransfer
             ? $this->resolveTransferFeePayment($data, $toAccount)
@@ -897,9 +896,6 @@ class TransactionService
 
         $updated = DB::transaction(function () use ($transaction, $cashier, $note): Transaction {
             $reversal = Money::normalize($transaction->amount ?? 0);
-            if ($transaction->fee_payment_method === 'account' && (float) ($transaction->customer_fee ?? 0) > 0) {
-                $reversal = Money::normalize((float) $reversal + (float) $transaction->customer_fee);
-            }
             if ((float) ($transaction->commission_amount ?? 0) > 0) {
                 $reversal = Money::normalize((float) $reversal - (float) $transaction->commission_amount);
             }

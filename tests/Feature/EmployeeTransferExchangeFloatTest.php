@@ -318,6 +318,7 @@ class EmployeeTransferExchangeFloatTest extends TestCase
             'account_name' => 'Main',
             'phone_number' => '0900000000',
             'balance' => $balance,
+            'is_agent' => true,
         ]);
 
         return [$account, $serviceType];
@@ -342,12 +343,14 @@ class EmployeeTransferExchangeFloatTest extends TestCase
             'account_name' => 'From',
             'phone_number' => '0900000001',
             'balance' => $fromBalance,
+            'is_agent' => true,
         ]);
         $to = Account::query()->create([
             'service_type_id' => $serviceType->id,
             'account_name' => 'To',
             'phone_number' => '0900000002',
             'balance' => 0,
+            'is_agent' => true,
         ]);
 
         return [$from, $to, $serviceType];

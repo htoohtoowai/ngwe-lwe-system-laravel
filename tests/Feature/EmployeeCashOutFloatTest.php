@@ -267,6 +267,7 @@ class EmployeeCashOutFloatTest extends TestCase
             'account_name' => 'Wave Main',
             'phone_number' => '0900000000',
             'balance' => 0,
+            'is_agent' => true,
         ]);
 
         return [$account, $serviceType];

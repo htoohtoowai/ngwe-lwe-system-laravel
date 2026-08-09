@@ -24,6 +24,7 @@ const props = withDefaults(
         cashInStock?: Record<number, number>;
         accounts: {
             id: number;
+            features?: string[];
             company: string;
             company_id?: number | null;
             company_logo_url?: string | null;
@@ -32,14 +33,6 @@ const props = withDefaults(
             name: string;
             number?: string;
             balance: string;
-        }[];
-        serviceTypes: {
-            id: number;
-            company_id?: number | null;
-            company: string;
-            company_logo_url?: string | null;
-            name: string;
-            operation: string;
         }[];
         feeAccounts: {
             id: number;
@@ -72,14 +65,14 @@ const props = withDefaults(
 const step = ref<'form' | 'review'>('form');
 const accountId = ref<number | null>(null);
 const selectedCompany = ref('');
-const selectedServiceTypeId = ref<number | null>(null);
 const customerName = ref('');
 const customerPhone = ref('');
 const amount = ref(0);
-const description = ref('');
 const screenshot = ref<File | null>(null);
 const receivedDenoms = ref<Record<number, number>>({});
 const changeDenoms = ref<Record<number, number>>({});
+const showReceivedDenoms = ref(true);
+const showChangeDenoms = ref(true);
 const feePaymentMethod = ref<FeePaymentMethod>('cash');
 const feeAccountId = ref<number | null>(null);
 const submitting = ref(false);
@@ -88,6 +81,7 @@ const historySearch = ref('');
 const historyStatus = ref('all');
 const historyDateFrom = ref('');
 const historyDateTo = ref('');
+const failedCompanyLogos = ref<Set<string>>(new Set());
 const { t } = useLocale();
 
 const feeNum = computed(() => Number(props.fee ?? 0));
@@ -111,10 +105,13 @@ const filteredHistory = computed(() => {
                 row.note,
                 row.amount,
                 row.status,
-            ].some((value) => String(value ?? '').toLowerCase().includes(query));
+            ].some((value) =>
+                String(value ?? '')
+                    .toLowerCase()
+                    .includes(query),
+            );
         const matchesStatus =
-            historyStatus.value === 'all' ||
-            row.status === historyStatus.value;
+            historyStatus.value === 'all' || row.status === historyStatus.value;
         const transactionDate = row.created_at?.slice(0, 10) ?? '';
         const matchesDateFrom =
             historyDateFrom.value === '' ||
@@ -124,10 +121,7 @@ const filteredHistory = computed(() => {
             transactionDate <= historyDateTo.value;
 
         return (
-            matchesSearch &&
-            matchesStatus &&
-            matchesDateFrom &&
-            matchesDateTo
+            matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo
         );
     });
 });
@@ -137,25 +131,10 @@ const account = computed(() =>
 const feeAccount = computed(() =>
     props.feeAccounts.find((a) => a.id === feeAccountId.value),
 );
-const cashInServiceTypes = computed(() =>
-    props.serviceTypes.filter(
-        (serviceType) =>
-            serviceType.operation === 'CashIn' ||
-            serviceType.operation === 'All' ||
-            ['WST', 'Pay_To_Pay', 'P2P'].includes(serviceType.name),
-    ),
-);
-const cashInServiceTypeIds = computed(
-    () => new Set(cashInServiceTypes.value.map((serviceType) => serviceType.id)),
-);
 const cashInAccountCounts = computed(() => {
     const counts = new Map<string, number>();
 
     for (const account of props.accounts) {
-        if (!cashInServiceTypeIds.value.has(account.service_type_id)) {
-            continue;
-        }
-
         counts.set(account.company, (counts.get(account.company) ?? 0) + 1);
     }
 
@@ -167,35 +146,46 @@ const companies = computed(() => {
         { id: number | null; name: string; logoUrl: string | null }
     >();
 
-    for (const serviceType of cashInServiceTypes.value) {
-        if (!serviceType.company || unique.has(serviceType.company)) {
+    for (const account of props.accounts) {
+        if (!account.company || unique.has(account.company)) {
             continue;
         }
 
-        unique.set(serviceType.company, {
-            id: serviceType.company_id ?? null,
-            name: serviceType.company,
-            logoUrl: serviceType.company_logo_url ?? null,
+        unique.set(account.company, {
+            id: account.company_id ?? null,
+            name: account.company,
+            logoUrl: account.company_logo_url ?? null,
         });
     }
 
     return Array.from(unique.values());
 });
-const cashInServiceOptions = computed(() =>
-    cashInServiceTypes.value.filter(
-        (serviceType) =>
-            !selectedCompany.value ||
-            serviceType.company === selectedCompany.value,
-    ),
-);
+function companyKey(company: { id: number | null; name: string }): string {
+    return company.id !== null ? `id:${company.id}` : `name:${company.name}`;
+}
+function hasCompanyLogo(company: {
+    id: number | null;
+    name: string;
+    logoUrl: string | null;
+}): boolean {
+    return Boolean(
+        company.logoUrl && !failedCompanyLogos.value.has(companyKey(company)),
+    );
+}
+function markCompanyLogoFailed(company: {
+    id: number | null;
+    name: string;
+    logoUrl: string | null;
+}): void {
+    failedCompanyLogos.value = new Set([
+        ...failedCompanyLogos.value,
+        companyKey(company),
+    ]);
+}
 const visibleAccounts = computed(() =>
     props.accounts.filter(
         (account) =>
-            cashInServiceTypeIds.value.has(account.service_type_id) &&
-            (!selectedCompany.value ||
-                account.company === selectedCompany.value) &&
-            (selectedServiceTypeId.value === null ||
-                account.service_type_id === selectedServiceTypeId.value),
+            !selectedCompany.value || account.company === selectedCompany.value,
     ),
 );
 const receivedTotal = computed(() =>
@@ -205,11 +195,7 @@ const receivedTotal = computed(() =>
     ),
 );
 const cashInNeedsDenoms = computed(() => props.cashInRequiresDenominations);
-const accountBalanceRequired = computed(
-    () =>
-        amount.value +
-        (feePaymentMethod.value === 'account' ? feeNum.value : 0),
-);
+const accountBalanceRequired = computed(() => amount.value);
 const cashSettlementAmount = computed(
     () => amount.value + (feePaymentMethod.value === 'cash' ? feeNum.value : 0),
 );
@@ -220,6 +206,10 @@ const amountReceived = computed(() =>
 const changeDue = computed(() =>
     Math.max(0, amountReceived.value - cashSettlementAmount.value),
 );
+const cashDifference = computed(
+    () => amountReceived.value - cashSettlementAmount.value,
+);
+const cashShortfall = computed(() => Math.max(0, -cashDifference.value));
 const changeTotal = computed(() =>
     props.notes.reduce(
         (sum, note) => sum + note * (changeDenoms.value[note] ?? 0),
@@ -227,13 +217,12 @@ const changeTotal = computed(() =>
     ),
 );
 const changeBalanced = computed(() => changeTotal.value === changeDue.value);
-const handoffStock = computed(() =>
+const netReceivedDenoms = computed(() =>
     props.notes.reduce(
         (stock, note) => {
             stock[note] = Math.max(
                 0,
-                (props.floatStock[note] ?? 0) +
-                    (receivedDenoms.value[note] ?? 0) -
+                (receivedDenoms.value[note] ?? 0) -
                     (changeDenoms.value[note] ?? 0),
             );
 
@@ -247,11 +236,27 @@ const handoffDenoms = computed(() => {
     const result: Record<number, number> = {};
 
     for (const note of [...props.notes].sort((a, b) => b - a)) {
-        const available = handoffStock.value[note] ?? 0;
+        const available = netReceivedDenoms.value[note] ?? 0;
         const quantity = Math.min(Math.floor(remaining / note), available);
 
         if (quantity > 0) {
             result[note] = quantity;
+            remaining -= quantity * note;
+        }
+    }
+
+    for (const note of [...props.notes].sort((a, b) => b - a)) {
+        const alreadyUsed = result[note] ?? 0;
+        const available = Math.max(
+            0,
+            (props.floatStock[note] ?? 0) +
+                (netReceivedDenoms.value[note] ?? 0) -
+                alreadyUsed,
+        );
+        const quantity = Math.min(Math.floor(remaining / note), available);
+
+        if (quantity > 0) {
+            result[note] = alreadyUsed + quantity;
             remaining -= quantity * note;
         }
     }
@@ -310,6 +315,82 @@ const ready = computed(
         !floatLocked.value &&
         !cashierLocked.value,
 );
+const readyIssue = computed(() => {
+    if (floatLocked.value) {
+        return t(
+            'transaction.floatLocked',
+            'Activate your teller float first.',
+        );
+    }
+
+    if (cashierLocked.value) {
+        return t(
+            'transaction.cashierLocked',
+            'Cashier review mode is read-only.',
+        );
+    }
+
+    if (accountId.value === null) {
+        return t(
+            'transaction.chooseAccountFirst',
+            'Choose the KPay account first.',
+        );
+    }
+
+    if (amount.value <= 0) {
+        return t(
+            'transaction.enterCashInAmountFirst',
+            'Enter the Cash In amount.',
+        );
+    }
+
+    if (Number(account.value?.balance ?? 0) < accountBalanceRequired.value) {
+        return t(
+            'transaction.accountBalanceNotEnough',
+            'Selected account balance is not enough.',
+        );
+    }
+
+    if (customerName.value.trim().length === 0) {
+        return t('transaction.customerNameRequired', 'Enter customer name.');
+    }
+
+    if (customerPhone.value.trim().length === 0) {
+        return t('transaction.customerPhoneRequired', 'Enter customer phone.');
+    }
+
+    if (!feePaymentValid.value) {
+        return t('transaction.feeAccountRequired', 'Choose the fee account.');
+    }
+
+    if (cashInNeedsDenoms.value && receivedTotal.value <= 0) {
+        return t('transaction.countCustomerCash', 'Count the customer cash.');
+    }
+
+    if (cashInNeedsDenoms.value && cashShortfall.value > 0) {
+        return `${t('transaction.cashShort', 'Received cash is short.')} ${cashShortfall.value.toLocaleString()} MMK`;
+    }
+
+    if (
+        cashInNeedsDenoms.value &&
+        changeDue.value > 0 &&
+        !changeBalanced.value
+    ) {
+        return `${t('transaction.changeMyVault', 'Change from my teller vault')}: ${changeDue.value.toLocaleString()} MMK`;
+    }
+
+    if (
+        props.role === 'teller' &&
+        handoffTotal.value !== cashSettlementAmount.value
+    ) {
+        return t(
+            'transaction.cashierHandoffNotReady',
+            'Cashier handoff notes are not ready.',
+        );
+    }
+
+    return '';
+});
 
 watch(
     companies,
@@ -320,24 +401,21 @@ watch(
     },
     { immediate: true },
 );
-watch(
-    cashInServiceOptions,
-    (values) => {
-        if (
-            !values.some(
-                (serviceType) => serviceType.id === selectedServiceTypeId.value,
-            )
-        ) {
-            selectedServiceTypeId.value = values[0]?.id ?? null;
-        }
-    },
-    { immediate: true },
-);
-watch([selectedCompany, selectedServiceTypeId], () => {
+watch(selectedCompany, () => {
     if (
         !visibleAccounts.value.some((account) => account.id === accountId.value)
     ) {
         accountId.value = null;
+    }
+});
+watch(canCountCash, (canCount) => {
+    if (canCount) {
+        showReceivedDenoms.value = true;
+    }
+});
+watch(changeDue, (nextChange, previousChange) => {
+    if (nextChange > 0 && previousChange <= 0) {
+        showChangeDenoms.value = true;
     }
 });
 
@@ -397,7 +475,6 @@ function submit() {
                 feePaymentMethod.value === 'account'
                     ? feeAccountId.value
                     : null,
-            note: description.value,
             screenshot: screenshot.value,
             received_denominations: receivedDenoms.value,
             handoff_denominations:
@@ -440,20 +517,22 @@ function submit() {
                 <div
                     class="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(16rem,2fr)_minmax(10rem,1fr)_minmax(9rem,1fr)_minmax(9rem,1fr)_auto]"
                 >
-                    <label class="min-w-0">
-                        <span class="bank-label">Search</span>
+                    <label class="group relative min-w-0">
                         <input
                             v-model="historySearch"
                             type="search"
-                            class="bank-input mt-1.5"
+                            class="bank-input h-14 pt-5 transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                             placeholder="Reference, customer, phone, account"
                         />
+                        <span
+                            class="pointer-events-none absolute top-0 left-3 -translate-y-1/2 bg-card px-2 text-xs font-black text-slate transition-colors group-focus-within:text-brand"
+                            >Search</span
+                        >
                     </label>
-                    <label>
-                        <span class="bank-label">Status</span>
+                    <label class="group relative">
                         <select
                             v-model="historyStatus"
-                            class="bank-input mt-1.5"
+                            class="bank-input h-14 pt-5 transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                         >
                             <option value="all">All statuses</option>
                             <option
@@ -464,22 +543,32 @@ function submit() {
                                 {{ status }}
                             </option>
                         </select>
+                        <span
+                            class="pointer-events-none absolute top-0 left-3 -translate-y-1/2 bg-card px-2 text-xs font-black text-slate transition-colors group-focus-within:text-brand"
+                            >Status</span
+                        >
                     </label>
-                    <label>
-                        <span class="bank-label">From</span>
+                    <label class="group relative">
                         <input
                             v-model="historyDateFrom"
                             type="date"
-                            class="bank-input mt-1.5"
+                            class="bank-input h-14 pt-5 transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                         />
+                        <span
+                            class="pointer-events-none absolute top-0 left-3 -translate-y-1/2 bg-card px-2 text-xs font-black text-slate transition-colors group-focus-within:text-brand"
+                            >From</span
+                        >
                     </label>
-                    <label>
-                        <span class="bank-label">To</span>
+                    <label class="group relative">
                         <input
                             v-model="historyDateTo"
                             type="date"
-                            class="bank-input mt-1.5"
+                            class="bank-input h-14 pt-5 transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                         />
+                        <span
+                            class="pointer-events-none absolute top-0 left-3 -translate-y-1/2 bg-card px-2 text-xs font-black text-slate transition-colors group-focus-within:text-brand"
+                            >To</span
+                        >
                     </label>
                     <button
                         type="button"
@@ -578,7 +667,7 @@ function submit() {
 
         <section
             v-else-if="view === 'entry' && step === 'form'"
-            class="bank-form-shell mt-5 max-w-6xl"
+            class="bank-form-shell mt-5 max-w-5xl p-5 sm:p-6"
             :class="
                 floatLocked || cashierLocked
                     ? 'pointer-events-none opacity-50'
@@ -589,31 +678,23 @@ function submit() {
                 {{ t('transaction.enterDetails') }}
             </h2>
 
-            <div class="mt-4 grid items-start gap-5 xl:grid-cols-2">
-                <div class="min-w-0 space-y-4">
+            <div class="mt-4 space-y-4">
+                <div
+                    class="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3"
+                >
                     <section
-                        class="rounded-2xl border border-line bg-card p-4 shadow-sm sm:p-5"
+                        class="space-y-2 md:col-span-2 xl:col-span-3"
                         aria-labelledby="cash-in-provider-title"
                     >
-                        <div class="flex items-start justify-between gap-3">
-                            <div>
-                                <h3
-                                    id="cash-in-provider-title"
-                                    class="text-sm font-black text-ink"
-                                >
-                                    {{ t('transaction.company', 'Company') }}
-                                </h3>
-                                <p class="mt-1 text-xs text-slate">
-                                    {{ t('transaction.chooseCompanyFirst') }}
-                                </p>
-                            </div>
-                            <span class="text-xs font-bold text-brand">{{
-                                t('component.required')
-                            }}</span>
-                        </div>
+                        <h3
+                            id="cash-in-provider-title"
+                            class="text-xs font-black text-slate"
+                        >
+                            {{ t('transaction.company', 'Company') }}
+                        </h3>
 
                         <div
-                            class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+                            class="flex gap-2 overflow-x-auto pb-1.5"
                             role="radiogroup"
                             aria-label="Company"
                         >
@@ -623,77 +704,44 @@ function submit() {
                                 type="button"
                                 role="radio"
                                 :aria-checked="selectedCompany === company.name"
-                                class="group flex min-h-16 items-center gap-2 rounded-xl border px-3 py-2 text-left transition"
-                                :class="
+                                :aria-label="company.name"
+                                :title="company.name"
+                                class="group flex min-h-12 shrink-0 items-center gap-2 rounded-field border px-2.5 py-1.5 text-left transition"
+                                :class="[
                                     selectedCompany === company.name
                                         ? 'border-brand bg-brand-soft text-brand shadow-sm ring-2 ring-brand/15'
-                                        : 'border-line bg-mist/40 text-ink hover:border-brand/40 hover:bg-brand-soft/40'
-                                "
+                                        : 'border-line bg-mist/40 text-ink hover:border-brand/40 hover:bg-brand-soft/40',
+                                    hasCompanyLogo(company)
+                                        ? 'min-w-16 justify-center'
+                                        : 'min-w-36',
+                                ]"
                                 @click="selectedCompany = company.name"
                             >
                                 <span
-                                    class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl text-sm font-black"
+                                    v-if="hasCompanyLogo(company)"
+                                    class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-card text-xs font-black"
                                     :class="
                                         selectedCompany === company.name
-                                            ? 'bg-brand text-white'
-                                            : 'bg-white text-brand shadow-sm'
+                                            ? 'border-brand/25 shadow-sm'
+                                            : 'shadow-sm'
                                     "
                                 >
                                     <img
-                                        v-if="company.logoUrl"
                                         :src="company.logoUrl"
                                         :alt="`${company.name} logo`"
-                                        class="size-full object-contain p-1"
+                                        class="size-full object-contain p-0.5"
+                                        @error="markCompanyLogoFailed(company)"
                                     />
-                                    <span v-else>
-                                        {{
-                                            company.name
-                                                .slice(0, 1)
-                                                .toUpperCase()
-                                        }}
-                                    </span>
                                 </span>
-                                <span class="min-w-0">
+                                <span v-else class="min-w-0">
                                     <span
                                         class="block truncate text-xs font-black"
                                         >{{ company.name }}</span
                                     >
-                                    <span
-                                        class="mt-0.5 block text-[10px] text-slate"
-                                    >
-                                        {{ cashInAccountCounts.get(company.name) ?? 0 }}
-                                        {{ t('transaction.accounts') }}
-                                    </span>
                                 </span>
                             </button>
                         </div>
 
-                        <div class="mt-4">
-                            <label
-                                class="bank-label"
-                                for="cash-in-service-type"
-                                >{{
-                                    t('transaction.serviceType', 'Service type')
-                                }}</label
-                            >
-                            <select
-                                id="cash-in-service-type"
-                                v-model.number="selectedServiceTypeId"
-                                class="bank-input mt-1.5 h-11"
-                                :disabled="!cashInServiceOptions.length"
-                            >
-                                <option :value="null" disabled>
-                                    {{ t('transaction.chooseServiceType') }}
-                                </option>
-                                <option
-                                    v-for="service in cashInServiceOptions"
-                                    :key="service.id"
-                                    :value="service.id"
-                                >
-                                    {{ service.name }}
-                                </option>
-                            </select>
-                        </div>
                     </section>
 
                     <AccountTile
@@ -701,116 +749,109 @@ function submit() {
                         :accounts="visibleAccounts"
                         :label="t('transaction.accountDebit')"
                         :must-cover="accountBalanceRequired"
+                        compact
                     />
 
                     <BigAmountInput
                         v-model="amount"
                         :label="t('transaction.cashInAmount')"
+                        required
+                        compact
                     />
 
-                    <div
-                        class="flex items-center justify-between rounded-field bg-mist px-4 py-3"
-                    >
-                        <p class="text-[13px] font-semibold text-slate">
-                            {{ t('transaction.fee') }}
-                            <span class="font-normal"
-                                >({{ t('transaction.commissionTier') }})</span
-                            >
-                        </p>
-                        <p class="money text-sm font-bold">
-                            {{ mmk(feeNum) }}
-                            <span class="text-[10px] text-slate">MMK</span>
-                        </p>
+                    <div>
+                        <p class="bank-label">{{ t('transaction.fee') }}</p>
+                        <div
+                            class="flex min-h-12 items-center justify-between gap-3 rounded-field border border-line bg-mist px-3 py-2"
+                        >
+                            <p class="text-sm font-bold text-ink">
+                                {{ t('transaction.commissionTier') }}
+                            </p>
+                            <p class="money text-base font-bold text-ink">
+                                {{ mmk(feeNum) }}
+                                <span class="text-[10px] text-slate">MMK</span>
+                            </p>
+                        </div>
                     </div>
 
                     <FeePaymentSelector
+                        class="md:col-span-2 xl:col-span-3"
                         v-model="feePaymentMethod"
                         v-model:fee-account-id="feeAccountId"
                         :fee="feeNum"
                         :fee-accounts="feeAccounts"
+                        compact
                     />
                 </div>
 
                 <div class="min-w-0">
-                    <div class="space-y-4">
-                        <div class="grid gap-4 sm:grid-cols-2">
+                    <div
+                        class="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3"
+                    >
+                        <div class="grid gap-3 sm:grid-cols-2 xl:col-span-2">
                             <div>
                                 <label
-                                    class="bank-label"
+                                    class="bank-label bank-required"
                                     for="cash-in-customer-name"
-                                    >{{ t('transaction.customerName') }}</label
                                 >
+                                    {{ t('transaction.customerName') }}
+                                </label>
                                 <input
                                     id="cash-in-customer-name"
                                     v-model="customerName"
                                     type="text"
                                     autocomplete="name"
-                                    class="bank-input mt-1.5"
-                                    :placeholder="t('transaction.customerName')"
+                                    placeholder=" "
+                                    :aria-invalid="
+                                        Boolean(errors.customer_name)
+                                    "
+                                    class="bank-input min-h-12 border border-line bg-mist px-3 py-2 transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                                    :class="
+                                        errors.customer_name
+                                            ? 'border-brand text-brand focus:border-brand focus:ring-brand/20'
+                                            : ''
+                                    "
                                 />
                             </div>
                             <div>
                                 <label
-                                    class="bank-label"
+                                    class="bank-label bank-required"
                                     for="cash-in-customer-phone"
-                                    >{{ t('transaction.customerPhone') }}</label
                                 >
+                                    {{ t('transaction.customerPhone') }}
+                                </label>
                                 <input
                                     id="cash-in-customer-phone"
                                     v-model="customerPhone"
                                     type="tel"
                                     autocomplete="tel"
-                                    class="bank-input mt-1.5"
-                                    :placeholder="
-                                        t('transaction.customerPhone')
+                                    placeholder=" "
+                                    :aria-invalid="
+                                        Boolean(errors.customer_phone)
+                                    "
+                                    class="bank-input min-h-12 border border-line bg-mist px-3 py-2 transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                                    :class="
+                                        errors.customer_phone
+                                            ? 'border-brand text-brand focus:border-brand focus:ring-brand/20'
+                                            : ''
                                     "
                                 />
                             </div>
                         </div>
 
-                        <label class="bank-label" for="cash-in-description">{{
-                            t('transaction.description')
-                        }}</label>
-                        <div class="relative">
-                            <textarea
-                                id="cash-in-description"
-                                v-model="description"
-                                maxlength="250"
-                                rows="4"
-                                autocomplete="off"
-                                :placeholder="t('transaction.cashIn')"
-                                class="bank-input resize-none pb-7"
-                                aria-describedby="cash-in-description-count"
-                            />
-                            <span
-                                id="cash-in-description-count"
-                                class="money pointer-events-none absolute right-3.5 bottom-2.5 text-[11px] text-slate"
-                            >
-                                ({{ description.length }}/250)
-                            </span>
-                        </div>
-
                         <div>
-                            <label
-                                class="bank-label"
-                                for="cash-in-screenshot"
-                                >{{ t('transaction.screenshot') }}</label
-                            >
+                            <p class="bank-label">
+                                {{ t('transaction.screenshot') }}
+                            </p>
                             <label
                                 for="cash-in-screenshot"
-                                class="mt-1.5 flex cursor-pointer items-center justify-between gap-3 rounded-field border border-dashed border-line bg-card px-4 py-3 text-sm transition hover:border-brand/50 hover:bg-brand-soft/30"
+                                class="flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-field border border-dashed border-line bg-mist px-3 py-2 text-sm transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/20 hover:border-brand/50 hover:bg-brand-soft/30"
                             >
                                 <span class="min-w-0">
                                     <span class="block font-bold text-ink">{{
                                         screenshot?.name ??
                                         t('transaction.attachScreenshot')
                                     }}</span>
-                                    <span
-                                        class="mt-0.5 block truncate text-xs text-slate"
-                                        >{{
-                                            t('transaction.screenshotHint')
-                                        }}</span
-                                    >
                                 </span>
                                 <span
                                     class="shrink-0 rounded-pill bg-mist px-3 py-1 text-xs font-bold text-slate"
@@ -828,38 +869,24 @@ function submit() {
                     </div>
                 </div>
 
-                <div
-                    v-if="cashInNeedsDenoms && canCountCash"
-                    class="min-w-0 xl:col-span-2"
-                >
-                    <div
-                        class="mb-4 flex items-start gap-3 rounded-2xl border border-brand/15 bg-brand-soft px-4 py-3.5 sm:px-5"
-                    >
-                        <span
-                            class="grid size-8 shrink-0 place-items-center rounded-full bg-brand text-xs font-black text-white"
-                            >01</span
-                        >
-                        <div class="min-w-0">
-                            <p class="text-sm font-bold text-ink">
-                                {{ t('transaction.cashInDenominationHint') }}
-                            </p>
-                            <p class="mt-1 text-xs leading-5 text-slate">
-                                {{ t('transaction.cashInDescription') }}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div class="grid items-start gap-4">
+                <div v-if="cashInNeedsDenoms && canCountCash" class="min-w-0">
+                    <div class="grid items-start gap-3">
                         <section
-                            class="overflow-hidden rounded-2xl border-2 border-brand/20 bg-card shadow-sm"
+                            class="overflow-hidden rounded-field border border-brand/20 bg-card"
                             aria-labelledby="cash-in-customer-cash-title"
                         >
-                            <header
-                                class="flex items-start justify-between gap-3 border-b border-line bg-brand-soft/55 px-4 py-4 sm:px-5"
+                            <button
+                                type="button"
+                                class="flex w-full items-center justify-between gap-3 border-b border-line bg-brand-soft/55 px-3 py-2.5 text-left transition hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/35 sm:px-4"
+                                :aria-expanded="showReceivedDenoms"
+                                aria-controls="cash-in-customer-denominations"
+                                @click="
+                                    showReceivedDenoms = !showReceivedDenoms
+                                "
                             >
-                                <div class="flex min-w-0 items-start gap-3">
+                                <div class="flex min-w-0 items-center gap-2">
                                     <span
-                                        class="grid size-9 shrink-0 place-items-center rounded-xl bg-brand text-xs font-black text-white"
+                                        class="grid size-6 shrink-0 place-items-center rounded-lg bg-brand text-[10px] font-black text-white"
                                         >01</span
                                     >
                                     <div class="min-w-0">
@@ -873,11 +900,6 @@ function submit() {
                                                 )
                                             }}
                                         </h3>
-                                        <p
-                                            class="mt-1 text-xs leading-5 text-slate"
-                                        >
-                                            {{ t('transaction.cashReceived') }}
-                                        </p>
                                     </div>
                                 </div>
                                 <div class="shrink-0 text-right">
@@ -895,8 +917,18 @@ function submit() {
                                         MMK
                                     </p>
                                 </div>
-                            </header>
-                            <div class="p-3 sm:p-4">
+                                <span
+                                    class="grid size-7 shrink-0 place-items-center rounded-full bg-card text-sm font-black text-slate shadow-sm"
+                                    aria-hidden="true"
+                                >
+                                    {{ showReceivedDenoms ? '⌃' : '⌄' }}
+                                </span>
+                            </button>
+                            <div
+                                v-show="showReceivedDenoms"
+                                id="cash-in-customer-denominations"
+                                class="p-2.5 sm:p-3"
+                            >
                                 <DenomDrawer
                                     v-model="receivedDenoms"
                                     :notes="notes"
@@ -908,28 +940,108 @@ function submit() {
                                 />
                             </div>
                             <footer
-                                class="flex items-center justify-between border-t border-line bg-mist/45 px-4 py-3 text-xs sm:px-5"
+                                class="grid gap-2 border-t border-line bg-mist/45 px-3 py-2 text-xs sm:px-4"
                             >
-                                <span class="font-semibold text-slate">{{
-                                    t('transaction.cashReceived')
-                                }}</span>
-                                <span class="money font-black text-ink"
-                                    >{{ mmk(receivedTotal) }} MMK</span
+                                <div class="flex items-center justify-between">
+                                    <span class="font-semibold text-slate">{{
+                                        t('transaction.cashReceived')
+                                    }}</span>
+                                    <span class="money font-black text-ink"
+                                        >{{ mmk(receivedTotal) }} MMK</span
+                                    >
+                                </div>
+                                <div
+                                    v-if="receivedTotal > 0"
+                                    class="grid gap-1 rounded-lg bg-card/70 px-2.5 py-2 sm:grid-cols-3"
                                 >
+                                    <div class="flex justify-between gap-3">
+                                        <span
+                                            class="font-semibold text-slate"
+                                            >{{
+                                                t('transaction.cashDue', 'Due')
+                                            }}</span
+                                        >
+                                        <span
+                                            class="money font-black text-ink"
+                                            >{{
+                                                mmk(cashSettlementAmount)
+                                            }}</span
+                                        >
+                                    </div>
+                                    <div class="flex justify-between gap-3">
+                                        <span
+                                            class="font-semibold text-slate"
+                                            >{{
+                                                t(
+                                                    'transaction.cashReceived',
+                                                    'Received',
+                                                )
+                                            }}</span
+                                        >
+                                        <span
+                                            class="money font-black text-ink"
+                                            >{{ mmk(receivedTotal) }}</span
+                                        >
+                                    </div>
+                                    <div
+                                        class="flex justify-between gap-3"
+                                        :class="
+                                            cashShortfall > 0
+                                                ? 'text-brand'
+                                                : changeDue > 0
+                                                  ? 'text-held'
+                                                  : 'text-balance'
+                                        "
+                                    >
+                                        <span class="font-black">{{
+                                            cashShortfall > 0
+                                                ? t(
+                                                      'transaction.cashShortfall',
+                                                      'Short',
+                                                  )
+                                                : changeDue > 0
+                                                  ? t(
+                                                        'transaction.changeDue',
+                                                        'Change due',
+                                                    )
+                                                  : t(
+                                                        'common.balanced',
+                                                        'Balanced',
+                                                    )
+                                        }}</span>
+                                        <span class="money font-black">{{
+                                            mmk(cashShortfall || changeDue)
+                                        }}</span>
+                                    </div>
+                                </div>
                             </footer>
                         </section>
 
+                        <p
+                            v-if="cashShortfall > 0"
+                            class="rounded-field border border-brand/25 bg-brand-soft px-3 py-2 text-xs font-bold text-brand"
+                        >
+                            {{ t('transaction.cashShort') }}
+                            <span class="money block"
+                                >{{ mmk(cashShortfall) }} MMK</span
+                            >
+                        </p>
+
                         <section
                             v-if="role === 'teller' && changeDue > 0"
-                            class="overflow-hidden rounded-2xl border-2 border-held/20 bg-card shadow-sm"
+                            class="overflow-hidden rounded-field border border-held/20 bg-card"
                             aria-labelledby="cash-in-change-title"
                         >
-                            <header
-                                class="flex items-start justify-between gap-3 border-b border-line bg-held/5 px-4 py-4 sm:px-5"
+                            <button
+                                type="button"
+                                class="flex w-full items-center justify-between gap-3 border-b border-line bg-held/5 px-3 py-2.5 text-left transition hover:bg-held/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-held/35 sm:px-4"
+                                :aria-expanded="showChangeDenoms"
+                                aria-controls="cash-in-change-denominations"
+                                @click="showChangeDenoms = !showChangeDenoms"
                             >
-                                <div class="flex min-w-0 items-start gap-3">
+                                <div class="flex min-w-0 items-center gap-2">
                                     <span
-                                        class="grid size-9 shrink-0 place-items-center rounded-xl bg-held text-xs font-black text-white"
+                                        class="grid size-6 shrink-0 place-items-center rounded-lg bg-held text-[10px] font-black text-white"
                                         >02</span
                                     >
                                     <div class="min-w-0">
@@ -940,7 +1052,7 @@ function submit() {
                                             {{ t('transaction.changeMyVault') }}
                                         </h3>
                                         <p
-                                            class="mt-1 text-xs leading-5 text-slate"
+                                            class="mt-0.5 text-[11px] font-semibold text-slate"
                                         >
                                             {{ t('transaction.changeNotice') }}
                                         </p>
@@ -961,8 +1073,18 @@ function submit() {
                                         MMK
                                     </p>
                                 </div>
-                            </header>
-                            <div class="p-3 sm:p-4">
+                                <span
+                                    class="grid size-7 shrink-0 place-items-center rounded-full bg-card text-sm font-black text-slate shadow-sm"
+                                    aria-hidden="true"
+                                >
+                                    {{ showChangeDenoms ? '⌃' : '⌄' }}
+                                </span>
+                            </button>
+                            <div
+                                v-show="showChangeDenoms"
+                                id="cash-in-change-denominations"
+                                class="p-2.5 sm:p-3"
+                            >
                                 <DenomDrawer
                                     v-model="changeDenoms"
                                     :notes="notes"
@@ -975,7 +1097,7 @@ function submit() {
                                 />
                             </div>
                             <footer
-                                class="flex items-center justify-between border-t px-4 py-3 text-xs sm:px-5"
+                                class="flex items-center justify-between border-t px-3 py-2 text-xs sm:px-4"
                                 :class="
                                     changeBalanced
                                         ? 'border-balance/25 bg-balance/5'
@@ -1033,17 +1155,32 @@ function submit() {
                 {{ msg }}
             </p>
 
-            <div
-                class="sticky bottom-3 z-10 mt-5 flex justify-end rounded-pill bg-card/90 p-1 backdrop-blur sm:mt-6"
-            >
-                <button
-                    type="button"
-                    :disabled="!ready"
-                    @click="step = 'review'"
-                    class="bank-button bank-button-primary px-7"
+            <div class="mt-6 border-t border-line pt-4">
+                <div
+                    class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                    {{ t('common.continueReview') }}
-                </button>
+                    <p
+                        class="min-h-5 text-xs font-bold"
+                        :class="ready ? 'text-balance' : 'text-brand'"
+                    >
+                        {{
+                            ready
+                                ? t(
+                                      'transaction.readyForReview',
+                                      'Ready for review.',
+                                  )
+                                : readyIssue
+                        }}
+                    </p>
+                    <button
+                        type="button"
+                        :disabled="!ready"
+                        @click="step = 'review'"
+                        class="bank-button bank-button-primary w-full px-7 sm:w-auto"
+                    >
+                        {{ t('common.continueReview') }}
+                    </button>
+                </div>
             </div>
         </section>
 
@@ -1063,7 +1200,7 @@ function submit() {
             >
                 <div class="flex items-start justify-between gap-4">
                     <div>
-                        <p class="text-xs font-black uppercase text-balance">
+                        <p class="text-xs font-black text-balance uppercase">
                             {{ t('transaction.customerSends') }}
                         </p>
                         <p class="mt-1 text-[13px] font-semibold text-slate">
@@ -1071,7 +1208,9 @@ function submit() {
                             {{ t('transaction.fee') }}
                         </p>
                     </div>
-                    <p class="money text-right text-2xl font-black text-balance">
+                    <p
+                        class="money text-right text-2xl font-black text-balance"
+                    >
                         {{ mmk(customerTotalDue) }}
                         <span class="text-xs text-slate">MMK</span>
                     </p>
@@ -1204,15 +1343,6 @@ function submit() {
                     <dd class="money font-bold text-brand">
                         −{{ mmk(accountBalanceRequired) }} MMK
                     </dd>
-                </div>
-                <div
-                    v-if="description"
-                    class="flex justify-between gap-6 py-3 text-sm"
-                >
-                    <dt class="shrink-0 text-slate">
-                        {{ t('transaction.description') }}
-                    </dt>
-                    <dd class="text-right">{{ description }}</dd>
                 </div>
                 <div
                     v-if="screenshot"

@@ -17,8 +17,9 @@ withDefaults(
         }[];
         disabled?: boolean;
         accountIncludedInTransaction?: boolean;
+        compact?: boolean;
     }>(),
-    { disabled: false, accountIncludedInTransaction: false },
+    { disabled: false, accountIncludedInTransaction: false, compact: false },
 );
 
 const emit = defineEmits<{
@@ -46,61 +47,113 @@ function setAccount(event: Event) {
 
 <template>
     <fieldset
-        class="rounded-field border border-line bg-mist/60 px-4 py-3.5"
+        class="rounded-field"
+        :class="compact ? '' : 'border border-line bg-mist/60 px-4 py-3.5'"
         :disabled="disabled"
     >
-        <legend class="px-1 text-[13px] font-bold text-slate">
+        <legend
+            class="px-1 font-bold text-slate"
+            :class="compact ? 'mb-2 text-xs' : 'text-[13px]'"
+        >
             {{ t('transaction.feePaymentMethod') }}
         </legend>
 
-        <div class="grid gap-2 sm:grid-cols-2">
+        <div class="flex gap-5" :class="compact ? '' : 'grid sm:grid-cols-2'">
             <label
-                class="bank-choice flex cursor-pointer items-start gap-2 rounded-field border bg-card px-3 py-2.5 transition"
-                :class="
+                class="bank-choice flex cursor-pointer items-center gap-2 transition"
+                :class="[
+                    compact
+                        ? 'min-h-7 px-0 py-0'
+                        : 'items-start rounded-field border bg-card py-2.5',
                     modelValue === 'cash'
-                        ? 'border-brand ring-1 ring-brand/20'
-                        : 'border-line hover:border-ink/30'
-                "
+                        ? compact
+                            ? 'text-brand'
+                            : 'border-brand ring-1 ring-brand/20'
+                        : compact
+                          ? 'text-slate'
+                          : 'border-line hover:border-ink/30',
+                ]"
             >
                 <input
                     type="radio"
                     name="fee_payment_method"
                     value="cash"
                     :checked="modelValue === 'cash'"
-                    class="mt-0.5 accent-brand"
+                    class="sr-only"
                     @change="setMethod('cash')"
                 />
+                <span
+                    class="grid size-4 shrink-0 place-items-center rounded-full border transition"
+                    :class="
+                        modelValue === 'cash'
+                            ? 'border-brand'
+                            : 'border-slate/50'
+                    "
+                    aria-hidden="true"
+                >
+                    <span
+                        class="size-2 rounded-full transition"
+                        :class="
+                            modelValue === 'cash' ? 'bg-brand' : 'bg-transparent'
+                        "
+                    />
+                </span>
                 <span>
-                    <span class="block text-sm font-bold">{{
+                    <span class="block text-sm font-bold leading-none">{{
                         t('transaction.feePaymentCash')
                     }}</span>
-                    <span class="block text-[11px] text-slate">{{
+                    <span v-if="!compact" class="block text-[11px] text-slate">{{
                         t('transaction.feePaymentCashHint')
                     }}</span>
                 </span>
             </label>
 
             <label
-                class="bank-choice flex cursor-pointer items-start gap-2 rounded-field border bg-card px-3 py-2.5 transition"
-                :class="
+                class="bank-choice flex cursor-pointer items-center gap-2 transition"
+                :class="[
+                    compact
+                        ? 'min-h-7 px-0 py-0'
+                        : 'items-start rounded-field border bg-card py-2.5',
                     modelValue === 'account'
-                        ? 'border-brand ring-1 ring-brand/20'
-                        : 'border-line hover:border-ink/30'
-                "
+                        ? compact
+                            ? 'text-brand'
+                            : 'border-brand ring-1 ring-brand/20'
+                        : compact
+                          ? 'text-slate'
+                          : 'border-line hover:border-ink/30',
+                ]"
             >
                 <input
                     type="radio"
                     name="fee_payment_method"
                     value="account"
                     :checked="modelValue === 'account'"
-                    class="mt-0.5 accent-brand"
+                    class="sr-only"
                     @change="setMethod('account')"
                 />
+                <span
+                    class="grid size-4 shrink-0 place-items-center rounded-full border transition"
+                    :class="
+                        modelValue === 'account'
+                            ? 'border-brand'
+                            : 'border-slate/50'
+                    "
+                    aria-hidden="true"
+                >
+                    <span
+                        class="size-2 rounded-full transition"
+                        :class="
+                            modelValue === 'account'
+                                ? 'bg-brand'
+                                : 'bg-transparent'
+                        "
+                    />
+                </span>
                 <span>
-                    <span class="block text-sm font-bold">{{
+                    <span class="block text-sm font-bold leading-none">{{
                         t('transaction.feePaymentAccount')
                     }}</span>
-                    <span class="block text-[11px] text-slate">{{
+                    <span v-if="!compact" class="block text-[11px] text-slate">{{
                         accountIncludedInTransaction
                             ? t('transaction.feePaymentAccountIncludedHint')
                             : t('transaction.feePaymentAccountHint')
@@ -114,14 +167,14 @@ function setAccount(event: Event) {
             class="mt-3"
         >
             <label
-                class="mb-1.5 block text-[12px] font-bold text-slate"
+                class="bank-label bank-required"
                 for="fee-account-select"
             >
                 {{ t('transaction.feeAccount') }}
             </label>
             <select
                 id="fee-account-select"
-                class="bank-input py-2.5"
+                class="bank-input min-h-12 border border-line bg-mist px-3 py-2 transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                 :value="feeAccountId ?? ''"
                 :aria-invalid="feeAccounts.length > 0 && feeAccountId === null"
                 @change="setAccount"
@@ -151,7 +204,7 @@ function setAccount(event: Event) {
             </p>
         </div>
 
-        <p class="mt-2 text-[11px] text-slate">
+        <p v-if="!compact" class="mt-2 text-[11px] text-slate">
             {{ t('transaction.feeAmount') }}:
             <span class="money font-bold text-ink"
                 >{{ fee.toLocaleString() }} MMK</span

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AccountFeature;
 use App\Exceptions\InsufficientBalanceException;
 use App\Exceptions\InsufficientFloatDenominationException;
 use App\Exceptions\InsufficientFloatException;
@@ -53,7 +54,7 @@ class TellerController extends Controller
             'float' => $this->floatProp($request),
             'notes' => $this->notes(),
             'floatStock' => $this->onHand($request),
-            'accounts' => $this->accounts(),
+            'accounts' => $this->accounts(AccountFeature::CashIn, 'CashIn'),
             'completed' => $this->pullCompleted($request),
         ]);
     }
@@ -64,7 +65,7 @@ class TellerController extends Controller
             'float' => $this->floatProp($request),
             'notes' => $this->notes(),
             'floatStock' => $this->onHand($request),
-            'accounts' => $this->accounts(),
+            'accounts' => $this->accounts(AccountFeature::CashOut, 'CashOut'),
             'fee' => $this->fee($request, TransactionFeeCalculator::MODE_CASH_OUT),
             'commission' => $this->commission($request, TransactionFeeCalculator::COMMISSION_RECEIVE),
             'completed' => $this->pullCompleted($request),
@@ -86,6 +87,11 @@ class TellerController extends Controller
     public function exchange(Request $request): Response
     {
         $rate = $this->exchangeRates->getLatest('THB', 'MMK');
+        $baseAmount = (float) ($rate?->base_amount ?? 1);
+
+        if ($baseAmount <= 0) {
+            $baseAmount = 1.0;
+        }
 
         return Inertia::render('teller/Exchange', [
             'float' => $this->floatProp($request),
@@ -94,8 +100,8 @@ class TellerController extends Controller
             'accounts' => $this->accounts(),
             'fee' => $this->fee($request, TransactionFeeCalculator::MODE_CASH_IN),
             'rate' => [
-                'buy_rate' => $rate?->buy_rate ?? '0.0000',
-                'sell_rate' => $rate?->sell_rate ?? '0.0000',
+                'buy_rate' => Money::normalize($rate !== null ? (float) $rate->buy_rate / $baseAmount : 0, 4),
+                'sell_rate' => Money::normalize($rate !== null ? (float) $rate->sell_rate / $baseAmount : 0, 4),
             ],
             'completed' => $this->pullCompleted($request),
         ]);
@@ -179,9 +185,13 @@ class TellerController extends Controller
     /**
      * @return array<int, array{id:int,name:string,company:string,balance:string}>
      */
-    private function accounts(): array
+    private function accounts(?AccountFeature $feature = null, ?string $legacyOperation = null): array
     {
-        return $this->accounts->active()
+        $accounts = $feature !== null
+            ? $this->accounts->activeForFeature($feature, $legacyOperation)
+            : $this->accounts->active();
+
+        return $accounts
             ->map(fn (Account $account): array => [
                 'id' => $account->id,
                 'name' => $account->account_name,

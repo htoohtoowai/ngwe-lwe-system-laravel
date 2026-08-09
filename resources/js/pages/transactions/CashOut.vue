@@ -538,14 +538,16 @@ function submit() {
                         role="radio"
                         :aria-checked="selectedCreditCompany === company.name"
                         class="group flex min-h-16 items-center gap-2 rounded-xl border px-3 py-2 text-left transition"
-                        :class="
+                        :class="[
                             selectedCreditCompany === company.name
                                 ? 'border-brand bg-brand-soft text-brand shadow-sm ring-2 ring-brand/15'
-                                : 'border-line bg-card text-ink hover:border-brand/40 hover:bg-brand-soft/40'
-                        "
+                                : 'border-line bg-card text-ink hover:border-brand/40 hover:bg-brand-soft/40',
+                            company.logoUrl ? 'justify-center' : '',
+                        ]"
                         @click="selectedCreditCompany = company.name"
                     >
                         <span
+                            v-if="company.logoUrl"
                             class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl text-sm font-black"
                             :class="
                                 selectedCreditCompany === company.name
@@ -554,28 +556,15 @@ function submit() {
                             "
                         >
                             <img
-                                v-if="company.logoUrl"
                                 :src="company.logoUrl"
                                 :alt="`${company.name} logo`"
                                 class="size-full object-contain p-1"
                             />
-                            <span v-else>
-                                {{ company.name.slice(0, 1).toUpperCase() }}
-                            </span>
                         </span>
-                        <span class="min-w-0">
+                        <span v-else class="min-w-0">
                             <span class="block truncate text-xs font-black">{{
                                 company.name
                             }}</span>
-                            <span class="mt-0.5 block text-[10px] text-slate">
-                                {{
-                                    props.accounts.filter(
-                                        (candidate) =>
-                                            candidate.company === company.name,
-                                    ).length
-                                }}
-                                {{ t('transaction.accounts') }}
-                            </span>
                         </span>
                     </button>
                 </div>

@@ -16,11 +16,13 @@ class ExchangeRateRequest extends FormRequest
         $isUpdate = $this->isMethod('patch') || $this->isMethod('put');
 
         return [
+            'company_id' => ['sometimes', 'nullable', 'integer', 'exists:companies,id'],
             'base_currency' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:8'],
             'quote_currency' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:8'],
             'base_amount' => [$isUpdate ? 'sometimes' : 'required', 'numeric', 'gt:0'],
             'buy_rate' => [$isUpdate ? 'sometimes' : 'required', 'numeric', 'gt:0'],
             'sell_rate' => [$isUpdate ? 'sometimes' : 'required', 'numeric', 'gt:0'],
+            'is_active' => ['sometimes', 'boolean'],
         ];
     }
 
