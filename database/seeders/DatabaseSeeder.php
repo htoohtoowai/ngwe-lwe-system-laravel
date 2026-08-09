@@ -446,6 +446,16 @@ class DatabaseSeeder extends Seeder
             ]);
             $this->seedAccount([
                 'company' => $companyName,
+                'service_type' => 'Exchange',
+                'name' => "{$companyName} Exchange Agent",
+                'phone' => "09{$prefix}3000002",
+                'balance' => '3000000.00',
+                'is_agent' => true,
+                'is_fee_account' => false,
+                'features' => [AccountFeature::Exchange],
+            ]);
+            $this->seedAccount([
+                'company' => $companyName,
                 'service_type' => $category === 'Pay' ? 'Transfer' : 'Bank Transfer',
                 'name' => "{$companyName} Fee Collection",
                 'phone' => "09{$prefix}9000001",
@@ -503,6 +513,8 @@ class DatabaseSeeder extends Seeder
 
         if ($category === 'Bank') {
             return [
+                AccountFeature::CashIn->value => $cashIn,
+                AccountFeature::CashOut->value => $cashOut,
                 AccountFeature::SendMoney->value => ['PERCENTAGE', '0.2000', '0.0000', 'PERCENTAGE', '0.0300'],
                 AccountFeature::ReceiveMoney->value => ['PERCENTAGE', '0.2000', '0.0000', 'PERCENTAGE', '0.0300'],
             ];

@@ -10,6 +10,7 @@ use App\Models\CommissionTier;
 use App\Models\Company;
 use App\Models\ServiceType;
 use App\Models\Transaction;
+use App\Models\TransferFeeTier;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
 use App\Services\NgweLweTokenService;
@@ -240,6 +241,7 @@ class TransactionEndpointsTest extends TestCase
             'balance' => 0,
         ]);
         $this->fixedTier($serviceType->id, feeDeposit: 300);
+        $this->fixedTransferTier($serviceType->company_id, $serviceType->company_id, 300);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/transactions/transfer', [
@@ -280,6 +282,7 @@ class TransactionEndpointsTest extends TestCase
         [$systemPayout, $payoutServiceType] = $this->accountWithBalance(50_000, 'System CB Bank');
         $this->fixedTier($serviceType->id, feeDeposit: 500, commWithdraw: 80);
         $this->fixedTier($payoutServiceType->id, commDeposit: 100);
+        $this->fixedTransferTier($serviceType->company_id, $payoutServiceType->company_id, 500);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/transactions/transfer', [
@@ -314,6 +317,59 @@ class TransactionEndpointsTest extends TestCase
 
         $this->assertSame('10580.00', $systemReceive->fresh()->balance);
         $this->assertSame('40100.00', $systemPayout->fresh()->balance);
+    }
+
+    public function test_customer_transfer_uses_company_route_transfer_fee_tier(): void
+    {
+        [, $token] = $this->owner();
+        [$receiveAccount, $receiveServiceType] = $this->accountWithBalance(0, 'System Receive');
+        [$payoutAccount, $payoutServiceType] = $this->accountWithBalance(500_000, 'System Payout');
+
+        TransferFeeTier::query()->create([
+            'company_from_id' => $receiveServiceType->company_id,
+            'company_to_id' => $payoutServiceType->company_id,
+            'amount_from' => 1,
+            'amount_to' => 999_999_999,
+            'fee_type' => 'FIXED',
+            'fee_amount' => 100,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_amount' => 0,
+            'is_active' => true,
+        ]);
+        TransferFeeTier::query()->create([
+            'company_from_id' => $receiveServiceType->company_id,
+            'company_to_id' => $payoutServiceType->company_id,
+            'amount_from' => 200_000,
+            'amount_to' => 300_000,
+            'fee_type' => 'PERCENTAGE',
+            'fee_amount' => 0.2,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_amount' => 0,
+            'is_active' => true,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/transfer', [
+                'from_account_id' => $payoutAccount->id,
+                'to_account_id' => $receiveAccount->id,
+                'source_account_type' => 'account',
+                'source_provider' => $receiveServiceType->company->name,
+                'source_account_number' => '09123456789',
+                'destination_provider' => $payoutServiceType->company->name,
+                'destination_customer_name' => 'Mya Mya',
+                'destination_account_number' => '001-001122-001',
+                'amount' => 210_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'fee_payment_method' => 'account',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.customer_fee', '400.00')
+            ->assertJsonPath('data.from_company_id', $receiveServiceType->company_id)
+            ->assertJsonPath('data.to_company_id', $payoutServiceType->company_id);
+
+        $this->assertSame('210400.00', $receiveAccount->fresh()->balance);
+        $this->assertSame('290000.00', $payoutAccount->fresh()->balance);
     }
 
     public function test_transfer_rejects_same_account(): void
@@ -799,6 +855,21 @@ class TransactionEndpointsTest extends TestCase
             'comm_deposit' => $commDeposit,
             'comm_withdraw' => $commWithdraw,
             'additional_fee_type' => 'FIXED',
+            'is_active' => true,
+        ]);
+    }
+
+    private function fixedTransferTier(int $fromCompanyId, int $toCompanyId, int $fee): TransferFeeTier
+    {
+        return TransferFeeTier::query()->create([
+            'company_from_id' => $fromCompanyId,
+            'company_to_id' => $toCompanyId,
+            'amount_from' => 1,
+            'amount_to' => 999_999_999_999,
+            'fee_type' => 'FIXED',
+            'fee_amount' => $fee,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_amount' => 0,
             'is_active' => true,
         ]);
     }

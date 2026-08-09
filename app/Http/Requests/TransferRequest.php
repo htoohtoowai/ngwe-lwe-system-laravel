@@ -18,7 +18,7 @@ class TransferRequest extends FormRequest
         return [
             'from_account_id' => ['required', 'integer', 'exists:accounts,id'],
             'to_account_id' => ['required', 'integer', 'exists:accounts,id', 'different:from_account_id'],
-            'source_account_type' => ['nullable', Rule::in(['pay', 'bank'])],
+            'source_account_type' => ['nullable', Rule::in(['account', 'pay', 'bank'])],
             'source_provider' => ['nullable', 'string', 'max:255', 'required_with:source_account_type'],
             'source_account_number' => ['nullable', 'string', 'max:255', 'required_with:source_account_type'],
             'destination_provider' => ['nullable', 'string', 'max:255', 'required_with:source_account_type'],

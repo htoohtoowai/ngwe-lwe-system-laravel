@@ -38,6 +38,7 @@ const props = withDefaults(
             balance: string;
         }[];
         fee: string;
+        commission: string;
         rate: { buy_rate: string; sell_rate: string };
         requiresDenominations: boolean;
         completed?: {
@@ -49,6 +50,7 @@ const props = withDefaults(
             created_at: string;
             from_label: string;
             to_label: string;
+            commission_amount?: string;
         } | null;
         history?: TransactionHistoryRow[];
     }>(),
@@ -85,6 +87,7 @@ const failedCompanyLogos = ref<Set<string>>(new Set());
 const { t } = useLocale();
 
 const feeNum = computed(() => Number(props.fee ?? 0));
+const commissionNum = computed(() => Number(props.commission ?? 0));
 const historyStatuses = computed(() =>
     [...new Set(props.history.map((row) => row.status))].sort(),
 );
@@ -190,6 +193,9 @@ const mmkSettlementAmount = computed(() =>
     currency.value === 'THB'
         ? Math.round((amount.value || 0) * Number(activeRate.value))
         : amount.value || 0,
+);
+const exchangeBalanceChange = computed(
+    () => mmkSettlementAmount.value + commissionNum.value,
 );
 const exchangeResultCurrency = computed<'MMK' | 'THB'>(() =>
     currency.value === 'MMK' ? 'THB' : 'MMK',
@@ -360,6 +366,29 @@ watch(selectedCompany, () => {
     ) {
         accountId.value = null;
     }
+});
+
+let commissionTimer: ReturnType<typeof setTimeout>;
+watch([amount, accountId, currency], ([value, selectedAccountId]) => {
+    clearTimeout(commissionTimer);
+
+    if (value <= 0 || selectedAccountId === null) {
+        return;
+    }
+
+    commissionTimer = setTimeout(
+        () =>
+            router.reload({
+                only: ['commission'],
+                data: {
+                    amount: value,
+                    account_id: selectedAccountId,
+                    currency: currency.value,
+                },
+                headers: authHeaders(),
+            }),
+        350,
+    );
 });
 
 function submit() {
@@ -540,6 +569,14 @@ function submit() {
                         }}</span>
                     </dd>
                 </div>
+                <div class="flex justify-between py-3 text-sm">
+                    <dt class="text-slate">
+                        {{ t('transaction.agentCommission') }}
+                    </dt>
+                    <dd class="money font-bold text-balance">
+                        +{{ mmk(completed.commission_amount ?? 0) }} MMK
+                    </dd>
+                </div>
             </dl>
             <div class="mt-6 flex gap-2">
                 <Link
@@ -666,7 +703,7 @@ function submit() {
                 </section>
 
                 <div
-                    class="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3"
+                    class="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-4"
                 >
                     <AccountTile
                         v-model="accountId"
@@ -743,8 +780,27 @@ function submit() {
                         </div>
                     </div>
 
+                    <div>
+                        <p class="bank-label">
+                            {{ t('transaction.agentCommission') }}
+                        </p>
+                        <div
+                            class="flex min-h-12 items-center justify-between gap-3 rounded-field border border-line bg-mist px-3 py-2"
+                        >
+                            <span class="text-sm font-bold text-ink"
+                                >Agent</span
+                            >
+                            <span
+                                class="money text-base font-black text-balance"
+                            >
+                                +{{ mmk(commissionNum) }}
+                                <span class="text-[10px] text-slate">MMK</span>
+                            </span>
+                        </div>
+                    </div>
+
                     <FeePaymentSelector
-                        class="md:col-span-2 xl:col-span-3"
+                        class="md:col-span-2 xl:col-span-4"
                         v-model="feePaymentMethod"
                         v-model:fee-account-id="feeAccountId"
                         :fee="feeNum"
@@ -1124,12 +1180,20 @@ function submit() {
                     <dd class="text-right font-bold">{{ customerPhone }}</dd>
                 </div>
                 <div class="flex justify-between py-3 text-sm">
+                    <dt class="text-slate">
+                        {{ t('transaction.agentCommission') }}
+                    </dt>
+                    <dd class="money font-bold text-balance">
+                        +{{ mmk(commissionNum) }} MMK
+                    </dd>
+                </div>
+                <div class="flex justify-between py-3 text-sm">
                     <dt class="font-bold">
                         {{ t('transaction.accountCredited') }}:
                         {{ account?.name }}
                     </dt>
                     <dd class="money font-bold text-balance">
-                        +{{ mmk(mmkSettlementAmount) }} MMK
+                        +{{ mmk(exchangeBalanceChange) }} MMK
                     </dd>
                 </div>
                 <div

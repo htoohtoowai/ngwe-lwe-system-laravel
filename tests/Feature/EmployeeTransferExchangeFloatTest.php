@@ -7,6 +7,7 @@ use App\Models\CommissionTier;
 use App\Models\Company;
 use App\Models\ExchangeRate;
 use App\Models\ServiceType;
+use App\Models\TransferFeeTier;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
 use App\Repositories\CashFloatRepository;
@@ -34,6 +35,7 @@ class EmployeeTransferExchangeFloatTest extends TestCase
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 3, 5_000 => 4]);
         [$from, $to, $serviceType] = $this->twoAccountsWithBalance(30_000);
         $this->fixedTier($serviceType->id, feeDeposit: 300);
+        $this->fixedTransferTier($serviceType->company_id, 300);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/transfer', [
@@ -65,6 +67,7 @@ class EmployeeTransferExchangeFloatTest extends TestCase
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 3]);
         [$from, $to, $serviceType] = $this->twoAccountsWithBalance(30_000);
         $this->fixedTier($serviceType->id, feeDeposit: 300);
+        $this->fixedTransferTier($serviceType->company_id, 300);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/transfer', [
@@ -367,6 +370,21 @@ class EmployeeTransferExchangeFloatTest extends TestCase
             'fee_amount_withdraw' => $feeWithdraw,
             'comm_type' => 'FIXED',
             'additional_fee_type' => 'FIXED',
+            'is_active' => true,
+        ]);
+    }
+
+    private function fixedTransferTier(int $companyId, int $fee): TransferFeeTier
+    {
+        return TransferFeeTier::query()->create([
+            'company_from_id' => $companyId,
+            'company_to_id' => $companyId,
+            'amount_from' => 1,
+            'amount_to' => 999_999_999_999,
+            'fee_type' => 'FIXED',
+            'fee_amount' => $fee,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_amount' => 0,
             'is_active' => true,
         ]);
     }

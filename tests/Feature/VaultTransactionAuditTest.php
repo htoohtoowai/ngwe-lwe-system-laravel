@@ -7,6 +7,7 @@ use App\Models\CommissionTier;
 use App\Models\Company;
 use App\Models\ExchangeRate;
 use App\Models\ServiceType;
+use App\Models\TransferFeeTier;
 use App\Models\User;
 use App\Models\VaultTransaction;
 use App\Repositories\CashDenominationRepository;
@@ -118,6 +119,17 @@ class VaultTransactionAuditTest extends TestCase
             'balance' => 0,
         ]);
         $this->fixedTier($fromServiceType->id, feeDeposit: 300);
+        TransferFeeTier::query()->create([
+            'company_from_id' => $fromServiceType->company_id,
+            'company_to_id' => $fromServiceType->company_id,
+            'amount_from' => 1,
+            'amount_to' => 999_999_999_999,
+            'fee_type' => 'FIXED',
+            'fee_amount' => 300,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_amount' => 0,
+            'is_active' => true,
+        ]);
 
         $transferId = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/transfer', [

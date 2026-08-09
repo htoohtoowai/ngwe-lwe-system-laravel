@@ -12,6 +12,16 @@ import { readStoredToken } from '@/lib/auth-token';
 import { useLocale } from '@/lib/i18n';
 import type { TransactionHistoryRow } from '@/types/domain';
 
+type TransferAccount = {
+    id: number;
+    company: string;
+    company_id?: number | null;
+    company_logo_url?: string | null;
+    name: string;
+    number?: string;
+    balance: string;
+};
+
 /**
  * Transfer — reference flow, three steps inside one card:
  *   Enter Details → Review → Receipt
@@ -27,51 +37,15 @@ const props = withDefaults(
         float: { status: string } | null;
         notes: number[];
         floatStock: Record<number, number>;
-        accounts: {
-            id: number;
-            company: string;
-            company_id?: number | null;
-            company_category?: string | null;
-            company_logo_url?: string | null;
-            name: string;
-            number?: string;
-            balance: string;
-        }[];
-        sendMoneyAccounts?: {
-            id: number;
-            company: string;
-            company_id?: number | null;
-            company_category?: string | null;
-            company_logo_url?: string | null;
-            name: string;
-            number?: string;
-            balance: string;
-        }[];
-        receiveMoneyAccounts?: {
-            id: number;
-            company: string;
-            company_id?: number | null;
-            company_category?: string | null;
-            company_logo_url?: string | null;
-            name: string;
-            number?: string;
-            balance: string;
-        }[];
+        accounts: TransferAccount[];
+        sendMoneyAccounts?: TransferAccount[];
+        receiveMoneyAccounts?: TransferAccount[];
         feeAccounts: {
             id: number;
             company: string;
             name: string;
             number?: string;
             balance: string;
-        }[];
-        serviceTypes: {
-            id: number;
-            company_id?: number | null;
-            company: string;
-            company_category?: string | null;
-            company_logo_url?: string | null;
-            name: string;
-            operation: string;
         }[];
         fee: string;
         receiveCommission: string;
@@ -99,6 +73,8 @@ const props = withDefaults(
     {
         view: 'entry',
         history: () => [],
+        sendMoneyAccounts: () => [],
+        receiveMoneyAccounts: () => [],
     },
 );
 
@@ -106,16 +82,16 @@ const step = ref<'form' | 'review'>('form');
 const fromId = ref<number | null>(null);
 const toId = ref<number | null>(null);
 const selectedPayoutCompany = ref('');
-const payoutAccountType = ref<'pay' | 'bank'>('bank');
-const sourceAccountType = ref<'pay' | 'bank'>('pay');
 const selectedSourceCompany = ref('');
 const sourceAccountNumber = ref('');
 const destinationCustomerName = ref('');
 const destinationAccountNumber = ref('');
 const amount = ref(0);
 const customerName = ref('');
+const customerPhone = ref('');
 const description = ref('');
 const feeDenoms = ref<Record<number, number>>({});
+const showFeeDenoms = ref(true);
 const submitting = ref(false);
 const errors = ref<Record<string, string>>({});
 const feePaymentMethod = ref<FeePaymentMethod>('cash');
@@ -124,6 +100,7 @@ const historySearch = ref('');
 const historyStatus = ref('all');
 const historyDateFrom = ref('');
 const historyDateTo = ref('');
+const failedCompanyLogos = ref<Set<string>>(new Set());
 const { t } = useLocale();
 
 const feeNum = computed(() => Number(props.fee ?? 0));
@@ -147,10 +124,13 @@ const filteredHistory = computed(() => {
                 row.note,
                 row.amount,
                 row.status,
-            ].some((value) => String(value ?? '').toLowerCase().includes(query));
+            ].some((value) =>
+                String(value ?? '')
+                    .toLowerCase()
+                    .includes(query),
+            );
         const matchesStatus =
-            historyStatus.value === 'all' ||
-            row.status === historyStatus.value;
+            historyStatus.value === 'all' || row.status === historyStatus.value;
         const transactionDate = row.created_at?.slice(0, 10) ?? '';
         const matchesDateFrom =
             historyDateFrom.value === '' ||
@@ -160,10 +140,7 @@ const filteredHistory = computed(() => {
             transactionDate <= historyDateTo.value;
 
         return (
-            matchesSearch &&
-            matchesStatus &&
-            matchesDateFrom &&
-            matchesDateTo
+            matchesSearch && matchesStatus && matchesDateFrom && matchesDateTo
         );
     });
 });
@@ -171,60 +148,19 @@ const receiveCommissionNum = computed(() =>
     Number(props.receiveCommission ?? 0),
 );
 const payoutCommissionNum = computed(() => Number(props.payoutCommission ?? 0));
-const from = computed(() => props.accounts.find((a) => a.id === fromId.value));
-const to = computed(() => props.accounts.find((a) => a.id === toId.value));
-const sourceServiceTypes = computed(() =>
-    props.serviceTypes.filter(
-        (serviceType) =>
-            serviceType.operation === 'CashIn' ||
-            serviceType.operation === 'Transfer' ||
-            serviceType.operation === 'All' ||
-            ['WST', 'Pay_To_Pay', 'P2P', 'Bank Transfer'].includes(
-                serviceType.name,
-            ),
-    ),
+const from = computed(() =>
+    props.sendMoneyAccounts.find((account) => account.id === fromId.value),
+);
+const to = computed(() =>
+    props.receiveMoneyAccounts.find((account) => account.id === toId.value),
 );
 const sourceCompanies = computed(() => {
-    const selectedCategory = sourceAccountType.value;
     const unique = new Map<
         string,
         { id: number | null; name: string; logoUrl: string | null }
     >();
 
-    for (const serviceType of sourceServiceTypes.value) {
-        if (!serviceType.company || unique.has(serviceType.company)) {
-            continue;
-        }
-
-        const category = (serviceType.company_category ?? 'Both')
-            .trim()
-            .toLowerCase();
-
-        if (category !== selectedCategory && category !== 'both') {
-            continue;
-        }
-
-        unique.set(serviceType.company, {
-            id: serviceType.company_id ?? null,
-            name: serviceType.company,
-            logoUrl: serviceType.company_logo_url ?? null,
-        });
-    }
-
-    return Array.from(unique.values());
-});
-const systemCompanies = computed(() => {
-    const unique = new Map<
-        string,
-        {
-            id: number | null;
-            name: string;
-            category: 'pay' | 'bank' | 'both';
-            logoUrl: string | null;
-        }
-    >();
-
-    for (const account of props.accounts) {
+    for (const account of props.receiveMoneyAccounts) {
         if (!account.company || unique.has(account.company)) {
             continue;
         }
@@ -232,9 +168,26 @@ const systemCompanies = computed(() => {
         unique.set(account.company, {
             id: account.company_id ?? null,
             name: account.company,
-            category: (account.company_category ?? 'Both')
-                .trim()
-                .toLowerCase() as 'pay' | 'bank' | 'both',
+            logoUrl: account.company_logo_url ?? null,
+        });
+    }
+
+    return Array.from(unique.values());
+});
+const payoutCompanies = computed(() => {
+    const unique = new Map<
+        string,
+        { id: number | null; name: string; logoUrl: string | null }
+    >();
+
+    for (const account of props.sendMoneyAccounts) {
+        if (!account.company || unique.has(account.company)) {
+            continue;
+        }
+
+        unique.set(account.company, {
+            id: account.company_id ?? null,
+            name: account.company,
             logoUrl: account.company_logo_url ?? null,
         });
     }
@@ -242,21 +195,12 @@ const systemCompanies = computed(() => {
     return Array.from(unique.values());
 });
 const receiveAccounts = computed(() =>
-    props.accounts.filter(
-        (account) =>
-            account.company === selectedSourceCompany.value &&
-            ['both', sourceAccountType.value].includes(
-                (account.company_category ?? 'Both').trim().toLowerCase(),
-            ),
-    ),
-);
-const payoutCompanies = computed(() =>
-    systemCompanies.value.filter((company) =>
-        ['both', payoutAccountType.value].includes(company.category),
+    props.receiveMoneyAccounts.filter(
+        (account) => account.company === selectedSourceCompany.value,
     ),
 );
 const payoutAccounts = computed(() =>
-    props.accounts.filter(
+    props.sendMoneyAccounts.filter(
         (account) =>
             !selectedPayoutCompany.value ||
             account.company === selectedPayoutCompany.value,
@@ -297,10 +241,60 @@ const ready = computed(
         destinationAccountNumber.value.trim().length > 0 &&
         amount.value > 0 &&
         customerName.value.trim().length > 0 &&
+        customerPhone.value.trim().length > 0 &&
         (!needsCashFeeDenoms.value || feeDenomTotal.value === feeNum.value) &&
         !floatLocked.value &&
         !cashierLocked.value,
 );
+
+const readyIssue = computed(() => {
+    if (cashierLocked.value) return t('transaction.cashierLocked');
+    if (floatLocked.value) return t('transaction.floatLocked');
+    if (toId.value === null) return 'Choose a Receive Money account.';
+    if (sourceAccountNumber.value.trim() === '') {
+        return 'Enter the customer source account number.';
+    }
+    if (fromId.value === null) return 'Choose a Send Money account.';
+    if (destinationCustomerName.value.trim() === '') {
+        return 'Enter the recipient name.';
+    }
+    if (destinationAccountNumber.value.trim() === '') {
+        return 'Enter the recipient account number.';
+    }
+    if (amount.value <= 0) return 'Enter the transfer amount.';
+    if (customerName.value.trim() === '') return 'Enter customer name.';
+    if (customerPhone.value.trim() === '') return 'Enter customer phone.';
+    if (needsCashFeeDenoms.value && feeDenomTotal.value !== feeNum.value) {
+        return t('transaction.cashFeeReceivedHint');
+    }
+
+    return '';
+});
+
+function companyKey(company: { id: number | null; name: string }): string {
+    return company.id !== null ? `id:${company.id}` : `name:${company.name}`;
+}
+
+function hasCompanyLogo(company: {
+    id: number | null;
+    name: string;
+    logoUrl: string | null;
+}): boolean {
+    return Boolean(
+        company.logoUrl && !failedCompanyLogos.value.has(companyKey(company)),
+    );
+}
+
+function markCompanyLogoFailed(company: {
+    id: number | null;
+    name: string;
+    logoUrl: string | null;
+}): void {
+    failedCompanyLogos.value = new Set([
+        ...failedCompanyLogos.value,
+        companyKey(company),
+    ]);
+}
 
 /** Fee is server truth — debounce-reload it when the slip changes. */
 watch(
@@ -317,7 +311,7 @@ watch(
     { immediate: true },
 );
 
-watch([selectedSourceCompany, sourceAccountType, receiveAccounts], () => {
+watch([selectedSourceCompany, receiveAccounts], () => {
     if (!receiveAccounts.value.some((account) => account.id === toId.value)) {
         toId.value = null;
     }
@@ -383,7 +377,7 @@ function submit() {
         '/transactions/transfer',
         {
             from_account_id: fromId.value,
-            source_account_type: sourceAccountType.value,
+            source_account_type: 'account',
             source_provider: selectedSourceCompany.value.trim(),
             source_account_number: sourceAccountNumber.value.trim(),
             to_account_id: toId.value,
@@ -393,6 +387,7 @@ function submit() {
             destination_account_number: destinationAccountNumber.value.trim(),
             amount: amount.value,
             customer_name: customerName.value.trim(),
+            customer_phone: customerPhone.value.trim(),
             note: description.value,
             fee_payment_method: feePaymentMethod.value,
             fee_account_id: null,
@@ -631,7 +626,7 @@ function submit() {
         <!-- ===== Enter Details ===== -->
         <section
             v-else-if="view === 'entry' && step === 'form'"
-            class="bank-form-shell mt-5 max-w-3xl"
+            class="bank-form-shell mt-5 max-w-5xl p-5 sm:p-6"
             :class="
                 floatLocked || cashierLocked
                     ? 'pointer-events-none opacity-50'
@@ -642,64 +637,14 @@ function submit() {
                 {{ t('transaction.enterTransferDetails') }}
             </h2>
 
-            <section
-                class="mt-4 rounded-2xl border border-line bg-card p-4 shadow-sm sm:p-5"
-            >
+            <section class="mt-4 space-y-3">
                 <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <h3 class="text-sm font-black text-ink">
-                            {{ t('transaction.transferCustomerInfo') }}
-                        </h3>
-                        <p class="mt-1 text-xs text-slate">
-                            {{ t('transaction.transferCustomerInfoHint') }}
-                        </p>
-                    </div>
-                    <span class="text-xs font-bold text-brand">{{
-                        t('component.required')
-                    }}</span>
+                    <h3 class="text-sm font-black text-ink">
+                        {{ t('transaction.transferCustomerInfo') }}
+                    </h3>
                 </div>
 
                 <div class="mt-3 space-y-3">
-                    <div class="max-w-md">
-                        <span class="bank-label">{{
-                            t('transaction.customerPayBank')
-                        }}</span>
-                        <div class="mt-1.5 grid grid-cols-2 gap-2">
-                            <label
-                                class="bank-choice flex cursor-pointer items-center gap-2 rounded-field border bg-card px-3 py-2.5 transition"
-                                :class="
-                                    sourceAccountType === 'pay'
-                                        ? 'border-brand ring-1 ring-brand/20'
-                                        : 'border-line hover:border-ink/30'
-                                "
-                            >
-                                <input
-                                    v-model="sourceAccountType"
-                                    type="radio"
-                                    value="pay"
-                                    class="accent-brand"
-                                />
-                                <span class="text-sm font-bold">Pay</span>
-                            </label>
-                            <label
-                                class="bank-choice flex cursor-pointer items-center gap-2 rounded-field border bg-card px-3 py-2.5 transition"
-                                :class="
-                                    sourceAccountType === 'bank'
-                                        ? 'border-brand ring-1 ring-brand/20'
-                                        : 'border-line hover:border-ink/30'
-                                "
-                            >
-                                <input
-                                    v-model="sourceAccountType"
-                                    type="radio"
-                                    value="bank"
-                                    class="accent-brand"
-                                />
-                                <span class="text-sm font-bold">Bank</span>
-                            </label>
-                        </div>
-                    </div>
-
                     <div>
                         <div class="flex items-center justify-between gap-3">
                             <span class="bank-label">{{
@@ -711,7 +656,7 @@ function submit() {
                             </span>
                         </div>
                         <div
-                            class="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-4"
+                            class="mt-1.5 flex gap-2 overflow-x-auto pb-1.5"
                             role="radiogroup"
                             aria-label="Source company"
                         >
@@ -723,18 +668,20 @@ function submit() {
                                 :aria-checked="
                                     selectedSourceCompany === company.name
                                 "
-                                class="group flex min-h-16 items-center gap-2 rounded-xl border px-3 py-2 text-left transition"
+                                class="group flex min-h-12 shrink-0 items-center gap-2 rounded-field border px-2.5 py-1.5 text-left transition"
                                 :class="[
                                     selectedSourceCompany === company.name
                                         ? 'border-brand bg-brand-soft text-brand shadow-sm ring-2 ring-brand/15'
                                         : 'border-line bg-mist/40 text-ink hover:border-brand/40 hover:bg-brand-soft/40',
-                                    company.logoUrl ? 'justify-center' : '',
+                                    hasCompanyLogo(company)
+                                        ? 'min-w-16 justify-center'
+                                        : 'min-w-36',
                                 ]"
                                 @click="selectedSourceCompany = company.name"
                             >
                                 <span
-                                    v-if="company.logoUrl"
-                                    class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl text-sm font-black"
+                                    v-if="hasCompanyLogo(company)"
+                                    class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-card text-sm font-black shadow-sm"
                                     :class="
                                         selectedSourceCompany === company.name
                                             ? 'bg-brand text-white'
@@ -742,9 +689,10 @@ function submit() {
                                     "
                                 >
                                     <img
-                                        :src="company.logoUrl"
+                                        :src="company.logoUrl ?? ''"
                                         :alt="`${company.name} logo`"
-                                        class="size-full object-contain p-1"
+                                        class="size-full object-contain p-0.5"
+                                        @error="markCompanyLogoFailed(company)"
                                     />
                                 </span>
                                 <span v-else class="min-w-0">
@@ -757,9 +705,9 @@ function submit() {
                         </div>
                     </div>
 
-                    <div class="grid gap-3 lg:grid-cols-2">
+                    <div class="grid gap-3 md:grid-cols-3">
                         <label>
-                            <span class="bank-label">{{
+                            <span class="bank-label bank-required">{{
                                 t('transaction.sourceBeneficiaryName')
                             }}</span>
                             <input
@@ -769,11 +717,24 @@ function submit() {
                                 :placeholder="
                                     t('transaction.sourceBeneficiaryName')
                                 "
-                                class="bank-input"
+                                class="bank-input min-h-12 bg-mist"
                             />
                         </label>
                         <label>
-                            <span class="bank-label">{{
+                            <span class="bank-label bank-required">{{
+                                t('transaction.customerPhone')
+                            }}</span>
+                            <input
+                                v-model="customerPhone"
+                                type="tel"
+                                autocomplete="tel"
+                                inputmode="tel"
+                                placeholder=" "
+                                class="bank-input min-h-12 bg-mist"
+                            />
+                        </label>
+                        <label>
+                            <span class="bank-label bank-required">{{
                                 t('transaction.customerSourceAccountNumber')
                             }}</span>
                             <input
@@ -784,7 +745,7 @@ function submit() {
                                 :placeholder="
                                     t('transaction.customerSourceAccountNumber')
                                 "
-                                class="bank-input"
+                                class="bank-input min-h-12 bg-mist"
                             />
                         </label>
                     </div>
@@ -792,44 +753,17 @@ function submit() {
             </section>
 
             <section
-                class="mt-4 rounded-2xl border border-line bg-card p-4 shadow-sm sm:p-5"
+                class="mt-4 border-t border-line pt-4"
                 aria-labelledby="transfer-receive-account-title"
             >
                 <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <h3
-                            id="transfer-receive-account-title"
-                            class="text-sm font-black text-ink"
-                        >
-                            {{ t('transaction.receiveLeg') }}:
-                            {{ t('transaction.systemReceives') }}
-                        </h3>
-                        <p class="mt-1 text-xs text-slate">
-                            {{ t('transaction.systemReceiveCompanyHint') }}
-                        </p>
-                    </div>
-                    <span class="text-xs font-bold text-brand">{{
-                        t('component.required')
-                    }}</span>
-                </div>
-
-                <div
-                    class="mt-3 flex items-center gap-3 rounded-field border border-line bg-mist/50 px-3 py-2.5"
-                >
-                    <span
-                        class="grid size-9 shrink-0 place-items-center rounded-full bg-brand text-xs font-black text-white"
+                    <h3
+                        id="transfer-receive-account-title"
+                        class="text-sm font-black text-ink"
                     >
-                        {{ selectedSourceCompany.slice(0, 1).toUpperCase() }}
-                    </span>
-                    <span class="min-w-0">
-                        <span class="block text-xs font-semibold text-slate">
-                            {{ t('transaction.systemReceiveCompany') }}
-                        </span>
-                        <span class="block truncate text-sm font-black">
-                            {{ selectedSourceCompany }}
-                            · {{ sourceAccountType.toUpperCase() }}
-                        </span>
-                    </span>
+                        {{ t('transaction.receiveLeg') }}:
+                        {{ t('transaction.systemReceives') }}
+                    </h3>
                 </div>
 
                 <AccountTile
@@ -838,6 +772,7 @@ function submit() {
                     :accounts="receiveAccounts"
                     :label="t('transaction.systemReceiveAccount')"
                     :exclude="fromId ? [fromId] : []"
+                    compact
                 />
                 <p
                     v-if="receiveAccounts.length === 0"
@@ -848,69 +783,21 @@ function submit() {
             </section>
 
             <section
-                class="mt-4 rounded-2xl border border-line bg-card p-4 shadow-sm sm:p-5"
+                class="mt-4 border-t border-line pt-4"
                 aria-labelledby="transfer-payout-company-title"
             >
                 <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <h3
-                            id="transfer-payout-company-title"
-                            class="text-sm font-black text-ink"
-                        >
-                            {{ t('transaction.payoutLeg') }}:
-                            {{ t('transaction.systemSends') }}
-                        </h3>
-                        <p class="mt-1 text-xs text-slate">
-                            {{ t('transaction.systemPayoutCompanyHint') }}
-                        </p>
-                    </div>
-                    <span class="text-xs font-bold text-brand">{{
-                        t('component.required')
-                    }}</span>
-                </div>
-
-                <div class="mt-3 max-w-md">
-                    <span class="bank-label">{{
-                        t('transaction.payBank')
-                    }}</span>
-                    <div class="mt-1.5 grid grid-cols-2 gap-2">
-                        <label
-                            class="bank-choice flex cursor-pointer items-center gap-2 rounded-field border bg-card px-3 py-2.5 transition"
-                            :class="
-                                payoutAccountType === 'pay'
-                                    ? 'border-brand ring-1 ring-brand/20'
-                                    : 'border-line hover:border-ink/30'
-                            "
-                        >
-                            <input
-                                v-model="payoutAccountType"
-                                type="radio"
-                                value="pay"
-                                class="accent-brand"
-                            />
-                            <span class="text-sm font-bold">Pay</span>
-                        </label>
-                        <label
-                            class="bank-choice flex cursor-pointer items-center gap-2 rounded-field border bg-card px-3 py-2.5 transition"
-                            :class="
-                                payoutAccountType === 'bank'
-                                    ? 'border-brand ring-1 ring-brand/20'
-                                    : 'border-line hover:border-ink/30'
-                            "
-                        >
-                            <input
-                                v-model="payoutAccountType"
-                                type="radio"
-                                value="bank"
-                                class="accent-brand"
-                            />
-                            <span class="text-sm font-bold">Bank</span>
-                        </label>
-                    </div>
+                    <h3
+                        id="transfer-payout-company-title"
+                        class="text-sm font-black text-ink"
+                    >
+                        {{ t('transaction.payoutLeg') }}:
+                        {{ t('transaction.systemSends') }}
+                    </h3>
                 </div>
 
                 <div
-                    class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+                    class="mt-3 flex gap-2 overflow-x-auto pb-1.5"
                     role="radiogroup"
                     aria-label="System payout company"
                 >
@@ -920,18 +807,20 @@ function submit() {
                         type="button"
                         role="radio"
                         :aria-checked="selectedPayoutCompany === company.name"
-                        class="group flex min-h-16 items-center gap-2 rounded-xl border px-3 py-2 text-left transition"
+                        class="group flex min-h-12 shrink-0 items-center gap-2 rounded-field border px-2.5 py-1.5 text-left transition"
                         :class="[
                             selectedPayoutCompany === company.name
                                 ? 'border-brand bg-brand-soft text-brand shadow-sm ring-2 ring-brand/15'
                                 : 'border-line bg-mist/40 text-ink hover:border-brand/40 hover:bg-brand-soft/40',
-                            company.logoUrl ? 'justify-center' : '',
+                            hasCompanyLogo(company)
+                                ? 'min-w-16 justify-center'
+                                : 'min-w-36',
                         ]"
                         @click="selectedPayoutCompany = company.name"
                     >
                         <span
-                            v-if="company.logoUrl"
-                            class="grid size-9 shrink-0 place-items-center overflow-hidden rounded-xl text-sm font-black"
+                            v-if="hasCompanyLogo(company)"
+                            class="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-card text-sm font-black shadow-sm"
                             :class="
                                 selectedPayoutCompany === company.name
                                     ? 'bg-brand text-white'
@@ -939,9 +828,10 @@ function submit() {
                             "
                         >
                             <img
-                                :src="company.logoUrl"
+                                :src="company.logoUrl ?? ''"
                                 :alt="`${company.name} logo`"
-                                class="size-full object-contain p-1"
+                                class="size-full object-contain p-0.5"
+                                @error="markCompanyLogoFailed(company)"
                             />
                         </span>
                         <span v-else class="min-w-0">
@@ -959,17 +849,15 @@ function submit() {
                     :label="t('transaction.systemPayoutAccount')"
                     :must-cover="amount"
                     :exclude="toId ? [toId] : []"
+                    compact
                 />
 
                 <h4 class="mt-4 text-sm font-black text-ink">
                     {{ t('transaction.customerDestinationAccount') }}
                 </h4>
-                <p class="mt-1 text-xs text-slate">
-                    {{ t('transaction.customerDestinationHint') }}
-                </p>
-                <div class="mt-3 grid gap-3 lg:grid-cols-2">
+                <div class="mt-3 grid gap-3 md:grid-cols-2">
                     <label>
-                        <span class="bank-label">{{
+                        <span class="bank-label bank-required">{{
                             t('transaction.destinationBeneficiaryName')
                         }}</span>
                         <input
@@ -979,11 +867,11 @@ function submit() {
                             :placeholder="
                                 t('transaction.destinationBeneficiaryName')
                             "
-                            class="bank-input"
+                            class="bank-input min-h-12 bg-mist"
                         />
                     </label>
                     <label>
-                        <span class="bank-label">{{
+                        <span class="bank-label bank-required">{{
                             t('transaction.customerDestinationAccountNumber')
                         }}</span>
                         <input
@@ -996,7 +884,7 @@ function submit() {
                                     'transaction.customerDestinationAccountNumber',
                                 )
                             "
-                            class="bank-input"
+                            class="bank-input min-h-12 bg-mist"
                         />
                     </label>
                 </div>
@@ -1006,6 +894,8 @@ function submit() {
                 <BigAmountInput
                     v-model="amount"
                     :label="t('transaction.transferAmount')"
+                    required
+                    compact
                 />
             </div>
 
@@ -1015,7 +905,7 @@ function submit() {
                 <p class="text-[13px] font-semibold text-slate">
                     {{ t('transaction.fee') }}
                     <span class="font-normal"
-                        >({{ t('transaction.commissionTier') }})</span
+                        >({{ t('transaction.transferFeeTier') }})</span
                     >
                 </p>
                 <p class="money text-sm font-bold">
@@ -1031,6 +921,7 @@ function submit() {
                     :fee="feeNum"
                     :fee-accounts="feeAccounts"
                     :account-included-in-transaction="true"
+                    compact
                 />
             </div>
 
@@ -1045,7 +936,8 @@ function submit() {
                         maxlength="250"
                         autocomplete="off"
                         :placeholder="t('transaction.transfer')"
-                        class="bank-input resize-none pb-7"
+                        rows="2"
+                        class="bank-input min-h-12 resize-none bg-mist pb-7"
                         aria-describedby="transfer-description-count"
                     />
                     <span
@@ -1057,19 +949,35 @@ function submit() {
                 </div>
             </div>
 
-            <div v-if="needsCashFeeDenoms" class="mt-5">
-                <DenomDrawer
-                    v-model="feeDenoms"
-                    :notes="notes"
-                    :target="feeNum"
-                    :enforce-stock="false"
-                    :label="t('transaction.cashFeeReceivedNotes')"
-                    id-prefix="transfer-fee-denomination"
-                />
-                <p class="mt-2 text-xs font-semibold text-slate">
-                    {{ t('transaction.cashFeeReceivedHint') }}
-                </p>
-            </div>
+            <section
+                v-if="needsCashFeeDenoms"
+                class="mt-5 overflow-hidden rounded-field border border-brand/20 bg-card"
+            >
+                <button
+                    type="button"
+                    class="flex w-full items-center justify-between gap-3 bg-brand-soft/55 px-3 py-2.5 text-left"
+                    :aria-expanded="showFeeDenoms"
+                    @click="showFeeDenoms = !showFeeDenoms"
+                >
+                    <span class="text-sm font-bold">{{
+                        t('transaction.cashFeeReceivedNotes')
+                    }}</span>
+                    <span class="money text-sm font-black text-brand">
+                        {{ mmk(feeDenomTotal) }} MMK
+                    </span>
+                </button>
+                <div v-show="showFeeDenoms" class="p-2.5 sm:p-3">
+                    <DenomDrawer
+                        v-model="feeDenoms"
+                        :notes="notes"
+                        :target="feeNum"
+                        :enforce-stock="false"
+                        :show-title="false"
+                        compact
+                        id-prefix="transfer-fee-denomination"
+                    />
+                </div>
+            </section>
 
             <p
                 v-for="(msg, key) in errors"
@@ -1079,15 +987,27 @@ function submit() {
                 {{ msg }}
             </p>
 
-            <div class="mt-6 flex justify-end">
-                <button
-                    type="button"
-                    :disabled="!ready"
-                    @click="step = 'review'"
-                    class="bank-button bank-button-primary px-7"
+            <div class="mt-6 border-t border-line pt-4">
+                <div
+                    class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                    {{ t('common.continueReview') }}
-                </button>
+                    <p
+                        class="min-h-5 text-xs font-bold"
+                        :class="ready ? 'text-balance' : 'text-brand'"
+                    >
+                        {{
+                            ready ? t('transaction.readyForReview') : readyIssue
+                        }}
+                    </p>
+                    <button
+                        type="button"
+                        :disabled="!ready"
+                        @click="step = 'review'"
+                        class="bank-button bank-button-primary w-full px-7 sm:w-auto"
+                    >
+                        {{ t('common.continueReview') }}
+                    </button>
+                </div>
             </div>
         </section>
 
@@ -1108,7 +1028,7 @@ function submit() {
             >
                 <div class="flex items-start justify-between gap-4">
                     <div>
-                        <p class="text-xs font-black uppercase text-balance">
+                        <p class="text-xs font-black text-balance uppercase">
                             {{ t('transaction.customerSends') }}
                         </p>
                         <p class="mt-1 text-[13px] font-semibold text-slate">
@@ -1116,7 +1036,9 @@ function submit() {
                             {{ t('transaction.fee') }}
                         </p>
                     </div>
-                    <p class="money text-right text-2xl font-black text-balance">
+                    <p
+                        class="money text-right text-2xl font-black text-balance"
+                    >
                         {{ mmk(customerTotalDue) }}
                         <span class="text-xs text-slate">MMK</span>
                     </p>
@@ -1132,9 +1054,8 @@ function submit() {
                     </dt>
                     <dd class="text-right font-bold">
                         {{ selectedSourceCompany }}
-                        <span
-                            class="block text-[11px] font-medium text-slate"
-                            >{{ sourceAccountType.toUpperCase() }}</span
+                        <span class="block text-[11px] font-medium text-slate"
+                            >Receive Money</span
                         >
                     </dd>
                 </div>
@@ -1143,6 +1064,12 @@ function submit() {
                         {{ t('transaction.sourceBeneficiaryName') }}
                     </dt>
                     <dd class="text-right font-bold">{{ customerName }}</dd>
+                </div>
+                <div class="flex justify-between py-3 text-sm">
+                    <dt class="text-slate">
+                        {{ t('transaction.customerPhone') }}
+                    </dt>
+                    <dd class="text-right font-bold">{{ customerPhone }}</dd>
                 </div>
                 <div class="flex justify-between py-3 text-sm">
                     <dt class="text-slate">

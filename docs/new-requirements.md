@@ -316,6 +316,10 @@ Exchange agent commission:
 - Exchange account is agent ဖြစ်လျှင် commission ပေးနိုင်သည်။
 - Commission source သည် `commission_tiers` ဖြစ်မည်။
 - Exchange conversion source သည် `exchange_rates` ဖြစ်မည်။
+- `account.is_agent = false` ဖြစ်လျှင် commission သည် `0` ဖြစ်မည်။
+- Provider lookup သည် `account.company_id + feature + amount` ကိုသုံးမည်။
+- MMK -> THB သည် `cash_in` commission tier ကိုသုံးမည်။
+- THB -> MMK သည် MMK settlement amount ဖြင့် `cash_out` commission tier ကိုသုံးမည်။
 
 ## Tables To Remove Or Deprecate
 

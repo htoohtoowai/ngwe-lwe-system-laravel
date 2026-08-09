@@ -37,6 +37,7 @@ class TransactionService
         private readonly TransactionRepository $transactions,
         private readonly AccountRepository $accounts,
         private readonly TransactionFeeCalculator $calculator,
+        private readonly TransferFeeCalculator $transferFees,
         private readonly ExchangeRateRepository $exchangeRates,
         private readonly CashFloatRepository $floats,
         private readonly EmployeeFloatValidator $floatValidator,
@@ -504,8 +505,9 @@ class TransactionService
         }
 
         $customerTransfer = ! empty($data['source_account_type']);
-        $feeReferenceAccount = $customerTransfer ? $toAccount : $fromAccount;
-        $fees = $this->calculator->resolveFees($feeReferenceAccount, $amount, TransactionFeeCalculator::MODE_CASH_IN);
+        $sourceCompanyId = $this->companyId($customerTransfer ? $toAccount : $fromAccount);
+        $destinationCompanyId = $this->companyId($customerTransfer ? $fromAccount : $toAccount);
+        $fees = $this->transferFees->resolve($sourceCompanyId, $destinationCompanyId, $amount);
         $receiveCommission = $customerTransfer
             ? $this->calculator->commissionForFeature($toAccount, $amount, AccountFeature::ReceiveMoney, TransactionFeeCalculator::COMMISSION_RECEIVE)
             : Money::normalize(0);
@@ -514,8 +516,8 @@ class TransactionService
         $feePayment = $customerTransfer
             ? $this->resolveTransferFeePayment($data, $toAccount)
             : $this->resolveFeePayment($data, $fromAccount, $fees['customer_fee']);
-        $fromCompanyId = $fromAccount->serviceType?->company_id;
-        $toCompanyId = $toAccount->serviceType?->company_id;
+        $fromCompanyId = $sourceCompanyId;
+        $toCompanyId = $destinationCompanyId;
 
         $rawDenominations = is_array($data['denominations'] ?? null) ? $data['denominations'] : [];
         if ($rawDenominations !== []) {
@@ -707,7 +709,14 @@ class TransactionService
             'customer_fee' => Money::normalize(0),
             'additional_fee' => Money::normalize(0),
         ];
-        $commission = $this->calculator->commission($account, $mmkSettlementAmount, TransactionFeeCalculator::COMMISSION_SEND);
+        $commission = $this->calculator->commissionForFeature(
+            $account,
+            $mmkSettlementAmount,
+            $currency === 'MMK' ? AccountFeature::CashIn : AccountFeature::CashOut,
+            $currency === 'MMK'
+                ? TransactionFeeCalculator::COMMISSION_SEND
+                : TransactionFeeCalculator::COMMISSION_RECEIVE,
+        );
         $feePayment = $this->resolveFeePayment($data, $account, $fees['customer_fee']);
         $fromCompanyId = $account->serviceType?->company_id;
 
@@ -822,6 +831,7 @@ class TransactionService
                 'currency' => $currency,
                 'exchange_payment_method' => $exchangePaymentMethod,
                 'balance_delta' => $exchangeBalanceChange,
+                'commission_amount' => $commission,
                 'exchange_rate' => $exchangeRate,
                 'denominations' => $normalizedDenominations,
                 'received_denominations' => $normalizedReceivedDenominations,
@@ -964,6 +974,17 @@ class TransactionService
         if ((float) $normalized <= 0) {
             throw new InvalidArgumentException('Amount must be greater than zero.');
         }
+    }
+
+    private function companyId(Account $account): int
+    {
+        $companyId = $account->company_id ?? $account->serviceType?->company_id;
+
+        if ($companyId === null) {
+            throw new InvalidArgumentException("Account #{$account->id} is not assigned to a company.");
+        }
+
+        return (int) $companyId;
     }
 
     /**

@@ -21,6 +21,7 @@ use App\Repositories\CashFloatRepository;
 use App\Repositories\ExchangeRateRepository;
 use App\Services\TransactionFeeCalculator;
 use App\Services\TransactionService;
+use App\Services\TransferFeeCalculator;
 use App\Support\Money;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,6 +38,7 @@ class TransactionEntryController extends Controller
         private readonly CashDenominationRepository $cashDenominations,
         private readonly ExchangeRateRepository $exchangeRates,
         private readonly TransactionFeeCalculator $fees,
+        private readonly TransferFeeCalculator $transferFees,
         private readonly TransactionService $transactions,
     ) {}
 
@@ -150,21 +152,27 @@ class TransactionEntryController extends Controller
             'cashOutStock' => $user?->role === 'admin'
                 ? $this->cashDenominations->getAvailableBalance()
                 : ($float ? $this->floats->getDenominationBalance($float->id) : []),
-            'accounts' => $this->accountProps(
-                $feature !== null
+            'accounts' => $transactionType === 'transfer'
+                ? []
+                : $this->accountProps(
+                    $feature !== null
                     ? $this->accounts->activeForFeature($feature, $operation)
                     : $this->accounts->activeForOperation($operation)
-            ),
+                ),
             'sendMoneyAccounts' => $transactionType === 'transfer'
-                ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::SendMoney, 'Transfer'))
+                ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::SendMoney))
                 : [],
             'receiveMoneyAccounts' => $transactionType === 'transfer'
-                ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::ReceiveMoney, 'Transfer'))
+                ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::ReceiveMoney))
                 : [],
-            'serviceTypes' => $transactionType === 'cash_in' ? [] : $this->serviceTypeProps($operation),
+            'serviceTypes' => in_array($transactionType, ['cash_in', 'transfer'], true) ? [] : $this->serviceTypeProps($operation),
             'feeAccounts' => $this->accountProps($this->accounts->feeAccounts()),
-            'fee' => $this->fee($request, $feeMode),
-            'commission' => $this->commission($request, $commissionDirection),
+            'fee' => $transactionType === 'transfer'
+                ? $this->transferFee($request)
+                : $this->fee($request, $feeMode),
+            'commission' => $transactionType === 'exchange'
+                ? $this->exchangeCommission($request)
+                : $this->commission($request, $commissionDirection),
             'receiveCommission' => $transactionType === 'transfer'
                 ? $this->commissionForAccount($request, 'receive_account_id', AccountFeature::ReceiveMoney, TransactionFeeCalculator::COMMISSION_RECEIVE)
                 : '0.00',
@@ -329,6 +337,27 @@ class TransactionEntryController extends Controller
         return $this->fees->resolveFees($account, $amount, $mode)['customer_fee'];
     }
 
+    private function transferFee(Request $request): string
+    {
+        $amount = $request->float('amount');
+        $receiveAccount = $this->accounts->find($request->integer('receive_account_id'));
+        $payoutAccount = $this->accounts->find($request->integer('payout_account_id'));
+
+        if ($amount <= 0 || $receiveAccount === null || $payoutAccount === null) {
+            return '0.00';
+        }
+
+        $fromCompanyId = $receiveAccount->company_id ?? $receiveAccount->serviceType?->company_id;
+        $toCompanyId = $payoutAccount->company_id ?? $payoutAccount->serviceType?->company_id;
+
+        if ($fromCompanyId === null || $toCompanyId === null) {
+            return '0.00';
+        }
+
+        return $this->transferFees
+            ->resolve((int) $fromCompanyId, (int) $toCompanyId, $amount)['customer_fee'];
+    }
+
     private function commission(Request $request, string $direction): string
     {
         $amount = $request->float('amount');
@@ -361,6 +390,31 @@ class TransactionEntryController extends Controller
         return $account !== null && $account->is_active
             ? $this->fees->commissionForFeature($account, $amount, $feature, $legacyDirection)
             : '0.00';
+    }
+
+    private function exchangeCommission(Request $request): string
+    {
+        $amount = $request->float('amount');
+        $account = $this->accounts->find($request->integer('account_id'));
+        $currency = strtoupper($request->string('currency', 'MMK')->toString());
+
+        if ($amount <= 0 || $account === null || ! in_array($currency, ['MMK', 'THB'], true)) {
+            return '0.00';
+        }
+
+        $rate = $this->rate();
+        $mmkAmount = $currency === 'THB'
+            ? $amount * (float) $rate['buy_rate']
+            : $amount;
+
+        return $this->fees->commissionForFeature(
+            $account,
+            $mmkAmount,
+            $currency === 'MMK' ? AccountFeature::CashIn : AccountFeature::CashOut,
+            $currency === 'MMK'
+                ? TransactionFeeCalculator::COMMISSION_SEND
+                : TransactionFeeCalculator::COMMISSION_RECEIVE,
+        );
     }
 
     /**
@@ -411,6 +465,7 @@ class TransactionEntryController extends Controller
             'system_payout_label' => $this->accountLabel($transaction->account_id),
             'receive_commission_amount' => Money::normalize($transaction->receive_commission_amount ?? 0),
             'payout_commission_amount' => Money::normalize($transaction->payout_commission_amount ?? 0),
+            'commission_amount' => Money::normalize($transaction->commission_amount ?? 0),
             'destination_customer_name' => $transaction->destination_customer_name,
             'customer_name' => $transaction->customer_name,
             'customer_phone' => $transaction->customer_phone,
@@ -429,7 +484,7 @@ class TransactionEntryController extends Controller
             return null;
         }
 
-        $company = $account->serviceType?->company?->name;
+        $company = $account->company?->name ?? $account->serviceType?->company?->name;
 
         return trim(($company ? "{$company} - " : '').$account->account_name);
     }
@@ -440,11 +495,13 @@ class TransactionEntryController extends Controller
             return null;
         }
 
-        $type = strtoupper((string) $transaction->source_account_type);
+        $type = $transaction->source_account_type === 'account'
+            ? ''
+            : strtoupper((string) $transaction->source_account_type);
         $provider = trim((string) $transaction->source_provider);
         $number = trim((string) $transaction->source_account_number);
 
-        return trim($type.' '.($provider !== '' ? $provider : 'Customer account').($number !== '' ? " ({$number})" : ''));
+        return trim(($type !== '' ? $type.' ' : '').($provider !== '' ? $provider : 'Customer account').($number !== '' ? " ({$number})" : ''));
     }
 
     private function transferDestinationLabel(Transaction $transaction): ?string

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AccountFeature;
 use App\Models\Account;
 use App\Models\CommissionTier;
 use App\Models\Company;
@@ -183,6 +184,51 @@ class ExchangeRateAndTransactionTest extends TestCase
         $this->assertSame('145000.00', $account->fresh()->balance);
     }
 
+    public function test_exchange_agent_commission_uses_provider_cash_in_tier_for_mmk_to_thb(): void
+    {
+        [, $token] = $this->userWithToken('admin');
+        [$account, $serviceType] = $this->accountWithBalance(0);
+        $this->featureCommissionTier($serviceType->company_id, AccountFeature::CashIn, 'FIXED', 125);
+        $this->exchangeRate();
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/exchange', [
+                'account_id' => $account->id,
+                'amount' => 100_000,
+                'currency' => 'MMK',
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'exchange_payment_method' => 'account',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.commission_amount', '125.00')
+            ->assertJsonPath('data.balance_change', '100125.00');
+
+        $this->assertSame('100125.00', $account->fresh()->balance);
+    }
+
+    public function test_exchange_agent_commission_uses_provider_cash_out_tier_for_thb_to_mmk(): void
+    {
+        [, $token] = $this->userWithToken('admin');
+        [$account, $serviceType] = $this->accountWithBalance(0);
+        $this->featureCommissionTier($serviceType->company_id, AccountFeature::CashOut, 'PERCENTAGE', 0.1);
+        $this->exchangeRate();
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/exchange', [
+                'account_id' => $account->id,
+                'amount' => 1_000,
+                'currency' => 'THB',
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.commission_amount', '145.00')
+            ->assertJsonPath('data.balance_change', '145145.00');
+
+        $this->assertSame('145145.00', $account->fresh()->balance);
+    }
+
     public function test_exchange_transaction_respects_base_amount_divisor(): void
     {
         [, $token] = $this->userWithToken('admin');
@@ -329,6 +375,42 @@ class ExchangeRateAndTransactionTest extends TestCase
             'comm_type' => 'FIXED',
             'additional_fee_type' => 'FIXED',
             'is_active' => true,
+        ]);
+    }
+
+    private function featureCommissionTier(
+        int $companyId,
+        AccountFeature $feature,
+        string $type,
+        float $amount,
+    ): CommissionTier {
+        return CommissionTier::query()->create([
+            'company_id' => $companyId,
+            'feature' => $feature->value,
+            'service_type_id' => null,
+            'amount_from' => 1,
+            'amount_to' => 999_999_999,
+            'fee_type' => 'FIXED',
+            'fee_amount' => 0,
+            'fee_amount_type' => 'FIXED',
+            'fee_amount_deposit' => 0,
+            'fee_amount_withdraw' => 0,
+            'comm_type' => $type,
+            'comm_amount' => $amount,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_amount' => 0,
+            'is_active' => true,
+        ]);
+    }
+
+    private function exchangeRate(): ExchangeRate
+    {
+        return ExchangeRate::query()->create([
+            'base_currency' => 'THB',
+            'quote_currency' => 'MMK',
+            'base_amount' => 1,
+            'buy_rate' => 145,
+            'sell_rate' => 148,
         ]);
     }
 }
