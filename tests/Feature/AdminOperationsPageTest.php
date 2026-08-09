@@ -56,7 +56,7 @@ class AdminOperationsPageTest extends TestCase
             ->get('/admin')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
-                ->component('admin/Operations')
+                ->component('admin/Overview')
                 ->where('role', $admin->role)
                 ->where('section', 'overview')
                 ->where('notificationCount', 0)
@@ -114,30 +114,30 @@ class AdminOperationsPageTest extends TestCase
             ->assertNotFound();
 
         foreach ([
-            '/admin/companies/create' => ['companies', 'create', null],
-            '/admin/companies/'.$company->id => ['companies', 'detail', $company->id],
-            '/admin/companies/'.$company->id.'/edit' => ['companies', 'edit', $company->id],
-            '/admin/service-types/create' => ['service-types', 'create', null],
-            '/admin/service-types/'.$serviceType->id => ['service-types', 'detail', $serviceType->id],
-            '/admin/service-types/'.$serviceType->id.'/edit' => ['service-types', 'edit', $serviceType->id],
-            '/admin/exchange-rates/create' => ['exchange-rates', 'create', null],
-            '/admin/exchange-rates/'.$rate->id => ['exchange-rates', 'detail', $rate->id],
-            '/admin/exchange-rates/'.$rate->id.'/edit' => ['exchange-rates', 'edit', $rate->id],
-            '/admin/accounts/create' => ['accounts', 'create', null],
-            '/admin/accounts/'.$account->id => ['accounts', 'detail', $account->id],
-            '/admin/accounts/'.$account->id.'/edit' => ['accounts', 'edit', $account->id],
-            '/admin/fees/create' => ['fees', 'create', null],
-            '/admin/fees/'.$tier->id => ['fees', 'detail', $tier->id],
-            '/admin/fees/'.$tier->id.'/edit' => ['fees', 'edit', $tier->id],
-            '/admin/users/create' => ['users', 'create', null],
-            '/admin/users/'.$admin->id => ['users', 'detail', $admin->id],
-            '/admin/users/'.$admin->id.'/edit' => ['users', 'edit', $admin->id],
-        ] as $path => [$section, $mode, $resourceId]) {
+            '/admin/companies/create' => ['companies', 'create', null, 'admin/Companies'],
+            '/admin/companies/'.$company->id => ['companies', 'detail', $company->id, 'admin/Companies'],
+            '/admin/companies/'.$company->id.'/edit' => ['companies', 'edit', $company->id, 'admin/Companies'],
+            '/admin/service-types/create' => ['service-types', 'create', null, 'admin/ServiceTypes'],
+            '/admin/service-types/'.$serviceType->id => ['service-types', 'detail', $serviceType->id, 'admin/ServiceTypes'],
+            '/admin/service-types/'.$serviceType->id.'/edit' => ['service-types', 'edit', $serviceType->id, 'admin/ServiceTypes'],
+            '/admin/exchange-rates/create' => ['exchange-rates', 'create', null, 'admin/ExchangeRates'],
+            '/admin/exchange-rates/'.$rate->id => ['exchange-rates', 'detail', $rate->id, 'admin/ExchangeRates'],
+            '/admin/exchange-rates/'.$rate->id.'/edit' => ['exchange-rates', 'edit', $rate->id, 'admin/ExchangeRates'],
+            '/admin/accounts/create' => ['accounts', 'create', null, 'admin/Accounts'],
+            '/admin/accounts/'.$account->id => ['accounts', 'detail', $account->id, 'admin/Accounts'],
+            '/admin/accounts/'.$account->id.'/edit' => ['accounts', 'edit', $account->id, 'admin/Accounts'],
+            '/admin/fees/create' => ['fees', 'create', null, 'admin/Fees'],
+            '/admin/fees/'.$tier->id => ['fees', 'detail', $tier->id, 'admin/Fees'],
+            '/admin/fees/'.$tier->id.'/edit' => ['fees', 'edit', $tier->id, 'admin/Fees'],
+            '/admin/users/create' => ['users', 'create', null, 'admin/Users'],
+            '/admin/users/'.$admin->id => ['users', 'detail', $admin->id, 'admin/Users'],
+            '/admin/users/'.$admin->id.'/edit' => ['users', 'edit', $admin->id, 'admin/Users'],
+        ] as $path => [$section, $mode, $resourceId, $component]) {
             $assertion = $this->withHeader('Authorization', 'Bearer '.$token)
                 ->get($path)
                 ->assertOk()
                 ->assertInertia(fn (Assert $page) => $page
-                    ->component('admin/Operations')
+                    ->component($component)
                     ->where('role', $admin->role)
                     ->where('section', $section)
                     ->where('mode', $mode)
@@ -162,6 +162,59 @@ class AdminOperationsPageTest extends TestCase
                     ->assertForbidden();
             }
         }
+    }
+
+    public function test_admin_company_action_uses_web_redirect_and_stores_logo(): void
+    {
+        Storage::fake('public');
+        [, $token] = $this->userWithToken('admin');
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->post('/admin/actions/companies', [
+                'name' => 'MAB Pay',
+                'category' => 'Pay',
+                'is_active' => true,
+                'logo' => UploadedFile::fake()->image('mab.png', 120, 120),
+            ]);
+
+        $company = Company::query()->where('name', 'MAB Pay')->firstOrFail();
+        $response->assertRedirect('/admin/companies/'.$company->id);
+        $this->assertNotNull($company->logo_path);
+        Storage::disk('public')->assertExists((string) $company->logo_path);
+    }
+
+    public function test_admin_action_converts_domain_error_to_inertia_form_error(): void
+    {
+        [, $token] = $this->userWithToken('admin');
+        Company::query()->create([
+            'name' => 'Existing Pay',
+            'category' => 'Pay',
+            'is_active' => true,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->from('/admin/companies/create')
+            ->post('/admin/actions/companies', [
+                'name' => 'Existing Pay',
+                'category' => 'Pay',
+                'is_active' => true,
+            ])
+            ->assertRedirect('/admin/companies/create')
+            ->assertSessionHasErrors('form');
+    }
+
+    public function test_non_admin_cannot_use_admin_inertia_actions(): void
+    {
+        [, $token] = $this->userWithToken('teller');
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->post('/admin/actions/companies', [
+                'name' => 'Blocked Pay',
+                'category' => 'Pay',
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseMissing('companies', ['name' => 'Blocked Pay']);
     }
 
     public function test_admin_console_read_endpoints_are_reachable(): void

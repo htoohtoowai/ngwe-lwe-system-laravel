@@ -1,18 +1,16 @@
 <script setup lang="ts">
-import { Link, router } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import BankLayout from '@/layouts/BankLayout.vue';
 import AdminListFrame from '@/components/admin/operations/AdminListFrame.vue';
-import { apiRequest } from '@/lib/api';
-import type { ApiRequestOptions } from '@/lib/api';
-import { readStoredToken } from '@/lib/auth-token';
 
 type Role = 'admin' | 'cashier' | 'teller';
 type MoneyValue = string | number | null;
 type DenominationMap = Record<string, number>;
-type ApiList<T> = { data?: T[] };
-type ApiObject<T> = { data?: T };
-type RequestOptions = Pick<ApiRequestOptions, 'method' | 'body' | 'query'>;
+type RequestOptions = {
+    method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+    body?: Record<string, unknown> | FormData;
+};
 type StatusTone = 'ok' | 'warn' | 'muted';
 
 type Company = {
@@ -197,6 +195,19 @@ type AdminBreadcrumbItem = {
     label: string;
     href?: string;
 };
+type AdminData = {
+    dailySummary: Summary;
+    companies: Company[];
+    serviceTypes: ServiceType[];
+    accounts: Account[];
+    users: User[];
+    transactions: Transaction[];
+    activityLogs: ActivityLog[];
+    cashFloats: CashFloat[];
+    vaultInventory: VaultInventory | null;
+    exchangeRates: ExchangeRate[];
+    commissionTiers: CommissionTier[];
+};
 
 const props = defineProps<{
     role: 'admin';
@@ -206,7 +217,10 @@ const props = defineProps<{
     transactionSubsection?: AdminTransactionSubsection | null;
     announcement?: string | null;
     notificationCount?: number;
+    adminData?: AdminData;
 }>();
+const page = usePage<{ adminData?: AdminData }>();
+const initialData = props.adminData ?? page.props.adminData;
 
 const setupSections: AdminTab[] = [
     'companies',
@@ -251,17 +265,17 @@ const companyPendingDelete = ref<Company | null>(null);
 const serviceTypePendingDelete = ref<ServiceType | null>(null);
 const accountPendingDelete = ref<Account | null>(null);
 
-const dailySummary = ref<Summary | null>(null);
-const companies = ref<Company[]>([]);
-const serviceTypes = ref<ServiceType[]>([]);
-const accounts = ref<Account[]>([]);
-const users = ref<User[]>([]);
-const transactions = ref<Transaction[]>([]);
-const activityLogs = ref<ActivityLog[]>([]);
-const cashFloats = ref<CashFloat[]>([]);
-const vaultInventory = ref<VaultInventory | null>(null);
-const exchangeRates = ref<ExchangeRate[]>([]);
-const commissionTiers = ref<CommissionTier[]>([]);
+const dailySummary = ref<Summary | null>(initialData?.dailySummary ?? null);
+const companies = ref<Company[]>(initialData?.companies ?? []);
+const serviceTypes = ref<ServiceType[]>(initialData?.serviceTypes ?? []);
+const accounts = ref<Account[]>(initialData?.accounts ?? []);
+const users = ref<User[]>(initialData?.users ?? []);
+const transactions = ref<Transaction[]>(initialData?.transactions ?? []);
+const activityLogs = ref<ActivityLog[]>(initialData?.activityLogs ?? []);
+const cashFloats = ref<CashFloat[]>(initialData?.cashFloats ?? []);
+const vaultInventory = ref<VaultInventory | null>(initialData?.vaultInventory ?? null);
+const exchangeRates = ref<ExchangeRate[]>(initialData?.exchangeRates ?? []);
+const commissionTiers = ref<CommissionTier[]>(initialData?.commissionTiers ?? []);
 const adminListSearch = ref('');
 const adminListFilter = ref('');
 const adminListPageSize = ref(25);
@@ -725,7 +739,7 @@ watch(
 );
 
 onMounted(() => {
-    void refreshAll();
+    void refreshCompanyLogoUrls();
 });
 
 onBeforeUnmount(() => {
@@ -740,9 +754,7 @@ function today(): string {
 }
 
 function authHeaders(): Record<string, string> {
-    const token = readStoredToken();
-
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return {};
 }
 
 function companyInitial(company: Company): string {
@@ -793,7 +805,7 @@ async function refreshCompanyLogoUrls(
         companiesWithLogos.map(async (company) => {
             try {
                 const response = await fetch(
-                    `/api/companies/${company.id}/logo`,
+                    `/companies/${company.id}/logo`,
                     {
                         headers: authHeaders(),
                     },
@@ -1051,24 +1063,19 @@ function syncFormsFromRoute(): void {
 }
 
 function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-    return apiRequest<T>(path, {
-        ...options,
-        token: readStoredToken(),
+    return new Promise((resolve, reject) => {
+        router.visit(path, {
+            method: (options.method ?? 'GET').toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete',
+            data: (options.body ?? {}) as never,
+            preserveScroll: true,
+            forceFormData: options.body instanceof FormData,
+            onSuccess: () => {
+                syncAdminData();
+                resolve({} as T);
+            },
+            onError: (errors) => reject({ errors }),
+        });
     });
-}
-
-function listFrom<T>(payload: unknown): T[] {
-    const data = (payload as ApiList<T>)?.data;
-
-    if (Array.isArray(data)) {
-        return data;
-    }
-
-    return Array.isArray(payload) ? (payload as T[]) : [];
-}
-
-function objectFrom<T>(payload: unknown): T {
-    return ((payload as ApiObject<T>)?.data ?? payload) as T;
 }
 
 function firstError(value: unknown): string {
@@ -1218,188 +1225,84 @@ async function runAction(
 async function refreshAll(): Promise<void> {
     loading.value = true;
     clearFeedback();
-
-    try {
-        const [
-            dailyPayload,
-            companiesPayload,
-            serviceTypesPayload,
-            accountsPayload,
-            usersPayload,
-            transactionsPayload,
-            logsPayload,
-            floatsPayload,
-            vaultPayload,
-            ratesPayload,
-        ] = await Promise.all([
-            request<ApiObject<Summary>>('/api/reports/daily-summary', {
-                query: { date: reportDate.value },
-            }),
-            request<ApiList<Company>>('/api/companies', {
-                query: { include_inactive: true },
-            }),
-            request<ApiList<ServiceType>>('/api/service-types', {
-                query: { include_inactive: true },
-            }),
-            request<ApiList<Account>>('/api/accounts', {
-                query: { include_inactive: true },
-            }),
-            request<ApiList<User>>('/api/users', {
-                query: { include_inactive: true },
-            }),
-            request<ApiList<Transaction>>('/api/transactions', {
-                query: transactionQuery(),
-            }),
-            request<ApiList<ActivityLog>>('/api/activity-logs', {
-                query: logQuery(),
-            }),
-            request<ApiList<CashFloat>>('/api/cash-floats'),
-            request<ApiObject<VaultInventory>>('/api/vault/inventory'),
-            request<ApiList<ExchangeRate>>('/api/exchange-rates', {
-                query: { limit: 50 },
-            }),
-        ]);
-
-        dailySummary.value = objectFrom<Summary>(dailyPayload);
-        companies.value = listFrom<Company>(companiesPayload);
-        serviceTypes.value = listFrom<ServiceType>(serviceTypesPayload);
-        accounts.value = listFrom<Account>(accountsPayload);
-        users.value = listFrom<User>(usersPayload);
-        transactions.value = listFrom<Transaction>(transactionsPayload);
-        activityLogs.value = listFrom<ActivityLog>(logsPayload);
-        cashFloats.value = listFrom<CashFloat>(floatsPayload);
-        vaultInventory.value = objectFrom<VaultInventory>(vaultPayload);
-        exchangeRates.value = listFrom<ExchangeRate>(ratesPayload);
-        await refreshTiers();
-        syncFormsFromRoute();
-    } catch (exception) {
-        error.value = firstError(exception);
-    } finally {
-        loading.value = false;
-    }
+    await new Promise<void>((resolve) => {
+        router.reload({
+            data: { report_date: reportDate.value },
+            only: ['adminData', 'notificationCount'],
+            onSuccess: () => {
+                syncAdminData();
+                syncFormsFromRoute();
+                resolve();
+            },
+            onError: (errors) => {
+                error.value = Object.values(errors)[0] ?? 'Unable to refresh.';
+                resolve();
+            },
+            onFinish: () => {
+                loading.value = false;
+            },
+        });
+    });
 }
 
 async function refreshDailySummary(): Promise<void> {
-    await runAction('Report refreshed.', async () => {
-        const payload = await request<ApiObject<Summary>>(
-            '/api/reports/daily-summary',
-            { query: { date: reportDate.value } },
-        );
-        dailySummary.value = objectFrom<Summary>(payload);
-    });
+    await refreshAll();
+    notice.value = 'Report refreshed.';
 }
 
-function transactionQuery(): Record<
-    string,
-    string | number | boolean | null | undefined
-> {
-    return {
-        limit: 200,
-        type:
-            transactionPageConfig.value.type ||
-            transactionFilters.value.type ||
-            null,
-        date_from: transactionFilters.value.date_from || null,
-        date_to: transactionFilters.value.date_to || null,
-    };
-}
-
-function logQuery(): Record<
-    string,
-    string | number | boolean | null | undefined
-> {
-    return {
-        per_page: 200,
-        user_id: logFilters.value.user_id,
-        action: logFilters.value.action || null,
-        entity_type: logFilters.value.entity_type || null,
-        date: logFilters.value.date || null,
-    };
+function syncAdminData(): void {
+    const data = page.props.adminData;
+    if (!data) return;
+    dailySummary.value = data.dailySummary;
+    companies.value = data.companies;
+    serviceTypes.value = data.serviceTypes;
+    accounts.value = data.accounts;
+    users.value = data.users;
+    transactions.value = data.transactions;
+    activityLogs.value = data.activityLogs;
+    cashFloats.value = data.cashFloats;
+    vaultInventory.value = data.vaultInventory;
+    exchangeRates.value = data.exchangeRates;
+    commissionTiers.value = data.commissionTiers;
+    void refreshCompanyLogoUrls();
 }
 
 async function refreshTransactions(): Promise<void> {
-    await runAction('Transactions refreshed.', async () => {
-        const payload = await request<ApiList<Transaction>>(
-            '/api/transactions',
-            { query: transactionQuery() },
-        );
-
-        transactions.value = listFrom<Transaction>(payload);
-    });
+    await refreshAll();
+    notice.value = 'Transactions refreshed.';
 }
 
 async function refreshActivityLogs(): Promise<void> {
-    await runAction('Activity logs refreshed.', async () => {
-        const payload = await request<ApiList<ActivityLog>>(
-            '/api/activity-logs',
-            { query: logQuery() },
-        );
-
-        activityLogs.value = listFrom<ActivityLog>(payload);
-    });
-}
-
-async function refreshTiers(): Promise<void> {
-    if (serviceTypes.value.length === 0) {
-        commissionTiers.value = [];
-
-        return;
-    }
-
-    const payloads = await Promise.all(
-        serviceTypes.value.map((serviceType) =>
-            request<ApiList<CommissionTier>>('/api/commission-tiers', {
-                query: {
-                    service_type_id: serviceType.id,
-                    include_inactive: true,
-                },
-            }).catch(() => ({ data: [] })),
-        ),
-    );
-    commissionTiers.value = payloads.flatMap((payload) =>
-        listFrom<CommissionTier>(payload),
-    );
+    await refreshAll();
+    notice.value = 'Activity logs refreshed.';
 }
 
 async function saveCompany(): Promise<void> {
     await runAction('Company saved.', async () => {
         const isEdit = activeMode.value === 'edit' && resourceId.value !== null;
-        const payload = await request<ApiObject<Company>>(
-            isEdit ? `/api/companies/${resourceId.value}` : '/api/companies',
+        const body = new FormData();
+        body.append('name', companyForm.value.name);
+        body.append('category', companyForm.value.category);
+        body.append('is_active', companyForm.value.is_active ? '1' : '0');
+        if (companyLogoFile.value) body.append('logo', companyLogoFile.value);
+
+        await request(
+            isEdit ? `/admin/actions/companies/${resourceId.value}` : '/admin/actions/companies',
             {
-                method: isEdit ? 'PATCH' : 'POST',
-                body: { ...companyForm.value },
+                method: 'POST',
+                body,
             },
         );
-        const company = objectFrom<Company>(payload);
-        await uploadCompanyLogo(company.id);
         resetCompanyForm();
-        await refreshAll();
-        visitAdmin('companies', 'detail', company.id);
-    });
-}
-
-async function uploadCompanyLogo(companyId: number): Promise<void> {
-    if (companyLogoFile.value === null) {
-        return;
-    }
-
-    const body = new FormData();
-    body.append('logo', companyLogoFile.value);
-
-    await request<ApiObject<Company>>(`/api/companies/${companyId}/logo`, {
-        method: 'POST',
-        body,
     });
 }
 
 async function toggleCompany(company: Company): Promise<void> {
     await runAction('Company status updated.', async () => {
-        await request(`/api/companies/${company.id}`, {
+        await request(`/admin/actions/companies/${company.id}/status`, {
             method: 'PATCH',
             body: { is_active: !company.is_active },
         });
-        await refreshAll();
     });
 }
 
@@ -1421,8 +1324,7 @@ async function confirmCompanyDelete(): Promise<void> {
     }
 
     await runAction('Company deleted.', async () => {
-        await request(`/api/companies/${company.id}`, { method: 'DELETE' });
-        await refreshAll();
+        await request(`/admin/actions/companies/${company.id}`, { method: 'DELETE' });
         companyPendingDelete.value = null;
     });
 }
@@ -1436,10 +1338,10 @@ async function saveServiceType(): Promise<void> {
 
     await runAction('Service type saved.', async () => {
         const isEdit = activeMode.value === 'edit' && resourceId.value !== null;
-        const payload = await request<ApiObject<ServiceType>>(
+        await request(
             isEdit
-                ? `/api/service-types/${resourceId.value}`
-                : '/api/service-types',
+                ? `/admin/actions/service-types/${resourceId.value}`
+                : '/admin/actions/service-types',
             {
                 method: isEdit ? 'PATCH' : 'POST',
                 body: {
@@ -1448,20 +1350,16 @@ async function saveServiceType(): Promise<void> {
                 },
             },
         );
-        const serviceType = objectFrom<ServiceType>(payload);
         resetServiceForm();
-        await refreshAll();
-        visitAdmin('service-types', 'detail', serviceType.id);
     });
 }
 
 async function toggleServiceType(serviceType: ServiceType): Promise<void> {
     await runAction('Service type status updated.', async () => {
-        await request(`/api/service-types/${serviceType.id}`, {
+        await request(`/admin/actions/service-types/${serviceType.id}/status`, {
             method: 'PATCH',
             body: { is_active: !serviceType.is_active },
         });
-        await refreshAll();
     });
 }
 
@@ -1483,12 +1381,10 @@ async function confirmServiceTypeDelete(): Promise<void> {
     }
 
     await runAction('Service type deleted.', async () => {
-        await request(`/api/service-types/${serviceType.id}`, {
+        await request(`/admin/actions/service-types/${serviceType.id}`, {
             method: 'DELETE',
         });
-        await refreshAll();
         serviceTypePendingDelete.value = null;
-        visitAdmin('service-types');
     });
 }
 
@@ -1501,8 +1397,8 @@ async function saveAccount(): Promise<void> {
 
     await runAction('Account saved.', async () => {
         const isEdit = activeMode.value === 'edit' && resourceId.value !== null;
-        const payload = await request<ApiObject<Account>>(
-            isEdit ? `/api/accounts/${resourceId.value}` : '/api/accounts',
+        await request(
+            isEdit ? `/admin/actions/accounts/${resourceId.value}` : '/admin/actions/accounts',
             {
                 method: isEdit ? 'PATCH' : 'POST',
                 body: {
@@ -1511,20 +1407,16 @@ async function saveAccount(): Promise<void> {
                 },
             },
         );
-        const account = objectFrom<Account>(payload);
         resetAccountForm();
-        await refreshAll();
-        visitAdmin('accounts', 'detail', account.id);
     });
 }
 
 async function toggleAccount(account: Account): Promise<void> {
     await runAction('Account status updated.', async () => {
-        await request(`/api/accounts/${account.id}`, {
+        await request(`/admin/actions/accounts/${account.id}/status`, {
             method: 'PATCH',
             body: { is_active: !account.is_active },
         });
-        await refreshAll();
     });
 }
 
@@ -1546,10 +1438,8 @@ async function confirmAccountDelete(): Promise<void> {
     }
 
     await runAction('Account deleted.', async () => {
-        await request(`/api/accounts/${account.id}`, { method: 'DELETE' });
-        await refreshAll();
+        await request(`/admin/actions/accounts/${account.id}`, { method: 'DELETE' });
         accountPendingDelete.value = null;
-        visitAdmin('accounts');
     });
 }
 
@@ -1562,7 +1452,7 @@ async function adjustAccountBalance(): Promise<void> {
 
     await runAction('Account balance adjusted.', async () => {
         await request(
-            `/api/accounts/${adjustForm.value.account_id}/balance-adjust`,
+            `/admin/actions/accounts/${adjustForm.value.account_id}/balance-adjust`,
             {
                 method: 'POST',
                 body: {
@@ -1578,7 +1468,6 @@ async function adjustAccountBalance(): Promise<void> {
             amount: 0,
             remark: '',
         };
-        await refreshAll();
     });
 }
 
@@ -1591,10 +1480,10 @@ async function saveTier(): Promise<void> {
 
     await runAction('Commission tier saved.', async () => {
         const isEdit = activeMode.value === 'edit' && resourceId.value !== null;
-        const payload = await request<ApiObject<CommissionTier>>(
+        await request(
             isEdit
-                ? `/api/commission-tiers/${resourceId.value}`
-                : '/api/commission-tiers',
+                ? `/admin/actions/commission-tiers/${resourceId.value}`
+                : '/admin/actions/commission-tiers',
             {
                 method: isEdit ? 'PATCH' : 'POST',
                 body: {
@@ -1603,17 +1492,13 @@ async function saveTier(): Promise<void> {
                 },
             },
         );
-        const tier = objectFrom<CommissionTier>(payload);
         resetTierForm();
-        await refreshTiers();
-        visitAdmin('fees', 'detail', tier.id);
     });
 }
 
 async function deleteTier(tier: CommissionTier): Promise<void> {
     await runAction('Commission tier deleted.', async () => {
-        await request(`/api/commission-tiers/${tier.id}`, { method: 'DELETE' });
-        await refreshTiers();
+        await request(`/admin/actions/commission-tiers/${tier.id}`, { method: 'DELETE' });
     });
 }
 
@@ -1636,27 +1521,23 @@ async function saveUser(): Promise<void> {
             body.pin = userForm.value.pin;
         }
 
-        const payload = await request<ApiObject<User>>(
-            isEdit ? `/api/users/${resourceId.value}` : '/api/users',
+        await request(
+            isEdit ? `/admin/actions/users/${resourceId.value}` : '/admin/actions/users',
             {
                 method: isEdit ? 'PATCH' : 'POST',
                 body,
             },
         );
-        const user = objectFrom<User>(payload);
         resetUserForm();
-        await refreshAll();
-        visitAdmin('users', 'detail', user.id);
     });
 }
 
 async function toggleUser(user: User): Promise<void> {
     await runAction('User status updated.', async () => {
-        await request(`/api/users/${user.id}/active`, {
+        await request(`/admin/actions/users/${user.id}/status`, {
             method: 'PATCH',
             body: { is_active: !user.is_active },
         });
-        await refreshAll();
     });
 }
 
@@ -1669,7 +1550,7 @@ async function resetUserPassword(): Promise<void> {
 
     await runAction('User password reset.', async () => {
         await request(
-            `/api/users/${credentialForm.value.user_id}/reset-password`,
+            `/admin/actions/users/${credentialForm.value.user_id}/reset-password`,
             {
                 method: 'POST',
                 body: { new_password: credentialForm.value.new_password },
@@ -1687,31 +1568,27 @@ async function setUserPin(): Promise<void> {
     }
 
     await runAction('User PIN updated.', async () => {
-        await request(`/api/users/${credentialForm.value.user_id}/pin`, {
+        await request(`/admin/actions/users/${credentialForm.value.user_id}/pin`, {
             method: 'POST',
             body: { pin: credentialForm.value.pin },
         });
         credentialForm.value.pin = '';
-        await refreshAll();
     });
 }
 
 async function saveExchangeRate(): Promise<void> {
     await runAction('Exchange rate saved.', async () => {
         const isEdit = activeMode.value === 'edit' && resourceId.value !== null;
-        const payload = await request<ApiObject<ExchangeRate>>(
+        await request(
             isEdit
-                ? `/api/exchange-rates/${resourceId.value}`
-                : '/api/exchange-rates',
+                ? `/admin/actions/exchange-rates/${resourceId.value}`
+                : '/admin/actions/exchange-rates',
             {
                 method: isEdit ? 'PATCH' : 'POST',
                 body: { ...rateForm.value },
             },
         );
-        const rate = objectFrom<ExchangeRate>(payload);
         resetRateForm();
-        await refreshAll();
-        visitAdmin('exchange-rates', 'detail', rate.id);
     });
 }
 
@@ -1726,21 +1603,13 @@ async function deleteExchangeRate(rate: ExchangeRate): Promise<void> {
     }
 
     await runAction('Exchange rate deleted.', async () => {
-        await request(`/api/exchange-rates/${rate.id}`, { method: 'DELETE' });
-        await refreshAll();
-
-        if (
-            activeTab.value === 'exchange-rates' &&
-            activeMode.value === 'detail'
-        ) {
-            visitAdmin('exchange-rates');
-        }
+        await request(`/admin/actions/exchange-rates/${rate.id}`, { method: 'DELETE' });
     });
 }
 
 async function changePassword(): Promise<void> {
     await runAction('Password changed.', async () => {
-        await request('/api/users/change-password', {
+        await request('/admin/actions/password', {
             method: 'POST',
             body: { ...passwordForm.value },
         });
@@ -1750,7 +1619,7 @@ async function changePassword(): Promise<void> {
 
 async function closeDay(): Promise<void> {
     await runAction('Day closed.', async () => {
-        await request('/api/reconciliation/close-day', {
+        await request('/admin/actions/close-day', {
             method: 'POST',
             body: {
                 date: reportDate.value,
@@ -1758,14 +1627,13 @@ async function closeDay(): Promise<void> {
             },
         });
         closeNotes.value = '';
-        await refreshAll();
     });
 }
 
 async function createBackup(): Promise<void> {
     await runAction('Backup created.', async () => {
         const payload = await request<{ message?: string; path?: string }>(
-            '/api/system/backup',
+            '/admin/actions/backup',
             { method: 'POST' },
         );
 
@@ -1777,7 +1645,7 @@ async function createBackup(): Promise<void> {
 
 async function sendBroadcastTest(): Promise<void> {
     await runAction('Broadcast test sent.', async () => {
-        await request('/api/broadcast/test', { method: 'POST' });
+        await request('/admin/actions/broadcast-test', { method: 'POST' });
     });
 }
 </script>

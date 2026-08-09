@@ -1,8 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { apiRequest } from '@/lib/api';
-import { readStoredToken } from '@/lib/auth-token';
 
 type Reconciliation = {
     id: number;
@@ -14,8 +12,8 @@ type Reconciliation = {
     notes: string | null;
 };
 
-defineProps<{ role: 'admin'; notificationCount?: number }>();
-const rows = ref<Reconciliation[]>([]);
+const props = defineProps<{ role: 'admin'; notificationCount?: number; rows: Reconciliation[] }>();
+const rows = computed(() => props.rows ?? []);
 const search = ref('');
 const dateFrom = ref('');
 const dateTo = ref('');
@@ -44,22 +42,6 @@ watch([search, dateFrom, dateTo, pageSize], () => (page.value = 1));
 watch(pageCount, (count) => (page.value = Math.min(page.value, count)));
 const money = (value: string | number) => Number(value ?? 0).toLocaleString();
 
-async function load(): Promise<void> {
-    loading.value = true;
-    error.value = '';
-    try {
-        const response = await apiRequest<{ data?: Reconciliation[] }>('/api/reports/daily-reconciliations', {
-            token: readStoredToken(),
-            query: { per_page: 100 },
-        });
-        rows.value = response.data ?? [];
-    } catch (exception) {
-        error.value = exception instanceof Error ? exception.message : 'Unable to load reconciliation history.';
-    } finally {
-        loading.value = false;
-    }
-}
-onMounted(load);
 </script>
 
 <template>

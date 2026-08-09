@@ -3,8 +3,7 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted } from 'vue';
 import MoneyText from '@/components/teller/MoneyText.vue';
 import StateChip from '@/components/teller/StateChip.vue';
-import { apiRequest } from '@/lib/api';
-import { readStoredToken, removeStoredToken } from '@/lib/auth-token';
+import { readStoredToken } from '@/lib/auth-token';
 import {
     createNgweLweEcho,
     disconnectNgweLweEcho,
@@ -105,18 +104,8 @@ onBeforeUnmount(() => {
     disconnectNgweLweEcho();
 });
 
-async function signOut() {
-    const token = readStoredToken();
-
-    if (token) {
-        await apiRequest('/api/auth/logout', {
-            method: 'POST',
-            token,
-        }).catch(() => undefined);
-    }
-
-    removeStoredToken();
-    router.visit('/login');
+function signOut() {
+    router.post('/logout');
 }
 </script>
 

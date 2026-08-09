@@ -2,7 +2,6 @@
 import { router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { apiRequest } from '@/lib/api';
 import { readStoredToken, removeStoredToken } from '@/lib/auth-token';
 
 defineProps<{
@@ -27,17 +26,17 @@ const busy = ref<'password' | 'pin' | null>(null);
 const error = ref('');
 const notice = ref('');
 
-function firstError(value: unknown): string {
-    const data = value as {
-        message?: string;
-        errors?: Record<string, string[]>;
-    };
-    const validation = data.errors ? Object.values(data.errors)[0]?.[0] : null;
+function authHeaders(): Record<string, string> {
+    const token = readStoredToken();
 
-    return validation ?? data.message ?? 'Request failed.';
+    return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-async function savePassword() {
+function firstInertiaError(errors: Record<string, string>): string {
+    return Object.values(errors)[0] ?? 'Request failed.';
+}
+
+function savePassword() {
     if (newPassword.value !== confirmPassword.value) {
         error.value = 'New passwords do not match.';
 
@@ -48,26 +47,23 @@ async function savePassword() {
     error.value = '';
     notice.value = '';
 
-    try {
-        await apiRequest('/api/auth/password', {
-            method: 'POST',
-            token: readStoredToken(),
-            body: {
-                current_password: currentPassword.value,
-                password: newPassword.value,
-                password_confirmation: confirmPassword.value,
-            },
-        });
-        removeStoredToken();
-        router.visit('/login');
-    } catch (exception) {
-        error.value = firstError(exception);
-    } finally {
-        busy.value = null;
-    }
+    router.post(
+        '/cashier/profile/password',
+        {
+            current_password: currentPassword.value,
+            password: newPassword.value,
+            password_confirmation: confirmPassword.value,
+        },
+        {
+            headers: authHeaders(),
+            onSuccess: () => removeStoredToken(),
+            onError: (errors) => (error.value = firstInertiaError(errors)),
+            onFinish: () => (busy.value = null),
+        },
+    );
 }
 
-async function savePin() {
+function savePin() {
     if (pin.value !== confirmPin.value) {
         error.value = 'PIN values do not match.';
 
@@ -78,20 +74,21 @@ async function savePin() {
     error.value = '';
     notice.value = '';
 
-    try {
-        await apiRequest('/api/auth/pin', {
-            method: 'POST',
-            token: readStoredToken(),
-            body: { pin: pin.value },
-        });
-        pin.value = '';
-        confirmPin.value = '';
-        notice.value = 'Cashier PIN updated successfully.';
-    } catch (exception) {
-        error.value = firstError(exception);
-    } finally {
-        busy.value = null;
-    }
+    router.post(
+        '/cashier/profile/pin',
+        { pin: pin.value },
+        {
+            headers: authHeaders(),
+            preserveScroll: true,
+            onSuccess: () => {
+                pin.value = '';
+                confirmPin.value = '';
+                notice.value = 'Cashier PIN updated successfully.';
+            },
+            onError: (errors) => (error.value = firstInertiaError(errors)),
+            onFinish: () => (busy.value = null),
+        },
+    );
 }
 </script>
 

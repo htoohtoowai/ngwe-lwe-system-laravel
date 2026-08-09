@@ -6,7 +6,6 @@ import MoneyText from '@/components/teller/MoneyText.vue';
 import PinSeal from '@/components/teller/PinSeal.vue';
 import StateChip from '@/components/teller/StateChip.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { apiRequest } from '@/lib/api';
 import { readStoredToken } from '@/lib/auth-token';
 import {
     createNgweLweEcho,
@@ -322,10 +321,10 @@ async function confirm(pin: string) {
 
     const url =
         intent.value === 'receive'
-            ? `/api/cash-floats/${floatId}/activate`
+            ? `/teller/floats/${floatId}/activate`
             : intent.value === 'return'
-              ? `/api/cash-floats/${floatId}/initiate-return`
-              : `/api/cash-floats/${floatId}/reject`;
+              ? `/teller/floats/${floatId}/initiate-return`
+              : `/teller/floats/${floatId}/reject`;
     const data =
         intent.value === 'receive'
             ? {
@@ -341,21 +340,20 @@ async function confirm(pin: string) {
                     note: `Rejected by Teller from My Float page for float #${floatId}.`,
                 };
 
-    try {
-        await apiRequest(url, {
-            method: 'POST',
-            token: readStoredToken(),
-            body: data,
-        });
-        pinOpen.value = false;
-        actionFloat.value = null;
-        closeReview();
-        refreshFloatPage();
-    } catch (error) {
-        pinError.value = firstError(error);
-    } finally {
-        pinBusy.value = false;
-    }
+    router.post(url, data, {
+        preserveScroll: true,
+        onSuccess: () => {
+            pinOpen.value = false;
+            actionFloat.value = null;
+            closeReview();
+        },
+        onError: (errors) => {
+            pinError.value = firstError({ errors });
+        },
+        onFinish: () => {
+            pinBusy.value = false;
+        },
+    });
 }
 
 onMounted(() => {

@@ -1,15 +1,8 @@
 <script setup lang="ts">
-import { router } from '@inertiajs/vue3';
-import { computed, onMounted, ref } from 'vue';
+import { useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 
-import { ApiRequestError, apiRequest } from '../lib/api';
-import {
-    readStoredToken,
-    removeStoredToken,
-    storeToken,
-} from '../lib/auth-token';
 import { useLocale } from '../lib/i18n';
-import type { LoginResponse, SessionUser } from '../types';
 
 type DemoUser = {
     role: string;
@@ -31,6 +24,11 @@ const submitting = ref(false);
 const selectedDemo = ref<string | null>(null);
 const { lang, setLang } = useLocale();
 const notice = ref<string | null>(null);
+const form = useForm({
+    username: '',
+    password: '',
+    return_to: props.returnTo ?? '',
+});
 
 const copy = computed(() =>
     lang.value === 'en'
@@ -99,7 +97,7 @@ const copy = computed(() =>
 );
 
 const canSubmit = computed(
-    () => username.value.trim().length > 0 && password.value.length > 0,
+    () => username.value.trim().length > 0 && password.value.length > 0 && !form.processing,
 );
 
 const roleLabel = (role: string): string =>
@@ -116,84 +114,25 @@ function fill(user: DemoUser): void {
     notice.value = null;
 }
 
-onMounted(() => {
-    const token = readStoredToken();
-
-    if (token) {
-        void restoreExistingSession(token);
-    }
-});
-
-async function restoreExistingSession(token: string): Promise<void> {
-    submitting.value = true;
-
-    try {
-        const response = await apiRequest<{ user: SessionUser }>(
-            '/api/auth/me',
-            { token },
-        );
-        goToConsole(response.user.role);
-    } catch {
-        removeStoredToken();
-        notice.value = copy.value.sessionExpired;
-    } finally {
-        submitting.value = false;
-    }
-}
-
-async function submit(): Promise<void> {
+function submit(): void {
     if (!canSubmit.value || submitting.value) {
         return;
     }
 
     submitting.value = true;
     notice.value = null;
-
-    try {
-        const response = await apiRequest<LoginResponse>('/api/auth/login', {
-            method: 'POST',
-            body: {
-                username: username.value.trim(),
-                password: password.value,
-            },
-        });
-
-        storeToken(response.token);
-        password.value = '';
-        goToConsole(response.user.role);
-    } catch (error) {
-        notice.value = messageFromError(error);
-    } finally {
-        submitting.value = false;
-    }
-}
-
-function messageFromError(error: unknown): string {
-    if (error instanceof ApiRequestError || error instanceof Error) {
-        return error.message || copy.value.invalidLogin;
-    }
-
-    return copy.value.invalidLogin;
-}
-
-function consoleHref(role: SessionUser['role']): string {
-    if (role === 'admin') {
-        return '/admin';
-    }
-
-    if (role === 'cashier') {
-        return '/cashier';
-    }
-
-    return '/dashboard';
-}
-
-function goToConsole(role: SessionUser['role']): void {
-    const token = readStoredToken();
-    const href = props.returnTo?.startsWith('/') ? props.returnTo : consoleHref(role);
-
-    router.visit(href, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+    form.username = username.value.trim();
+    form.password = password.value;
+    form.post('/login', {
+        preserveScroll: true,
+        onError: () => {
+            notice.value = form.errors.username ?? copy.value.invalidLogin;
+        },
+        onFinish: () => {
+            submitting.value = false;
+            form.password = '';
+            password.value = '';
+        },
     });
 }
 </script>

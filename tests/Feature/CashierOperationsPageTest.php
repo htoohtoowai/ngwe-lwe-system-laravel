@@ -31,7 +31,7 @@ class CashierOperationsPageTest extends TestCase
         [$cashier, $token] = $this->userWithToken('cashier');
 
         foreach ([
-            '/cashier' => 'cashier/Notifications',
+            '/cashier' => 'cashier/Dashboard',
             '/cashier/teller-entry-notifications' => 'cashier/Notifications',
             '/cashier/main-vault-denomination-stock' => 'cashier/VaultStock',
             '/cashier/morning-issue' => 'cashier/MorningIssue',
@@ -104,7 +104,7 @@ class CashierOperationsPageTest extends TestCase
         ]);
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->get('/cashier')
+            ->get('/cashier/teller-entry-notifications')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('cashier/Notifications')
@@ -117,12 +117,12 @@ class CashierOperationsPageTest extends TestCase
             );
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/cashier/notifications/'.$transaction->id.'/read')
-            ->assertOk()
-            ->assertJsonPath('data.unread_count', 0);
+            ->from('/cashier/teller-entry-notifications')
+            ->post('/cashier/notifications/'.$transaction->id.'/read')
+            ->assertRedirect('/cashier/teller-entry-notifications');
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->get('/cashier')
+            ->get('/cashier/teller-entry-notifications')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('cashier/Notifications')
@@ -140,6 +140,27 @@ class CashierOperationsPageTest extends TestCase
                 ->get('/cashier/morning-issue')
                 ->assertForbidden();
         }
+    }
+
+    public function test_cashier_can_update_pin_through_web_action(): void
+    {
+        [$cashier, $token] = $this->userWithToken('cashier');
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->from('/cashier/profile')
+            ->post('/cashier/profile/pin', ['pin' => '2468'])
+            ->assertRedirect('/cashier/profile');
+
+        $this->assertTrue(Hash::check('2468', (string) $cashier->refresh()->pin_hash));
+    }
+
+    public function test_non_cashier_cannot_call_cashier_web_actions(): void
+    {
+        [, $token] = $this->userWithToken('teller');
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->post('/cashier/profile/pin', ['pin' => '2468'])
+            ->assertForbidden();
     }
 
     /**

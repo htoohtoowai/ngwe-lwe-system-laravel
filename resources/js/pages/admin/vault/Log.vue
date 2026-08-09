@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { router } from '@inertiajs/vue3';
+import { computed, ref, watch } from 'vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { apiRequest } from '@/lib/api';
-import { readStoredToken } from '@/lib/auth-token';
 
 type VaultLog = {
     id: number;
@@ -14,8 +13,8 @@ type VaultLog = {
     created_at?: string | null;
 };
 
-defineProps<{ role: 'admin'; notificationCount?: number }>();
-const rows = ref<VaultLog[]>([]);
+const props = defineProps<{ role: 'admin'; notificationCount?: number; rows: VaultLog[] }>();
+const rows = computed(() => props.rows ?? []);
 const search = ref('');
 const page = ref(1);
 const pageSize = ref(25);
@@ -34,19 +33,10 @@ watch([search, pageSize], () => (page.value = 1));
 watch(pageCount, (count) => (page.value = Math.min(page.value, count)));
 const money = (value: number) => value.toLocaleString();
 const dateTime = (value?: string | null) => value ? new Date(value).toLocaleString() : '-';
-async function load(): Promise<void> {
+function load(): void {
     loading.value = true;
-    try {
-        const response = await apiRequest<{ data?: VaultLog[] }>('/api/vault/log', {
-            token: readStoredToken(),
-            query: { per_page: 200 },
-        });
-        rows.value = response.data ?? [];
-    } finally {
-        loading.value = false;
-    }
+    router.reload({ only: ['rows'], onFinish: () => (loading.value = false) });
 }
-onMounted(load);
 </script>
 
 <template>

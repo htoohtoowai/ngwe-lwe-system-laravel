@@ -1,14 +1,20 @@
 <?php
 
+use App\Http\Controllers\AdminFeeController;
+use App\Http\Controllers\AdminOperationsActionController;
+use App\Http\Controllers\AdminReadController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\SystemCompatibilityController;
+use App\Http\Controllers\CashierActionController;
 use App\Http\Controllers\CashierController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\TellerController;
+use App\Http\Controllers\TellerFloatActionController;
 use App\Http\Controllers\TransactionEntryController;
 use App\Models\Transaction;
 use App\Services\DailyReportService;
+use App\Services\AdminOperationsDataService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -16,7 +22,9 @@ use Inertia\Inertia;
 Route::get('/health', fn () => response()->json(['status' => 'ok']))->name('health');
 Route::middleware('ngwe.auth')->post('/ws-ticket', [SystemCompatibilityController::class, 'wsTicket'])->name('ws-ticket');
 Route::get('/login', LoginController::class)->name('login');
-Route::inertia('/', 'RootRedirect')->name('home');
+Route::post('/login', [LoginController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
+Route::middleware('ngwe.auth')->post('/logout', [LoginController::class, 'logout'])->name('logout');
+Route::middleware('ngwe.auth')->get('/', [LoginController::class, 'home'])->name('home');
 Route::middleware(['ngwe.auth', 'role:admin'])->get('/reports/daily/pdf', function (Request $request, DailyReportService $reports) {
     $date = $request->query('date', now()->toDateString());
     $summary = $reports->summary((string) $date);
@@ -111,6 +119,7 @@ $renderAdminOperations = static function (
             ->where('transaction_type', 'cash_in')
             ->where('status', 'PENDING_CASHIER_CONFIRM')
             ->count(),
+        'adminData' => app(AdminOperationsDataService::class)->get($request),
     ]);
 };
 Route::middleware(['ngwe.auth', 'role:admin'])
@@ -121,27 +130,56 @@ Route::middleware(['ngwe.auth', 'role:admin'])
             ->name('');
         Route::get('/overview', fn (Request $request) => $renderAdminOperations($request))
             ->name('.overview');
-        Route::get('/transactions', fn (Request $request) => Inertia::render('admin/transactions/All', [
-            'role' => $request->user()?->role,
-            'announcement' => 'Admin transaction records.',
-            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
-        ]))->name('.transactions');
-        Route::get('/transactions/cash-in', fn (Request $request) => Inertia::render('admin/transactions/CashIn', [
-            'role' => $request->user()?->role,
-            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
-        ]))->name('.transactions.cash-in');
-        Route::get('/transactions/cash-out', fn (Request $request) => Inertia::render('admin/transactions/CashOut', [
-            'role' => $request->user()?->role,
-            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
-        ]))->name('.transactions.cash-out');
-        Route::get('/transactions/transfer', fn (Request $request) => Inertia::render('admin/transactions/Transfer', [
-            'role' => $request->user()?->role,
-            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
-        ]))->name('.transactions.transfer');
-        Route::get('/transactions/exchange', fn (Request $request) => Inertia::render('admin/transactions/Exchange', [
-            'role' => $request->user()?->role,
-            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
-        ]))->name('.transactions.exchange');
+        Route::prefix('actions')->name('.actions.')->controller(AdminOperationsActionController::class)->group(function (): void {
+            Route::post('/companies', 'storeCompany')->name('companies.store');
+            Route::patch('/companies/{company}', 'updateCompany')->name('companies.update');
+            Route::post('/companies/{company}', 'updateCompany')->name('companies.update-with-logo');
+            Route::patch('/companies/{company}/status', 'toggleCompany')->name('companies.status');
+            Route::delete('/companies/{company}', 'destroyCompany')->name('companies.destroy');
+            Route::post('/service-types', 'storeServiceType')->name('service-types.store');
+            Route::patch('/service-types/{serviceType}', 'updateServiceType')->name('service-types.update');
+            Route::patch('/service-types/{serviceType}/status', 'toggleServiceType')->name('service-types.status');
+            Route::delete('/service-types/{serviceType}', 'destroyServiceType')->name('service-types.destroy');
+            Route::post('/accounts', 'storeAccount')->name('accounts.store');
+            Route::patch('/accounts/{account}', 'updateAccount')->name('accounts.update');
+            Route::patch('/accounts/{account}/status', 'toggleAccount')->name('accounts.status');
+            Route::delete('/accounts/{account}', 'destroyAccount')->name('accounts.destroy');
+            Route::post('/accounts/{account}/balance-adjust', 'adjustAccount')->name('accounts.balance-adjust');
+            Route::post('/commission-tiers', 'storeTier')->name('commission-tiers.store');
+            Route::patch('/commission-tiers/{commissionTier}', 'updateTier')->name('commission-tiers.update');
+            Route::delete('/commission-tiers/{commissionTier}', 'destroyTier')->name('commission-tiers.destroy');
+            Route::post('/users', 'storeUser')->name('users.store');
+            Route::patch('/users/{user}', 'updateUser')->name('users.update');
+            Route::patch('/users/{user}/status', 'toggleUser')->name('users.status');
+            Route::post('/users/{user}/reset-password', 'resetUserPassword')->name('users.reset-password');
+            Route::post('/users/{user}/pin', 'setUserPin')->name('users.pin');
+            Route::post('/exchange-rates', 'storeRate')->name('exchange-rates.store');
+            Route::patch('/exchange-rates/{exchangeRate}', 'updateRate')->name('exchange-rates.update');
+            Route::delete('/exchange-rates/{exchangeRate}', 'destroyRate')->name('exchange-rates.destroy');
+            Route::post('/password', 'changePassword')->name('password');
+            Route::post('/close-day', 'closeDay')->name('close-day');
+            Route::post('/backup', 'backup')->name('backup');
+            Route::post('/broadcast-test', 'broadcastTest')->name('broadcast-test');
+        });
+        Route::get('/fees', [AdminFeeController::class, 'index'])->name('.fees');
+        Route::get('/fees/create', [AdminFeeController::class, 'createProvider'])->name('.fees.create');
+        Route::get('/fees/provider/create', [AdminFeeController::class, 'createProvider'])->name('.fees.provider.create');
+        Route::post('/fees/provider', [AdminFeeController::class, 'storeProvider'])->name('.fees.provider.store');
+        Route::get('/fees/provider/{commissionTier}/edit', [AdminFeeController::class, 'editProvider'])->name('.fees.provider.edit');
+        Route::put('/fees/provider/{commissionTier}', [AdminFeeController::class, 'updateProvider'])->name('.fees.provider.update');
+        Route::delete('/fees/provider/{commissionTier}', [AdminFeeController::class, 'destroyProvider'])->name('.fees.provider.destroy');
+        Route::get('/fees/transfer/create', [AdminFeeController::class, 'createTransfer'])->name('.fees.transfer.create');
+        Route::post('/fees/transfer', [AdminFeeController::class, 'storeTransfer'])->name('.fees.transfer.store');
+        Route::get('/fees/transfer/{transferFeeTier}/edit', [AdminFeeController::class, 'editTransfer'])->name('.fees.transfer.edit');
+        Route::put('/fees/transfer/{transferFeeTier}', [AdminFeeController::class, 'updateTransfer'])->name('.fees.transfer.update');
+        Route::delete('/fees/transfer/{transferFeeTier}', [AdminFeeController::class, 'destroyTransfer'])->name('.fees.transfer.destroy');
+        Route::get('/fees/{commissionTier}', [AdminFeeController::class, 'showProvider'])->name('.fees.show');
+        Route::get('/fees/{commissionTier}/edit', [AdminFeeController::class, 'editProvider'])->name('.fees.edit');
+        Route::get('/transactions', fn (Request $request) => app(AdminReadController::class)->transactions($request))->name('.transactions');
+        Route::get('/transactions/cash-in', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'cash_in'))->name('.transactions.cash-in');
+        Route::get('/transactions/cash-out', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'cash_out'))->name('.transactions.cash-out');
+        Route::get('/transactions/transfer', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'transfer'))->name('.transactions.transfer');
+        Route::get('/transactions/exchange', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'exchange'))->name('.transactions.exchange');
         Route::get('/{section}', fn (Request $request, string $section) => $renderAdminOperations($request, $section))
             ->whereIn('section', array_keys($adminSections))
             ->name('.section');
@@ -150,14 +188,8 @@ Route::middleware(['ngwe.auth', 'role:admin'])
             ->name('.create');
         Route::get('/transactions/activity-logs', fn (Request $request) => $renderAdminOperations($request, 'transactions', 'list', null, 'activity-logs'))
             ->name('.transactions.activity-logs');
-        Route::get('/vault/log', fn (Request $request) => Inertia::render('admin/vault/Log', [
-            'role' => $request->user()?->role,
-            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
-        ]))->name('.vault.log');
-        Route::get('/reports/reconciliations', fn (Request $request) => Inertia::render('admin/reports/Reconciliations', [
-            'role' => $request->user()?->role,
-            'notificationCount' => Transaction::query()->where('transaction_type', 'cash_in')->where('status', 'PENDING_CASHIER_CONFIRM')->count(),
-        ]))->name('.reports.reconciliations');
+        Route::get('/vault/log', [AdminReadController::class, 'vaultLog'])->name('.vault.log');
+        Route::get('/reports/reconciliations', [AdminReadController::class, 'reconciliations'])->name('.reports.reconciliations');
         Route::get('/{section}/{resourceId}/edit', fn (Request $request, string $section, int $resourceId) => $renderAdminOperations($request, $section, 'edit', $resourceId))
             ->whereIn('section', $adminCrudSections)
             ->whereNumber('resourceId')
@@ -169,10 +201,25 @@ Route::middleware(['ngwe.auth', 'role:admin'])
     });
 Route::middleware(['ngwe.auth', 'role:cashier'])->get('/cashier', CashierController::class)->name('cashier');
 Route::middleware(['ngwe.auth', 'role:cashier'])
+    ->prefix('dashboard')
+    ->name('dashboard.')
+    ->group(function (): void {
+        Route::post('/transactions/{transaction}/confirm-cash-in', [CashierActionController::class, 'confirmCashIn'])->name('transactions.confirm-cash-in');
+        Route::post('/transactions/{transaction}/cancel-cash-in', [CashierActionController::class, 'cancelCashIn'])->name('transactions.cancel-cash-in');
+    });
+Route::middleware(['ngwe.auth', 'role:cashier'])
     ->prefix('cashier')
     ->name('cashier.')
     ->group(function (): void {
         Route::get('/profile', [CashierController::class, 'profile'])->name('profile');
+        Route::post('/profile/password', [CashierActionController::class, 'updatePassword'])->name('profile.password');
+        Route::post('/profile/pin', [CashierActionController::class, 'updatePin'])->name('profile.pin');
+        Route::post('/vault/entries', [CashierActionController::class, 'recordVaultEntry'])->name('vault.entries.store');
+        Route::post('/cash-floats', [CashierActionController::class, 'issueFloat'])->name('cash-floats.store');
+        Route::post('/cash-floats/{float}/confirm-return', [CashierActionController::class, 'confirmFloatReturn'])->name('cash-floats.confirm-return');
+        Route::post('/notifications/{transaction}/read', [CashierActionController::class, 'markNotificationRead'])->name('notifications.read');
+        Route::post('/transactions/{transaction}/confirm-cash-in', [CashierActionController::class, 'confirmCashIn'])->name('transactions.confirm-cash-in');
+        Route::post('/transactions/{transaction}/cancel-cash-in', [CashierActionController::class, 'cancelCashIn'])->name('transactions.cancel-cash-in');
         Route::get('/{section}', CashierController::class)
             ->whereIn('section', [
                 'dashboard',
@@ -238,6 +285,16 @@ Route::middleware(['ngwe.auth', 'role:teller'])
         Route::post('/transactions/cash-out', 'cashOutStore')->name('transactions.cash-out');
         Route::post('/transactions/transfer', 'transferStore')->name('transactions.transfer');
         Route::post('/transactions/exchange', 'exchangeStore')->name('transactions.exchange');
+    });
+
+Route::middleware(['ngwe.auth', 'role:teller'])
+    ->prefix('teller/floats')
+    ->name('teller.floats.')
+    ->controller(TellerFloatActionController::class)
+    ->group(function (): void {
+        Route::post('/{float}/activate', 'activate')->name('activate');
+        Route::post('/{float}/reject', 'reject')->name('reject');
+        Route::post('/{float}/initiate-return', 'initiateReturn')->name('initiate-return');
     });
 
 if (! function_exists('minimal_pdf')) {

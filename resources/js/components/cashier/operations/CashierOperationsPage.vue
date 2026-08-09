@@ -4,7 +4,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import DenomDrawer from '@/components/bank/DenomDrawer.vue';
 import PinSeal from '@/components/teller/PinSeal.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { apiRequest } from '@/lib/api';
 import { readStoredToken } from '@/lib/auth-token';
 import {
     createNgweLweEcho,
@@ -298,14 +297,15 @@ const pendingReviewBalanced = computed(
 const pendingReviewSettlementLabel = computed(() =>
     pendingReviewUsesHandoff.value ? 'Cashier handoff' : 'Main vault cash',
 );
+const historyTransactionTypes: Partial<Record<CashierSection, string>> = {
+    'teller-entry-history-cash-in': 'cash_in',
+    'teller-entry-history-cash-out': 'cash_out',
+    'teller-entry-history-transfer': 'transfer',
+    'teller-entry-history-exchange': 'exchange',
+};
 const filteredTransactions = computed(() => {
     const query = transactionSearch.value.trim().toLowerCase();
-    const fixedType = {
-        'teller-entry-history-cash-in': 'cash_in',
-        'teller-entry-history-cash-out': 'cash_out',
-        'teller-entry-history-transfer': 'transfer',
-        'teller-entry-history-exchange': 'exchange',
-    }[activeSection.value] ?? null;
+    const fixedType = historyTransactionTypes[activeSection.value] ?? null;
 
     return props.transactions.filter((transaction) => {
         const matchesType =
@@ -483,14 +483,8 @@ function authHeaders(): Record<string, string> {
     return token ? { Authorization: 'Bearer ' + token } : {};
 }
 
-function firstError(value: unknown): string {
-    const data = value as {
-        message?: string;
-        errors?: Record<string, string[]>;
-    };
-    const validation = data.errors ? Object.values(data.errors)[0]?.[0] : null;
-
-    return validation ?? data.message ?? 'Request failed.';
+function firstInertiaError(errors: Record<string, string>): string {
+    return Object.values(errors)[0] ?? 'Request failed.';
 }
 
 function reload() {
@@ -584,7 +578,7 @@ function openVaultEntry(entryType: 'vault_in' | 'adjustment') {
     vaultEntryOpen.value = true;
 }
 
-async function recordVaultEntry() {
+function recordVaultEntry() {
     if (vaultEntryTotal.value <= 0) {
         return;
     }
@@ -593,31 +587,31 @@ async function recordVaultEntry() {
     error.value = '';
     notice.value = '';
 
-    try {
-        await apiRequest('/api/vault/entries', {
-            method: 'POST',
-            token: readStoredToken(),
-            body: {
-                entry_type: vaultEntryType.value,
-                denominations: vaultEntryDenoms.value,
-                note:
-                    vaultEntryType.value === 'vault_in'
-                        ? 'Cash received into main vault.'
-                        : 'Cashier vault adjustment.',
+    router.post(
+        '/cashier/vault/entries',
+        {
+            entry_type: vaultEntryType.value,
+            denominations: vaultEntryDenoms.value,
+            note:
+                vaultEntryType.value === 'vault_in'
+                    ? 'Cash received into main vault.'
+                    : 'Cashier vault adjustment.',
+        },
+        {
+            headers: authHeaders(),
+            preserveScroll: true,
+            onSuccess: () => {
+                vaultEntryDenoms.value = {};
+                vaultEntryOpen.value = false;
+                notice.value = 'Cash received into the main vault.';
             },
-        });
-        vaultEntryDenoms.value = {};
-        vaultEntryOpen.value = false;
-        notice.value = 'Cash received into the main vault.';
-        reload();
-    } catch (exception) {
-        error.value = firstError(exception);
-    } finally {
-        busy.value = false;
-    }
+            onError: (errors) => (error.value = firstInertiaError(errors)),
+            onFinish: () => (busy.value = false),
+        },
+    );
 }
 
-async function issueFloat() {
+function issueFloat() {
     if (!canIssue.value || issueEmployeeId.value === null) {
         return;
     }
@@ -626,26 +620,26 @@ async function issueFloat() {
     error.value = '';
     notice.value = '';
 
-    try {
-        await apiRequest('/api/cash-floats', {
-            method: 'POST',
-            token: readStoredToken(),
-            body: {
-                employee_id: issueEmployeeId.value,
-                denominations: issueDenoms.value,
-                note: issueNote.value || null,
+    router.post(
+        '/cashier/cash-floats',
+        {
+            employee_id: issueEmployeeId.value,
+            denominations: issueDenoms.value,
+            note: issueNote.value || null,
+        },
+        {
+            headers: authHeaders(),
+            preserveScroll: true,
+            onSuccess: () => {
+                issueDenoms.value = {};
+                issueNote.value = '';
+                notice.value =
+                    'Teller float issued. Teller must count and receive it before use.';
             },
-        });
-        issueDenoms.value = {};
-        issueNote.value = '';
-        notice.value =
-            'Teller float issued. Teller must count and receive it before use.';
-        reload();
-    } catch (exception) {
-        error.value = firstError(exception);
-    } finally {
-        busy.value = false;
-    }
+            onError: (errors) => (error.value = firstInertiaError(errors)),
+            onFinish: () => (busy.value = false),
+        },
+    );
 }
 
 function openReturn(float: FloatRow) {
@@ -681,7 +675,7 @@ function closeReturnPin() {
     }
 }
 
-async function confirmReturn(pin: string) {
+function confirmReturn(pin: string) {
     if (!returnFloat.value) {
         return;
     }
@@ -689,48 +683,51 @@ async function confirmReturn(pin: string) {
     returnPinBusy.value = true;
     returnPinError.value = null;
 
-    try {
-        await apiRequest(
-            '/api/cash-floats/' + returnFloat.value.id + '/confirm-return',
-            {
-                method: 'POST',
-                token: readStoredToken(),
-                body: {
-                    closing_total: returnCountedTotal.value,
-                    pin,
-                    return_denominations: returnCountedDenoms.value,
-                },
+    const floatId = returnFloat.value.id;
+    router.post(
+        `/cashier/cash-floats/${floatId}/confirm-return`,
+        {
+            closing_total: returnCountedTotal.value,
+            pin,
+            return_denominations: returnCountedDenoms.value,
+        },
+        {
+            headers: authHeaders(),
+            preserveScroll: true,
+            onSuccess: () => {
+                returnPinOpen.value = false;
+                returnFloat.value = null;
+                returnCountedDenoms.value = {};
+                notice.value =
+                    'Teller float return confirmed and added back to the main vault.';
             },
-        );
-        returnPinOpen.value = false;
-        returnFloat.value = null;
-        returnCountedDenoms.value = {};
-        notice.value =
-            'Teller float return confirmed and added back to the main vault.';
-        reload();
-    } catch (exception) {
-        returnPinError.value = firstError(exception);
-    } finally {
-        returnPinBusy.value = false;
-    }
+            onError: (errors) => {
+                returnPinError.value = firstInertiaError(errors);
+            },
+            onFinish: () => (returnPinBusy.value = false),
+        },
+    );
 }
 
-async function openCashInReview(entry: PendingCashIn) {
+function openCashInReview(entry: PendingCashIn) {
     pendingReview.value = entry;
     pendingPinError.value = null;
 
-    try {
-        const response = await apiRequest<{ data?: { unread_count?: number } }>(
-            `/api/cashier/notifications/${entry.id}/read`,
-            {
-                method: 'POST',
-                token: readStoredToken(),
+    router.post(
+        `/cashier/notifications/${entry.id}/read`,
+        {},
+        {
+            headers: authHeaders(),
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => {
+                unreadNotificationCount.value = Math.max(
+                    0,
+                    unreadNotificationCount.value - 1,
+                );
             },
-        );
-        unreadNotificationCount.value = response.data?.unread_count ?? 0;
-    } catch {
-        // Review remains available if the read receipt cannot be stored.
-    }
+        },
+    );
 }
 
 function closeCashInReview() {
@@ -756,7 +753,7 @@ function closePendingPin() {
     }
 }
 
-async function confirmPendingCashIn(pin: string) {
+function confirmPendingCashIn(pin: string) {
     if (!pendingReview.value) {
         return;
     }
@@ -766,38 +763,32 @@ async function confirmPendingCashIn(pin: string) {
     pendingPinBusy.value = true;
     pendingPinError.value = null;
 
-    try {
-        await apiRequest(
-            '/api/transactions/' +
-                entry.id +
-                '/' +
-                pendingAction.value +
-                '-cash-in',
-            {
-                method: 'POST',
-                token: readStoredToken(),
-                body:
-                    pendingAction.value === 'confirm'
-                        ? { pin }
-                        : {
-                              pin,
-                              note: 'Cancelled by cashier during review.',
-                          },
+    const action = pendingAction.value;
+    router.post(
+        `/cashier/transactions/${entry.id}/${action}-cash-in`,
+        action === 'confirm'
+            ? { pin }
+            : { pin, note: 'Cancelled by cashier during review.' },
+        {
+            headers: authHeaders(),
+            preserveScroll: true,
+            onSuccess: () => {
+                pendingPinOpen.value = false;
+                pendingReview.value = null;
+                notice.value =
+                    action === 'confirm'
+                        ? 'Cash In confirmed and posted to the main vault.'
+                        : 'Cash In cancelled and Teller float/account state reversed.';
             },
-        );
-        pendingPinOpen.value = false;
-        pendingReview.value = null;
-        notice.value =
-            pendingAction.value === 'confirm'
-                ? 'Cash In confirmed and posted to the main vault.'
-                : 'Cash In cancelled and Teller float/account state reversed.';
-        reload();
-    } catch (exception) {
-        pendingPinError.value = firstError(exception);
-    } finally {
-        pendingPinBusy.value = false;
-        pendingBusy.value = null;
-    }
+            onError: (errors) => {
+                pendingPinError.value = firstInertiaError(errors);
+            },
+            onFinish: () => {
+                pendingPinBusy.value = false;
+                pendingBusy.value = null;
+            },
+        },
+    );
 }
 
 function statusLabel(status: string): string {

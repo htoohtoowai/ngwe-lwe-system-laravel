@@ -1,9 +1,7 @@
 <script setup lang="ts">
-import { Link } from '@inertiajs/vue3';
-import { computed, onMounted, ref, watch } from 'vue';
+import { Link, router } from '@inertiajs/vue3';
+import { computed, ref, watch } from 'vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { apiRequest } from '@/lib/api';
-import { readStoredToken } from '@/lib/auth-token';
 
 type Transaction = {
     id: number;
@@ -23,9 +21,10 @@ const props = defineProps<{
     transactionType?: '' | 'cash_in' | 'cash_out' | 'transfer' | 'exchange';
     announcement?: string | null;
     notificationCount?: number;
+    rows: Transaction[];
 }>();
 
-const rows = ref<Transaction[]>([]);
+const rows = computed(() => props.rows ?? []);
 const search = ref('');
 const selectedType = ref('');
 const dateFrom = ref('');
@@ -37,9 +36,13 @@ const error = ref('');
 
 const filtered = computed(() => {
     const query = search.value.trim().toLowerCase();
-    return rows.value.filter((row) =>
-        query === '' ||
-        [
+    return rows.value.filter((row) => {
+        const date = row.created_at?.slice(0, 10) ?? '';
+        const matchesFilters =
+            (!selectedType.value || row.transaction_type === selectedType.value) &&
+            (!dateFrom.value || date >= dateFrom.value) &&
+            (!dateTo.value || date <= dateTo.value);
+        const matchesSearch = query === '' || [
             row.id,
             `#${row.id}`,
             row.customer_name,
@@ -49,8 +52,9 @@ const filtered = computed(() => {
             row.amount,
             row.customer_fee,
             row.status,
-        ].some((value) => String(value ?? '').toLowerCase().includes(query)),
-    );
+        ].some((value) => String(value ?? '').toLowerCase().includes(query));
+        return matchesFilters && matchesSearch;
+    });
 });
 const pageCount = computed(() =>
     Math.max(1, Math.ceil(filtered.value.length / pageSize.value)),
@@ -63,10 +67,6 @@ const paginated = computed(() => {
 watch([search, pageSize], () => (page.value = 1));
 watch(pageCount, (count) => (page.value = Math.min(page.value, count)));
 
-function authHeaders(): Record<string, string> {
-    const token = readStoredToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-}
 function typeLabel(type: string): string {
     return { cash_in: 'Cash In', cash_out: 'Cash Out', transfer: 'Transfer', exchange: 'Exchange' }[type] ?? type;
 }
@@ -76,24 +76,12 @@ function money(value: string | number | null): string {
 function dateTime(value?: string | null): string {
     return value ? new Date(value).toLocaleString() : '-';
 }
-async function load(): Promise<void> {
+function load(): void {
     loading.value = true;
     error.value = '';
-    try {
-        const type = props.transactionType || selectedType.value || undefined;
-        const response = await apiRequest<{ data?: Transaction[] }>('/api/transactions', {
-            token: readStoredToken(),
-            query: { limit: 200, type, date_from: dateFrom.value || undefined, date_to: dateTo.value || undefined },
-        });
-        rows.value = response.data ?? [];
-        page.value = 1;
-    } catch (exception) {
-        error.value = exception instanceof Error ? exception.message : 'Unable to load transactions.';
-    } finally {
-        loading.value = false;
-    }
+    page.value = 1;
+    router.reload({ only: ['rows'], onFinish: () => (loading.value = false) });
 }
-onMounted(load);
 </script>
 
 <template>
@@ -119,7 +107,7 @@ onMounted(load);
                     <thead class="bg-mist text-xs text-slate uppercase"><tr><th class="px-4 py-3">Ref</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Customer</th><th class="px-4 py-3 text-right">Amount</th><th class="px-4 py-3 text-right">Fee</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Time</th><th class="px-4 py-3"></th></tr></thead>
                     <tbody class="divide-y divide-line">
                         <tr v-for="row in paginated" :key="row.id">
-                            <td class="money px-4 py-3 font-black">#{{ row.id }}</td><td class="px-4 py-3 font-bold">{{ typeLabel(row.transaction_type) }}</td><td class="px-4 py-3">{{ row.customer_name ?? '-' }}</td><td class="money px-4 py-3 text-right font-bold">{{ money(row.amount) }}</td><td class="money px-4 py-3 text-right">{{ money(row.customer_fee) }}</td><td class="px-4 py-3">{{ row.status }}</td><td class="px-4 py-3 text-xs">{{ dateTime(row.created_at) }}</td><td class="px-4 py-3 text-right"><Link :href="`/admin/transactions/${row.id}`" :headers="authHeaders()" class="font-black text-brand">View</Link></td>
+                            <td class="money px-4 py-3 font-black">#{{ row.id }}</td><td class="px-4 py-3 font-bold">{{ typeLabel(row.transaction_type) }}</td><td class="px-4 py-3">{{ row.customer_name ?? '-' }}</td><td class="money px-4 py-3 text-right font-bold">{{ money(row.amount) }}</td><td class="money px-4 py-3 text-right">{{ money(row.customer_fee) }}</td><td class="px-4 py-3">{{ row.status }}</td><td class="px-4 py-3 text-xs">{{ dateTime(row.created_at) }}</td><td class="px-4 py-3 text-right"><Link :href="`/admin/transactions/${row.id}`" class="font-black text-brand">View</Link></td>
                         </tr>
                         <tr v-if="!paginated.length"><td colspan="8" class="px-4 py-8 text-center text-slate">No transactions found.</td></tr>
                     </tbody>

@@ -8,8 +8,6 @@ import {
     ref,
     watch,
 } from 'vue';
-import { apiRequest } from '@/lib/api';
-import { readStoredToken, removeStoredToken } from '@/lib/auth-token';
 import { useLocale } from '@/lib/i18n';
 
 /**
@@ -545,9 +543,7 @@ const hrefFor = (href: string) => {
     return href;
 };
 function authHeaders(): Record<string, string> {
-    const token = readStoredToken();
-
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return {};
 }
 const isTransactionRecordsPath = (path: string) =>
     path === '/admin/transactions' || /^\/admin\/transactions\/\d+$/.test(path);
@@ -621,18 +617,8 @@ watch(sidebarCollapsed, (collapsed) => {
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? '1' : '0');
 });
 
-async function signOut() {
-    const token = readStoredToken();
-
-    if (token) {
-        await apiRequest('/api/auth/logout', {
-            method: 'POST',
-            token,
-        }).catch(() => undefined);
-    }
-
-    removeStoredToken();
-    router.visit('/login');
+function signOut() {
+    router.post('/logout');
 }
 </script>
 

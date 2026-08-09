@@ -3,7 +3,6 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import PinSeal from '@/components/teller/PinSeal.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { apiRequest } from '@/lib/api';
 import { readStoredToken } from '@/lib/auth-token';
 import {
     createNgweLweEcho,
@@ -297,18 +296,20 @@ async function reviewCashIn(
     pendingError.value = '';
 
     try {
-        await apiRequest(`/api/transactions/${id}/${action}-cash-in`, {
-            method: 'POST',
-            token: readStoredToken(),
-            body:
+        await new Promise<void>((resolve, reject) => {
+            router.post(`/dashboard/transactions/${id}/${action}-cash-in`,
                 action === 'confirm'
                     ? { pin }
                     : { pin, note: 'Cancelled by cashier during review.' },
-        });
-        pendingReview.value = null;
-        router.reload({
-            only: ['pendingCashIns', 'notificationCount', 'recent', 'floats'],
-            headers: authHeaders(),
+                {
+                    preserveScroll: true,
+                    onSuccess: () => {
+                        pendingReview.value = null;
+                        resolve();
+                    },
+                    onError: (errors) => reject(new Error(Object.values(errors)[0] ?? t('dashboard.unableUpdate'))),
+                },
+            );
         });
     } catch (error) {
         pendingError.value =
