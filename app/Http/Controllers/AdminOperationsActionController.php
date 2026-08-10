@@ -8,7 +8,6 @@ use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ExchangeRateController;
 use App\Http\Controllers\Api\RealtimeBroadcastController;
 use App\Http\Controllers\Api\ReportController;
-use App\Http\Controllers\Api\ServiceTypeController;
 use App\Http\Controllers\Api\SystemCompatibilityController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Requests\AccountRequest;
@@ -16,13 +15,11 @@ use App\Http\Requests\BalanceAdjustRequest;
 use App\Http\Requests\CommissionTierRequest;
 use App\Http\Requests\CompanyRequest;
 use App\Http\Requests\ExchangeRateRequest;
-use App\Http\Requests\ServiceTypeRequest;
 use App\Http\Requests\UserRequest;
 use App\Models\Account;
 use App\Models\CommissionTier;
 use App\Models\Company;
 use App\Models\ExchangeRate;
-use App\Models\ServiceType;
 use App\Models\User;
 use App\Services\DatabaseBackupService;
 use Illuminate\Http\JsonResponse;
@@ -35,7 +32,6 @@ class AdminOperationsActionController extends Controller
 {
     public function __construct(
         private readonly CompanyController $companies,
-        private readonly ServiceTypeController $serviceTypes,
         private readonly AccountController $accounts,
         private readonly CommissionTierController $tiers,
         private readonly UserController $users,
@@ -77,30 +73,6 @@ class AdminOperationsActionController extends Controller
     {
         $this->ensureSuccess($this->companies->destroy($company));
         return redirect()->route('admin.operations.section', ['section' => 'companies'])->with('success', 'Company deactivated.');
-    }
-
-    public function storeServiceType(ServiceTypeRequest $request): RedirectResponse
-    {
-        $payload = $this->ensureSuccess($this->serviceTypes->store($request));
-        return redirect()->route('admin.operations.detail', ['section' => 'service-types', 'resourceId' => $this->resourceId($payload)]);
-    }
-
-    public function updateServiceType(ServiceTypeRequest $request, ServiceType $serviceType): RedirectResponse
-    {
-        $this->ensureSuccess($this->serviceTypes->update($request, $serviceType));
-        return redirect()->route('admin.operations.detail', ['section' => 'service-types', 'resourceId' => $serviceType->id]);
-    }
-
-    public function toggleServiceType(ServiceTypeRequest $request, ServiceType $serviceType): RedirectResponse
-    {
-        $this->ensureSuccess($this->serviceTypes->update($request, $serviceType));
-        return back()->with('success', 'Service type status updated.');
-    }
-
-    public function destroyServiceType(ServiceType $serviceType): RedirectResponse
-    {
-        $this->ensureSuccess($this->serviceTypes->destroy($serviceType));
-        return redirect()->route('admin.operations.section', ['section' => 'service-types'])->with('success', 'Service type deactivated.');
     }
 
     public function storeAccount(AccountRequest $request): RedirectResponse

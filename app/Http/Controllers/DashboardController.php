@@ -83,13 +83,13 @@ class DashboardController extends Controller
     private function accounts(): array
     {
         return Account::query()
-            ->with('serviceType.company')
+            ->with('company')
             ->where('is_active', true)
             ->orderBy('account_name')
             ->get()
             ->map(fn (Account $account): array => [
                 'id' => $account->id,
-                'company' => $account->serviceType?->company?->name ?? 'Account',
+                'company' => $account->company?->name ?? 'Account',
                 'name' => $account->account_name,
                 'number' => $account->phone_number,
                 'balance' => Money::normalize($account->balance ?? 0),
@@ -259,7 +259,7 @@ class DashboardController extends Controller
     private function scopedTransactions(User $user): Builder
     {
         return Transaction::query()
-            ->with('account.serviceType.company')
+            ->with('account.company')
             ->when($user->role === 'teller', fn (Builder $query) => $query->where('created_by', $user->id));
     }
 
@@ -288,14 +288,14 @@ class DashboardController extends Controller
         }
 
         $account = Account::query()
-            ->with('serviceType.company')
+            ->with('company')
             ->find($accountId);
 
         if ($account === null) {
             return null;
         }
 
-        $company = $account->serviceType?->company?->name;
+        $company = $account->company?->name;
         $label = trim(($company ? "{$company} - " : '').$account->account_name);
         $this->accountLabels[$accountId] = $label;
 

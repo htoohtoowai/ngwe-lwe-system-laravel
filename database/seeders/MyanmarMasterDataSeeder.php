@@ -72,7 +72,7 @@ class MyanmarMasterDataSeeder extends Seeder
         foreach (self::COMPANIES as $seed) {
             $logoPath = $this->logoPathFor($seed);
 
-            $company = Company::query()->updateOrCreate(
+            Company::query()->updateOrCreate(
                 ['name' => $seed['name']],
                 [
                     'category' => $seed['category'],
@@ -80,8 +80,6 @@ class MyanmarMasterDataSeeder extends Seeder
                     ...($logoPath !== null ? ['logo_path' => $logoPath] : []),
                 ],
             );
-
-            $this->seedServiceTypes($company);
         }
     }
 
@@ -126,31 +124,4 @@ class MyanmarMasterDataSeeder extends Seeder
         return null;
     }
 
-    private function seedServiceTypes(Company $company): void
-    {
-        if (in_array($company->category, ['Bank', 'Both'], true)) {
-            $company->serviceTypes()->updateOrCreate(
-                ['name' => 'Bank Transfer'],
-                ['operation' => 'Transfer', 'is_active' => true],
-            );
-            $company->serviceTypes()->updateOrCreate(
-                ['name' => 'Exchange'],
-                ['operation' => 'Exchange', 'is_active' => true],
-            );
-        }
-
-        if (in_array($company->category, ['Pay', 'Both'], true)) {
-            foreach ([
-                'WST' => 'CashIn',
-                'CashOut' => 'CashOut',
-                'Transfer' => 'Transfer',
-                'Exchange' => 'Exchange',
-            ] as $name => $operation) {
-                $company->serviceTypes()->updateOrCreate(
-                    ['name' => $name],
-                    ['operation' => $operation, 'is_active' => true],
-                );
-            }
-        }
-    }
 }

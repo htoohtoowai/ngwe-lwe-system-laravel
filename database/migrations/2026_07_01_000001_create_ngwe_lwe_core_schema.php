@@ -30,12 +30,6 @@ return new class extends Migration
             }
         });
 
-        Schema::create('schema_version', function (Blueprint $table) {
-            $table->unsignedInteger('version')->primary();
-            $table->timestamp('applied_at')->useCurrent();
-            $table->string('description')->nullable();
-        });
-
         Schema::create('companies', function (Blueprint $table) {
             $table->id();
             $table->string('name')->unique();
@@ -45,30 +39,28 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        Schema::create('service_types', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('company_id')->constrained()->restrictOnDelete()->cascadeOnUpdate();
-            $table->string('name');
-            $table->enum('operation', ['CashIn', 'CashOut', 'Transfer', 'Exchange', 'All']);
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-            $table->unique(['company_id', 'name']);
-        });
-
         Schema::create('accounts', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('service_type_id')->constrained()->restrictOnDelete()->cascadeOnUpdate();
+            $table->foreignId('company_id')->constrained()->restrictOnDelete()->cascadeOnUpdate();
             $table->string('account_name');
             $table->string('phone_number');
             $table->decimal('balance', 18, 2)->default(0);
-            $table->decimal('commission_rate', 10, 4)->default(0);
             $table->boolean('is_active')->default(true);
             $table->boolean('is_fee_account')->default(false);
+            $table->boolean('is_agent')->default(false);
             $table->timestamps();
-            $table->index('service_type_id');
+            $table->unique(['company_id', 'account_name', 'phone_number'], 'accounts_company_name_number_unique');
+            $table->index(['company_id', 'is_active']);
         });
 
-        Schema::create('transactions', function (Blueprint $table) {
+        Schema::create('account_features', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('account_id')->constrained()->cascadeOnDelete()->cascadeOnUpdate();
+            $table->string('feature', 32);
+            $table->timestamps();
+            $table->unique(['account_id', 'feature']);
+            $table->index('feature');
+        });        Schema::create('transactions', function (Blueprint $table) {
             $table->id();
             $table->enum('transaction_type', ['cash_in', 'cash_out', 'transfer', 'exchange']);
             $table->foreignId('account_id')->constrained()->restrictOnDelete()->cascadeOnUpdate();
@@ -106,36 +98,51 @@ return new class extends Migration
 
         Schema::create('commission_tiers', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('service_type_id')->constrained()->restrictOnDelete()->cascadeOnUpdate();
+            $table->foreignId('company_id')->constrained()->restrictOnDelete()->cascadeOnUpdate();
+            $table->string('feature', 32);
             $table->decimal('amount_from', 18, 2);
             $table->decimal('amount_to', 18, 2);
-            $table->enum('fee_amount_type', ['FIXED', 'PERCENTAGE'])->default('FIXED');
-            $table->decimal('fee_amount_deposit', 18, 4)->default(0);
-            $table->decimal('fee_amount_withdraw', 18, 4)->default(0);
-            $table->enum('comm_type', ['FIXED', 'PERCENTAGE'])->default('FIXED');
-            $table->decimal('comm_deposit', 18, 4)->default(0);
-            $table->decimal('comm_withdraw', 18, 4)->default(0);
-            $table->enum('additional_fee_type', ['FIXED', 'PERCENTAGE'])->default('FIXED');
-            $table->decimal('additional_fee_deposit_amount', 18, 4)->default(0);
-            $table->decimal('additional_fee_withdraw_amount', 18, 4)->default(0);
+            $table->string('fee_type', 16)->default('FIXED');
+            $table->decimal('fee_amount', 18, 4)->default(0);
+            $table->string('comm_type', 16)->default('FIXED');
+            $table->decimal('comm_amount', 18, 4)->default(0);
+            $table->string('additional_fee_type', 16)->default('FIXED');
+            $table->decimal('additional_fee_amount', 18, 4)->default(0);
             $table->boolean('is_active')->default(true);
             $table->timestamp('created_at')->useCurrent();
-            $table->index(['service_type_id', 'is_active']);
+            $table->index(['company_id', 'feature', 'is_active'], 'commission_tiers_company_feature_active_index');
+            $table->index(['amount_from', 'amount_to']);
+        });
+
+        Schema::create('transfer_fee_tiers', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('company_from_id')->constrained('companies')->restrictOnDelete()->cascadeOnUpdate();
+            $table->foreignId('company_to_id')->constrained('companies')->restrictOnDelete()->cascadeOnUpdate();
+            $table->decimal('amount_from', 18, 2);
+            $table->decimal('amount_to', 18, 2);
+            $table->string('fee_type', 16)->default('FIXED');
+            $table->decimal('fee_amount', 18, 4)->default(0);
+            $table->string('additional_fee_type', 16)->default('FIXED');
+            $table->decimal('additional_fee_amount', 18, 4)->default(0);
+            $table->boolean('is_active')->default(true);
+            $table->timestamps();
+            $table->index(['company_from_id', 'company_to_id', 'is_active'], 'transfer_fee_tiers_company_active_index');
+            $table->index(['amount_from', 'amount_to']);
         });
 
         Schema::create('exchange_rates', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('company_id')->nullable()->constrained()->nullOnDelete()->cascadeOnUpdate();
             $table->string('base_currency')->default('THB');
             $table->string('quote_currency')->default('MMK');
             $table->decimal('base_amount', 18, 2)->default(1);
             $table->decimal('buy_rate', 18, 4);
             $table->decimal('sell_rate', 18, 4);
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
-            $table->index(['base_currency', 'quote_currency']);
+            $table->index(['company_id', 'base_currency', 'quote_currency'], 'exchange_rates_company_currency_index');
             $table->index('updated_at');
-        });
-
-        Schema::create('daily_summary', function (Blueprint $table) {
+        });        Schema::create('daily_summary', function (Blueprint $table) {
             $table->id();
             $table->date('summary_date')->unique();
             $table->decimal('total_cash_in', 18, 2)->default(0);
@@ -264,7 +271,6 @@ return new class extends Migration
             $table->index('recon_date');
         });
 
-        $this->seedSchemaVersion();
         $this->seedDenominations();
     }
 
@@ -281,12 +287,12 @@ return new class extends Migration
         Schema::dropIfExists('activity_logs');
         Schema::dropIfExists('daily_summary');
         Schema::dropIfExists('exchange_rates');
+        Schema::dropIfExists('transfer_fee_tiers');
         Schema::dropIfExists('commission_tiers');
         Schema::dropIfExists('transactions');
+        Schema::dropIfExists('account_features');
         Schema::dropIfExists('accounts');
-        Schema::dropIfExists('service_types');
         Schema::dropIfExists('companies');
-        Schema::dropIfExists('schema_version');
 
         Schema::table('users', function (Blueprint $table) {
             foreach (['auth_version', 'is_active', 'role', 'full_name', 'pin_hash', 'username'] as $column) {
@@ -295,31 +301,6 @@ return new class extends Migration
                 }
             }
         });
-    }
-
-    private function seedSchemaVersion(): void
-    {
-        $versions = [
-            [1, 'Add cashier role and pin_hash'],
-            [2, 'Create cash management tables'],
-            [3, 'Add cash approval fields to transactions'],
-            [4, 'Add companies, service_types; migrate accounts, commission_tiers, and transactions'],
-            [5, 'Add is_fee_account flag to accounts'],
-            [6, 'Add current_balance to floats; create daily_reconciliation_logs'],
-            [7, 'Rebuild cash_float_assignments with new statuses; create vault_transactions'],
-            [8, 'Add Pay_To_Pay service types for Bank companies'],
-            [9, 'Add auth_version for token revocation'],
-            [10, 'Add transaction status and vault impact fields'],
-            [11, 'Add denomination payment and vault balance tables'],
-            [12, 'Add 20,000 MMK denomination support'],
-        ];
-
-        foreach ($versions as [$version, $description]) {
-            DB::table('schema_version')->insertOrIgnore([
-                'version' => $version,
-                'description' => $description,
-            ]);
-        }
     }
 
     private function seedDenominations(): void

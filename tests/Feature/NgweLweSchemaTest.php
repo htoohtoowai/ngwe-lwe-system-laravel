@@ -19,9 +19,7 @@ class NgweLweSchemaTest extends TestCase
     public function test_ngwe_lwe_core_tables_are_created(): void
     {
         foreach ([
-            'schema_version',
             'companies',
-            'service_types',
             'accounts',
             'account_features',
             'transactions',
@@ -41,6 +39,13 @@ class NgweLweSchemaTest extends TestCase
         ] as $table) {
             $this->assertTrue(Schema::hasTable($table), "Missing table: {$table}");
         }
+    }
+
+    public function test_service_types_and_legacy_foreign_keys_are_removed(): void
+    {
+        $this->assertFalse(Schema::hasTable('service_types'));
+        $this->assertFalse(Schema::hasColumn('accounts', 'service_type_id'));
+        $this->assertFalse(Schema::hasColumn('commission_tiers', 'service_type_id'));
     }
 
     public function test_users_table_has_ngwe_lwe_auth_and_role_columns(): void

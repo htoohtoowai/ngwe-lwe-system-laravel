@@ -6,7 +6,6 @@ use App\Models\Account;
 use App\Models\CommissionTier;
 use App\Models\Company;
 use App\Models\ExchangeRate;
-use App\Models\ServiceType;
 use App\Models\TransferFeeTier;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
@@ -33,9 +32,9 @@ class EmployeeTransferExchangeFloatTest extends TestCase
     public function test_employee_transfer_does_not_deduct_float_denominations_or_balance(): void
     {
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 3, 5_000 => 4]);
-        [$from, $to, $serviceType] = $this->twoAccountsWithBalance(30_000);
-        $this->fixedTier($serviceType->id, feeDeposit: 300);
-        $this->fixedTransferTier($serviceType->company_id, 300);
+        [$from, $to, $company] = $this->twoAccountsWithBalance(30_000);
+        $this->fixedTier($company->id, feeDeposit: 300);
+        $this->fixedTransferTier($company->id, 300);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/transfer', [
@@ -65,9 +64,9 @@ class EmployeeTransferExchangeFloatTest extends TestCase
     public function test_employee_transfer_cash_fee_adds_fee_denominations_to_float(): void
     {
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 3]);
-        [$from, $to, $serviceType] = $this->twoAccountsWithBalance(30_000);
-        $this->fixedTier($serviceType->id, feeDeposit: 300);
-        $this->fixedTransferTier($serviceType->company_id, 300);
+        [$from, $to, $company] = $this->twoAccountsWithBalance(30_000);
+        $this->fixedTier($company->id, feeDeposit: 300);
+        $this->fixedTransferTier($company->id, 300);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/transfer', [
@@ -99,8 +98,8 @@ class EmployeeTransferExchangeFloatTest extends TestCase
     public function test_employee_transfer_rejects_amount_denominations(): void
     {
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 1]);
-        [$from, $to, $serviceType] = $this->twoAccountsWithBalance(30_000);
-        $this->fixedTier($serviceType->id);
+        [$from, $to, $company] = $this->twoAccountsWithBalance(30_000);
+        $this->fixedTier($company->id);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/transfer', [
@@ -122,8 +121,8 @@ class EmployeeTransferExchangeFloatTest extends TestCase
     public function test_owner_transfer_still_works_without_denominations(): void
     {
         [, $ownerToken] = $this->userWithToken('admin');
-        [$from, $to, $serviceType] = $this->twoAccountsWithBalance(30_000);
-        $this->fixedTier($serviceType->id);
+        [$from, $to, $company] = $this->twoAccountsWithBalance(30_000);
+        $this->fixedTier($company->id);
 
         $this->withHeader('Authorization', 'Bearer '.$ownerToken)
             ->postJson('/api/transactions/transfer', [
@@ -142,8 +141,8 @@ class EmployeeTransferExchangeFloatTest extends TestCase
     public function test_employee_thb_exchange_deducts_mmk_float_denominations_and_balance(): void
     {
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 20, 5_000 => 2]);
-        [$account, $serviceType] = $this->accountWithServiceType(0);
-        $this->fixedTier($serviceType->id, feeDeposit: 200);
+        [$account, $company] = $this->accountWithCompany(0);
+        $this->fixedTier($company->id, feeDeposit: 200);
 
         ExchangeRate::query()->create([
             'base_currency' => 'THB',
@@ -176,8 +175,8 @@ class EmployeeTransferExchangeFloatTest extends TestCase
     public function test_employee_mmk_exchange_account_payment_does_not_require_denominations(): void
     {
         [, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 1]);
-        [$account, $serviceType] = $this->accountWithServiceType(0);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithCompany(0);
+        $this->fixedTier($company->id);
 
         ExchangeRate::query()->create([
             'base_currency' => 'THB',
@@ -202,8 +201,8 @@ class EmployeeTransferExchangeFloatTest extends TestCase
     public function test_employee_thb_exchange_account_payment_does_not_require_or_deduct_denominations(): void
     {
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 20, 5_000 => 2]);
-        [$account, $serviceType] = $this->accountWithServiceType(0);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithCompany(0);
+        $this->fixedTier($company->id);
 
         ExchangeRate::query()->create([
             'base_currency' => 'THB',
@@ -233,8 +232,8 @@ class EmployeeTransferExchangeFloatTest extends TestCase
     public function test_employee_thb_exchange_denom_total_mismatch_rejected(): void
     {
         [, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 3, 5_000 => 4]);
-        [$account, $serviceType] = $this->accountWithServiceType(0);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithCompany(0);
+        $this->fixedTier($company->id);
 
         ExchangeRate::query()->create([
             'base_currency' => 'THB',
@@ -303,32 +302,27 @@ class EmployeeTransferExchangeFloatTest extends TestCase
     }
 
     /**
-     * @return array{0: Account, 1: ServiceType}
+     * @return array{0: Account, 1: Company}
      */
-    private function accountWithServiceType(int $balance): array
+    private function accountWithCompany(int $balance): array
     {
         $company = Company::query()->create([
             'name' => 'Wave-'.uniqid('', true),
             'category' => 'Pay',
         ]);
-        $serviceType = ServiceType::query()->create([
-            'company_id' => $company->id,
-            'name' => 'Exchange',
-            'operation' => 'Exchange',
-        ]);
         $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => 'Main',
             'phone_number' => '0900000000',
             'balance' => $balance,
             'is_agent' => true,
         ]);
 
-        return [$account, $serviceType];
+        return [$account, $company];
     }
 
     /**
-     * @return array{0: Account, 1: Account, 2: ServiceType}
+     * @return array{0: Account, 1: Account, 2: Company}
      */
     private function twoAccountsWithBalance(int $fromBalance): array
     {
@@ -336,44 +330,39 @@ class EmployeeTransferExchangeFloatTest extends TestCase
             'name' => 'Wave-'.uniqid('', true),
             'category' => 'Pay',
         ]);
-        $serviceType = ServiceType::query()->create([
-            'company_id' => $company->id,
-            'name' => 'Transfer',
-            'operation' => 'Transfer',
-        ]);
         $from = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => 'From',
             'phone_number' => '0900000001',
             'balance' => $fromBalance,
             'is_agent' => true,
         ]);
         $to = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => 'To',
             'phone_number' => '0900000002',
             'balance' => 0,
             'is_agent' => true,
         ]);
 
-        return [$from, $to, $serviceType];
+        return [$from, $to, $company];
     }
 
-    private function fixedTier(int $serviceTypeId, int $feeDeposit = 0, int $feeWithdraw = 0): CommissionTier
-    {
-        return CommissionTier::query()->create([
-            'service_type_id' => $serviceTypeId,
-            'amount_from' => 1,
-            'amount_to' => 999_999_999_999,
-            'fee_amount_type' => 'FIXED',
-            'fee_amount_deposit' => $feeDeposit,
-            'fee_amount_withdraw' => $feeWithdraw,
-            'comm_type' => 'FIXED',
-            'additional_fee_type' => 'FIXED',
-            'is_active' => true,
-        ]);
+    private function fixedTier(
+        int $companyId,
+        int $feeDeposit = 0,
+        int $feeWithdraw = 0,
+        int $commDeposit = 0,
+        int $commWithdraw = 0,
+    ): CommissionTier {
+        return $this->createCompanyTierFixtures(
+            $companyId,
+            $feeDeposit,
+            $feeWithdraw,
+            $commDeposit,
+            $commWithdraw,
+        );
     }
-
     private function fixedTransferTier(int $companyId, int $fee): TransferFeeTier
     {
         return TransferFeeTier::query()->create([

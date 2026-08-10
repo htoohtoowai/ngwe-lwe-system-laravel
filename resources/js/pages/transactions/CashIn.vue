@@ -29,7 +29,6 @@ const props = withDefaults(
             company_id?: number | null;
             company_logo_url?: string | null;
             service?: string;
-            service_type_id?: number | null;
             name: string;
             number?: string;
             balance: string;

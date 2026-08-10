@@ -6,7 +6,6 @@ use App\Models\Account;
 use App\Models\CashFloatAssignment;
 use App\Models\Company;
 use App\Models\ExchangeRate;
-use App\Models\ServiceType;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\NgweLweTokenService;
@@ -174,23 +173,17 @@ class TellerHistoryPagesTest extends TestCase
             'name' => 'Wave-'.uniqid('', true),
             'category' => 'Pay',
         ]);
-        $serviceType = ServiceType::query()->create([
-            'company_id' => $company->id,
-            'name' => 'WST',
-            'operation' => 'All',
-            'is_active' => true,
-        ]);
 
         return [
             Account::query()->create([
-                'service_type_id' => $serviceType->id,
+                'company_id' => $company->id,
                 'account_name' => 'Wave Main',
                 'phone_number' => '0900000000',
                 'balance' => 100_000,
                 'is_active' => true,
             ]),
             Account::query()->create([
-                'service_type_id' => $serviceType->id,
+                'company_id' => $company->id,
                 'account_name' => 'Wave Second',
                 'phone_number' => '0911111111',
                 'balance' => 100_000,

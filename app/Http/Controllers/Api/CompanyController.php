@@ -4,9 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CompanyRequest;
-use App\Http\Requests\ServiceTypeRequest;
 use App\Http\Resources\CompanyResource;
-use App\Http\Resources\ServiceTypeResource;
 use App\Models\Company;
 use App\Repositories\CompanyRepository;
 use Illuminate\Database\QueryException;
@@ -40,32 +38,7 @@ class CompanyController extends Controller
 
     public function show(Company $company): CompanyResource
     {
-        return new CompanyResource($company->load('serviceTypes'));
-    }
-
-    public function serviceTypes(Request $request, Company $company): AnonymousResourceCollection
-    {
-        return ServiceTypeResource::collection(
-            $company->serviceTypes()
-                ->when(! $request->boolean('include_inactive'), fn ($query) => $query->where('is_active', true))
-                ->with('company')
-                ->orderBy('name')
-                ->get(),
-        );
-    }
-
-    public function storeServiceType(ServiceTypeRequest $request, Company $company): JsonResponse
-    {
-        $data = $request->validated();
-        $data['company_id'] = $company->id;
-
-        try {
-            $serviceType = $company->serviceTypes()->create($data)->load('company');
-        } catch (QueryException) {
-            return response()->json(['message' => 'Service type already exists.'], 409);
-        }
-
-        return (new ServiceTypeResource($serviceType))->response()->setStatusCode(201);
+        return new CompanyResource($company);
     }
 
     public function uploadLogo(Request $request, Company $company): CompanyResource|JsonResponse

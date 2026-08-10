@@ -54,7 +54,7 @@ class TellerController extends Controller
             'float' => $this->floatProp($request),
             'notes' => $this->notes(),
             'floatStock' => $this->onHand($request),
-            'accounts' => $this->accounts(AccountFeature::CashIn, 'CashIn'),
+            'accounts' => $this->accounts(AccountFeature::CashIn),
             'completed' => $this->pullCompleted($request),
         ]);
     }
@@ -65,7 +65,7 @@ class TellerController extends Controller
             'float' => $this->floatProp($request),
             'notes' => $this->notes(),
             'floatStock' => $this->onHand($request),
-            'accounts' => $this->accounts(AccountFeature::CashOut, 'CashOut'),
+            'accounts' => $this->accounts(AccountFeature::CashOut),
             'fee' => $this->fee($request, TransactionFeeCalculator::MODE_CASH_OUT),
             'commission' => $this->commission($request, TransactionFeeCalculator::COMMISSION_RECEIVE),
             'completed' => $this->pullCompleted($request),
@@ -185,17 +185,17 @@ class TellerController extends Controller
     /**
      * @return array<int, array{id:int,name:string,company:string,balance:string}>
      */
-    private function accounts(?AccountFeature $feature = null, ?string $legacyOperation = null): array
+    private function accounts(?AccountFeature $feature = null): array
     {
         $accounts = $feature !== null
-            ? $this->accounts->activeForFeature($feature, $legacyOperation)
+            ? $this->accounts->activeForFeature($feature)
             : $this->accounts->active();
 
         return $accounts
             ->map(fn (Account $account): array => [
                 'id' => $account->id,
                 'name' => $account->account_name,
-                'company' => $account->serviceType?->company?->name ?? 'Account',
+                'company' => $account->company?->name ?? 'Account',
                 'balance' => $account->balance,
             ])
             ->values()
@@ -460,7 +460,7 @@ class TellerController extends Controller
             return null;
         }
 
-        $company = $account->serviceType?->company?->name;
+        $company = $account->company?->name;
 
         return trim(($company ? "{$company} - " : '').$account->account_name);
     }

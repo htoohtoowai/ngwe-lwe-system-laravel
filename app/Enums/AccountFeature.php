@@ -36,31 +36,4 @@ enum AccountFeature: string
             []
         );
     }
-
-    /**
-     * Bridge old service_types rows into the new enum-key feature model.
-     *
-     * @return list<self>
-     */
-    public static function fromLegacy(?string $operation, ?string $name = null): array
-    {
-        $normalizedName = strtolower(str_replace([' ', '-', '_'], '', $name ?? ''));
-
-        if ($normalizedName === 'wst') {
-            return [self::SendMoney];
-        }
-
-        if (in_array($normalizedName, ['p2p', 'paytopay'], true)) {
-            return [self::ReceiveMoney];
-        }
-
-        return match ($operation) {
-            'CashIn' => [self::CashIn],
-            'CashOut' => [self::CashOut],
-            'Transfer' => [self::Transfer],
-            'Exchange' => [self::Exchange],
-            'All' => self::cases(),
-            default => [],
-        };
-    }
 }

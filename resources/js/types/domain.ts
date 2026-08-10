@@ -42,28 +42,16 @@ export type Company = {
     is_active: boolean;
 };
 
-export type ServiceType = {
-    id: number;
-    company_id: number;
-    name: string;
-    operation: string;
-    is_active: boolean;
-    company?: Company;
-};
-
 export type Account = {
     id: number;
     company_id: number | null;
-    service_type_id: number;
     account_name: string;
     phone_number: string | null;
     balance: string;
-    commission_rate: string | null;
     is_active: boolean;
     is_fee_account: boolean;
     is_agent: boolean;
     features?: string[];
-    service_type?: ServiceType;
 };
 
 export type Transaction = {
@@ -174,21 +162,14 @@ export type CommissionTier = {
     id: number;
     company_id?: number | null;
     feature?: string | null;
-    service_type_id: number;
     amount_from: string;
     amount_to: string;
     fee_type?: 'FIXED' | 'PERCENTAGE';
     fee_amount?: string;
-    fee_amount_type: 'FIXED' | 'PERCENTAGE';
-    fee_amount_deposit: string;
-    fee_amount_withdraw: string;
     comm_type: 'FIXED' | 'PERCENTAGE';
-    comm_deposit: string;
-    comm_withdraw: string;
+    comm_amount: string;
     additional_fee_type: 'FIXED' | 'PERCENTAGE';
-    additional_fee_amount?: string;
-    additional_fee_deposit_amount: string;
-    additional_fee_withdraw_amount: string;
+    additional_fee_amount: string;
     is_active: boolean;
 };
 
@@ -212,7 +193,6 @@ export type ReportEmployeeSnapshot = {
 export type ReportAccountSnapshot = {
     id: number;
     account_name: string;
-    service_type: string | null;
     company: string | null;
     balance: string;
     is_fee_account: boolean;

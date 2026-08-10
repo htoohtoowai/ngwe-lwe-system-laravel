@@ -20,12 +20,10 @@ class AccountRequest extends FormRequest
         $isUpdate = $this->isMethod('patch') || $this->isMethod('put');
 
         return [
-            'company_id' => ['sometimes', 'nullable', 'integer', 'exists:companies,id'],
-            'service_type_id' => [$isUpdate ? 'sometimes' : 'required', 'integer', 'exists:service_types,id'],
+            'company_id' => [$isUpdate ? 'sometimes' : 'required', 'integer', 'exists:companies,id'],
             'account_name' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:255'],
             'phone_number' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:255'],
             'balance' => ['sometimes', 'numeric', 'min:0'],
-            'commission_rate' => ['sometimes', 'numeric', 'min:0'],
             'is_active' => ['sometimes', 'boolean'],
             'is_fee_account' => ['sometimes', 'boolean'],
             'is_agent' => ['sometimes', 'boolean'],
@@ -43,7 +41,7 @@ class AccountRequest extends FormRequest
 
             $account = $this->route('account');
             $duplicate = Account::query()
-                ->where('service_type_id', $this->input('service_type_id', $account?->service_type_id))
+                ->where('company_id', $this->input('company_id', $account?->company_id))
                 ->where('account_name', $this->input('account_name', $account?->account_name))
                 ->where('phone_number', $this->input('phone_number', $account?->phone_number))
                 ->when($account, fn ($query) => $query->where('id', '!=', $account->id))
@@ -52,7 +50,7 @@ class AccountRequest extends FormRequest
             if ($duplicate) {
                 $validator->errors()->add(
                     'phone_number',
-                    'This service type, account name, and account number already exist.'
+                    'This company, account name, and account number already exist.'
                 );
             }
         });

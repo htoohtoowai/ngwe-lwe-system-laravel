@@ -7,7 +7,6 @@ use App\Models\Account;
 use App\Models\CommissionTier;
 use App\Models\Company;
 use App\Models\ExchangeRate;
-use App\Models\ServiceType;
 use App\Models\User;
 use App\Services\NgweLweTokenService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -124,8 +123,8 @@ class ExchangeRateAndTransactionTest extends TestCase
     public function test_exchange_transaction_credits_account_and_uses_sell_rate_for_mmk(): void
     {
         [, $token] = $this->userWithToken('admin');
-        [$account, $serviceType] = $this->accountWithBalance(0);
-        $this->fixedTier($serviceType->id, feeDeposit: 300);
+        [$account, $company] = $this->accountWithBalance(0);
+        $this->fixedTier($company->id, feeDeposit: 300);
 
         ExchangeRate::query()->create([
             'base_currency' => 'THB',
@@ -157,8 +156,8 @@ class ExchangeRateAndTransactionTest extends TestCase
     public function test_exchange_transaction_uses_buy_rate_for_thb(): void
     {
         [, $token] = $this->userWithToken('admin');
-        [$account, $serviceType] = $this->accountWithBalance(0);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(0);
+        $this->fixedTier($company->id);
 
         ExchangeRate::query()->create([
             'base_currency' => 'THB',
@@ -187,8 +186,8 @@ class ExchangeRateAndTransactionTest extends TestCase
     public function test_exchange_agent_commission_uses_provider_cash_in_tier_for_mmk_to_thb(): void
     {
         [, $token] = $this->userWithToken('admin');
-        [$account, $serviceType] = $this->accountWithBalance(0);
-        $this->featureCommissionTier($serviceType->company_id, AccountFeature::CashIn, 'FIXED', 125);
+        [$account, $company] = $this->accountWithBalance(0);
+        $this->featureCommissionTier($company->id, AccountFeature::CashIn, 'FIXED', 125);
         $this->exchangeRate();
 
         $this->withHeader('Authorization', 'Bearer '.$token)
@@ -210,8 +209,8 @@ class ExchangeRateAndTransactionTest extends TestCase
     public function test_exchange_agent_commission_uses_provider_cash_out_tier_for_thb_to_mmk(): void
     {
         [, $token] = $this->userWithToken('admin');
-        [$account, $serviceType] = $this->accountWithBalance(0);
-        $this->featureCommissionTier($serviceType->company_id, AccountFeature::CashOut, 'PERCENTAGE', 0.1);
+        [$account, $company] = $this->accountWithBalance(0);
+        $this->featureCommissionTier($company->id, AccountFeature::CashOut, 'PERCENTAGE', 0.1);
         $this->exchangeRate();
 
         $this->withHeader('Authorization', 'Bearer '.$token)
@@ -232,8 +231,8 @@ class ExchangeRateAndTransactionTest extends TestCase
     public function test_exchange_transaction_respects_base_amount_divisor(): void
     {
         [, $token] = $this->userWithToken('admin');
-        [$account, $serviceType] = $this->accountWithBalance(0);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(0);
+        $this->fixedTier($company->id);
 
         ExchangeRate::query()->create([
             'base_currency' => 'THB',
@@ -259,8 +258,8 @@ class ExchangeRateAndTransactionTest extends TestCase
     public function test_exchange_rejects_when_no_rate_stored(): void
     {
         [, $token] = $this->userWithToken('admin');
-        [$account, $serviceType] = $this->accountWithBalance(0);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(0);
+        $this->fixedTier($company->id);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/transactions/exchange', [
@@ -276,8 +275,8 @@ class ExchangeRateAndTransactionTest extends TestCase
     public function test_exchange_rejects_unsupported_currency(): void
     {
         [, $token] = $this->userWithToken('admin');
-        [$account, $serviceType] = $this->accountWithBalance(0);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(0);
+        $this->fixedTier($company->id);
 
         ExchangeRate::query()->create([
             'base_currency' => 'THB',
@@ -301,8 +300,8 @@ class ExchangeRateAndTransactionTest extends TestCase
     public function test_cashier_cannot_create_exchange(): void
     {
         [, $cashierToken] = $this->userWithToken('cashier');
-        [$account, $serviceType] = $this->accountWithBalance(0);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(0);
+        $this->fixedTier($company->id);
 
         ExchangeRate::query()->create([
             'base_currency' => 'THB',
@@ -339,7 +338,7 @@ class ExchangeRateAndTransactionTest extends TestCase
     }
 
     /**
-     * @return array{0: Account, 1: ServiceType}
+     * @return array{0: Account, 1: Company}
      */
     private function accountWithBalance(int $balance): array
     {
@@ -347,37 +346,32 @@ class ExchangeRateAndTransactionTest extends TestCase
             'name' => 'Wave-'.uniqid('', true),
             'category' => 'Pay',
         ]);
-        $serviceType = ServiceType::query()->create([
-            'company_id' => $company->id,
-            'name' => 'Exchange',
-            'operation' => 'Exchange',
-        ]);
         $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => 'Wave Main',
             'phone_number' => '0900000000',
             'balance' => $balance,
             'is_agent' => true,
         ]);
 
-        return [$account, $serviceType];
+        return [$account, $company];
     }
 
-    private function fixedTier(int $serviceTypeId, int $feeDeposit = 0, int $feeWithdraw = 0): CommissionTier
-    {
-        return CommissionTier::query()->create([
-            'service_type_id' => $serviceTypeId,
-            'amount_from' => 1,
-            'amount_to' => 999_999_999_999,
-            'fee_amount_type' => 'FIXED',
-            'fee_amount_deposit' => $feeDeposit,
-            'fee_amount_withdraw' => $feeWithdraw,
-            'comm_type' => 'FIXED',
-            'additional_fee_type' => 'FIXED',
-            'is_active' => true,
-        ]);
+    private function fixedTier(
+        int $companyId,
+        int $feeDeposit = 0,
+        int $feeWithdraw = 0,
+        int $commDeposit = 0,
+        int $commWithdraw = 0,
+    ): CommissionTier {
+        return $this->createCompanyTierFixtures(
+            $companyId,
+            $feeDeposit,
+            $feeWithdraw,
+            $commDeposit,
+            $commWithdraw,
+        );
     }
-
     private function featureCommissionTier(
         int $companyId,
         AccountFeature $feature,
@@ -387,14 +381,10 @@ class ExchangeRateAndTransactionTest extends TestCase
         return CommissionTier::query()->create([
             'company_id' => $companyId,
             'feature' => $feature->value,
-            'service_type_id' => null,
             'amount_from' => 1,
             'amount_to' => 999_999_999,
             'fee_type' => 'FIXED',
             'fee_amount' => 0,
-            'fee_amount_type' => 'FIXED',
-            'fee_amount_deposit' => 0,
-            'fee_amount_withdraw' => 0,
             'comm_type' => $type,
             'comm_amount' => $amount,
             'additional_fee_type' => 'FIXED',

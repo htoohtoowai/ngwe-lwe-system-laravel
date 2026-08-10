@@ -82,7 +82,7 @@ class TransactionService
             ? (float) $fees['customer_fee']
             : 0.0;
         $cashSettlementAmount = Money::normalize((float) $amount + $cashFee);
-        $fromCompanyId = $account->serviceType?->company_id;
+        $fromCompanyId = $account->company_id;
 
         $amountReceived = isset($data['amount_received']) && $data['amount_received'] !== null
             ? Money::normalize($data['amount_received'])
@@ -300,7 +300,7 @@ class TransactionService
         $fees = $this->calculator->resolveFees($account, $amount, TransactionFeeCalculator::MODE_CASH_OUT);
         $commission = $this->calculator->commission($account, $amount, TransactionFeeCalculator::COMMISSION_RECEIVE);
         $feePayment = $this->resolveCashOutFeePayment($data, $account, $fees['customer_fee']);
-        $fromCompanyId = $account->serviceType?->company_id;
+        $fromCompanyId = $account->company_id;
 
         $normalizedDenominations = null;
         if ($creator->role === 'teller') {
@@ -509,9 +509,9 @@ class TransactionService
         $destinationCompanyId = $this->companyId($customerTransfer ? $fromAccount : $toAccount);
         $fees = $this->transferFees->resolve($sourceCompanyId, $destinationCompanyId, $amount);
         $receiveCommission = $customerTransfer
-            ? $this->calculator->commissionForFeature($toAccount, $amount, AccountFeature::ReceiveMoney, TransactionFeeCalculator::COMMISSION_RECEIVE)
+            ? $this->calculator->commissionForFeature($toAccount, $amount, AccountFeature::ReceiveMoney)
             : Money::normalize(0);
-        $payoutCommission = $this->calculator->commissionForFeature($fromAccount, $amount, AccountFeature::SendMoney, TransactionFeeCalculator::COMMISSION_SEND);
+        $payoutCommission = $this->calculator->commissionForFeature($fromAccount, $amount, AccountFeature::SendMoney);
         $commission = Money::normalize((float) $receiveCommission + (float) $payoutCommission);
         $feePayment = $customerTransfer
             ? $this->resolveTransferFeePayment($data, $toAccount)
@@ -713,12 +713,9 @@ class TransactionService
             $account,
             $mmkSettlementAmount,
             $currency === 'MMK' ? AccountFeature::CashIn : AccountFeature::CashOut,
-            $currency === 'MMK'
-                ? TransactionFeeCalculator::COMMISSION_SEND
-                : TransactionFeeCalculator::COMMISSION_RECEIVE,
         );
         $feePayment = $this->resolveFeePayment($data, $account, $fees['customer_fee']);
-        $fromCompanyId = $account->serviceType?->company_id;
+        $fromCompanyId = $account->company_id;
 
         $normalizedDenominations = null;
         if ($creator->role === 'teller' && $currency === 'THB' && $exchangePaymentMethod === 'cash') {
@@ -978,7 +975,7 @@ class TransactionService
 
     private function companyId(Account $account): int
     {
-        $companyId = $account->company_id ?? $account->serviceType?->company_id;
+        $companyId = $account->company_id;
 
         if ($companyId === null) {
             throw new InvalidArgumentException("Account #{$account->id} is not assigned to a company.");

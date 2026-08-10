@@ -6,7 +6,6 @@ use App\Models\Account;
 use App\Models\CommissionTier;
 use App\Models\Company;
 use App\Models\ExchangeRate;
-use App\Models\ServiceType;
 use App\Models\User;
 use App\Services\NgweLweTokenService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -32,18 +31,8 @@ class AdminOperationsPageTest extends TestCase
     public function test_admin_can_open_operations_console(): void
     {
         [$admin, $token] = $this->userWithToken('admin');
-        [$company, $serviceType, $account] = $this->seedServiceAccount();
-        $tier = CommissionTier::query()->create([
-            'service_type_id' => $serviceType->id,
-            'amount_from' => 1,
-            'amount_to' => 999999999,
-            'fee_amount_type' => 'FIXED',
-            'fee_amount_deposit' => 100,
-            'fee_amount_withdraw' => 100,
-            'comm_type' => 'FIXED',
-            'additional_fee_type' => 'FIXED',
-            'is_active' => true,
-        ]);
+        [$company, $account] = $this->seedServiceAccount();
+        $tier = $this->createCompanyTierFixtures($company->id, 100, 100);
         $rate = ExchangeRate::query()->create([
             'base_currency' => 'THB',
             'quote_currency' => 'MMK',
@@ -64,7 +53,6 @@ class AdminOperationsPageTest extends TestCase
 
         foreach ([
             '/admin/companies' => ['companies', 'admin/Companies'],
-            '/admin/service-types' => ['service-types', 'admin/ServiceTypes'],
             '/admin/exchange-rates' => ['exchange-rates', 'admin/ExchangeRates'],
             '/admin/accounts' => ['accounts', 'admin/Accounts'],
             '/admin/fees' => ['fees', 'admin/Fees'],
@@ -117,9 +105,6 @@ class AdminOperationsPageTest extends TestCase
             '/admin/companies/create' => ['companies', 'create', null, 'admin/Companies'],
             '/admin/companies/'.$company->id => ['companies', 'detail', $company->id, 'admin/Companies'],
             '/admin/companies/'.$company->id.'/edit' => ['companies', 'edit', $company->id, 'admin/Companies'],
-            '/admin/service-types/create' => ['service-types', 'create', null, 'admin/ServiceTypes'],
-            '/admin/service-types/'.$serviceType->id => ['service-types', 'detail', $serviceType->id, 'admin/ServiceTypes'],
-            '/admin/service-types/'.$serviceType->id.'/edit' => ['service-types', 'edit', $serviceType->id, 'admin/ServiceTypes'],
             '/admin/exchange-rates/create' => ['exchange-rates', 'create', null, 'admin/ExchangeRates'],
             '/admin/exchange-rates/'.$rate->id => ['exchange-rates', 'detail', $rate->id, 'admin/ExchangeRates'],
             '/admin/exchange-rates/'.$rate->id.'/edit' => ['exchange-rates', 'edit', $rate->id, 'admin/ExchangeRates'],
@@ -237,10 +222,6 @@ class AdminOperationsPageTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.0.name', 'Wave Money');
 
-        $this->withHeader('Authorization', 'Bearer '.$token)
-            ->getJson('/api/service-types?include_inactive=1')
-            ->assertOk()
-            ->assertJsonPath('data.0.name', 'WST');
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->getJson('/api/accounts?include_inactive=1')
@@ -297,24 +278,14 @@ class AdminOperationsPageTest extends TestCase
             ->get('/companies/'.$companyId.'/logo')
             ->assertOk();
 
-        $serviceTypeId = $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/service-types', [
-                'company_id' => $companyId,
-                'name' => 'P2P',
-                'operation' => 'CashIn',
-                'is_active' => true,
-            ])
-            ->assertCreated()
-            ->assertJsonPath('data.name', 'P2P')
-            ->json('data.id');
 
         $accountId = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/accounts', [
-                'service_type_id' => $serviceTypeId,
+                'company_id' => $companyId,
+                'features' => ['cash_in'],
                 'account_name' => 'P2P Main',
                 'phone_number' => '0912345678',
                 'balance' => 10000,
-                'commission_rate' => 0,
                 'is_fee_account' => false,
                 'is_active' => true,
             ])
@@ -324,23 +295,20 @@ class AdminOperationsPageTest extends TestCase
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/commission-tiers', [
-                'service_type_id' => $serviceTypeId,
+                'company_id' => $companyId,
+                'feature' => 'cash_in',
                 'amount_from' => 1,
                 'amount_to' => 999999999,
-                'fee_amount_type' => 'FIXED',
-                'fee_amount_deposit' => 100,
-                'fee_amount_withdraw' => 100,
+                'fee_type' => 'FIXED',
+                'fee_amount' => 100,
                 'comm_type' => 'FIXED',
-                'comm_deposit' => 0,
-                'comm_withdraw' => 0,
+                'comm_amount' => 0,
                 'additional_fee_type' => 'FIXED',
-                'additional_fee_deposit_amount' => 0,
-                'additional_fee_withdraw_amount' => 0,
+                'additional_fee_amount' => 0,
                 'is_active' => true,
             ])
             ->assertCreated()
-            ->assertJsonPath('data.fee_amount_cash_in', '100.0000');
-
+            ->assertJsonPath('data.fee_amount', '100.0000');
         $userId = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/users', [
                 'username' => 'console_teller',
@@ -379,7 +347,7 @@ class AdminOperationsPageTest extends TestCase
     public function test_non_admin_roles_cannot_use_admin_management_endpoints(): void
     {
         [, $token] = $this->userWithToken('teller');
-        [, , $account] = $this->seedServiceAccount();
+        [, $account] = $this->seedServiceAccount();
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->getJson('/api/users')
@@ -420,7 +388,7 @@ class AdminOperationsPageTest extends TestCase
     }
 
     /**
-     * @return array{0: Company, 1: ServiceType, 2: Account}
+     * @return array{0: Company, 1: Account}
      */
     private function seedServiceAccount(): array
     {
@@ -429,20 +397,14 @@ class AdminOperationsPageTest extends TestCase
             'category' => 'Pay',
             'is_active' => true,
         ]);
-        $serviceType = ServiceType::query()->create([
-            'company_id' => $company->id,
-            'name' => 'WST',
-            'operation' => 'CashIn',
-            'is_active' => true,
-        ]);
         $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => 'Wave Main',
             'phone_number' => '0900000000',
             'balance' => '10000.00',
             'is_active' => true,
         ]);
 
-        return [$company, $serviceType, $account];
+        return [$company, $account];
     }
 }

@@ -4,7 +4,6 @@ namespace Tests\Feature;
 
 use App\Models\Account;
 use App\Models\Company;
-use App\Models\ServiceType;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -25,7 +24,7 @@ class DatabaseSeederTest extends TestCase
         config()->set('ngwe_lwe.auth.secret', str_repeat('d', 32));
     }
 
-    public function test_database_seeder_creates_login_users_and_master_data_without_demo_accounts(): void
+    public function test_database_seeder_creates_login_users_and_master_provider_accounts(): void
     {
         $this->seed(DatabaseSeeder::class);
 
@@ -54,11 +53,8 @@ class DatabaseSeederTest extends TestCase
         $company = Company::query()->where('name', 'Wave Money')->firstOrFail();
         $this->assertSame('Pay', $company->category);
         $this->assertTrue((bool) $company->is_active);
-
-        $this->assertSame(3, ServiceType::query()->where('company_id', $company->id)->count());
-        $this->assertSame(0, Account::query()->count());
+        $this->assertGreaterThan(0, Account::query()->count());
         $this->assertSame(0, Company::query()->where('name', 'like', 'Demo %')->count());
-        $this->assertSame(0, ServiceType::query()->where('name', 'like', 'Demo %')->count());
         $this->assertDatabaseHas('exchange_rates', [
             'base_currency' => 'THB',
             'quote_currency' => 'MMK',
@@ -78,10 +74,8 @@ class DatabaseSeederTest extends TestCase
         $this->assertSame(1, Company::query()->where('name', 'Wave Money')->count());
 
         $company = Company::query()->where('name', 'Wave Money')->firstOrFail();
-        $this->assertSame(3, ServiceType::query()->where('company_id', $company->id)->count());
-        $this->assertSame(0, Account::query()->count());
+        $this->assertGreaterThan(0, Account::query()->count());
         $this->assertSame(0, Company::query()->where('name', 'like', 'Demo %')->count());
-        $this->assertSame(0, ServiceType::query()->where('name', 'like', 'Demo %')->count());
 
         $this->assertSame(8, DB::table('cash_denomination_logs')
             ->where('note', 'Demo vault opening balance')

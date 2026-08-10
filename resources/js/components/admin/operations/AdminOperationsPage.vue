@@ -23,28 +23,17 @@ type Company = {
     updated_at?: string | null;
 };
 
-type ServiceType = {
-    id: number;
-    company_id: number;
-    name: string;
-    operation: 'CashIn' | 'CashOut' | 'Transfer' | 'Exchange' | 'All' | string;
-    is_active: boolean;
-    company?: Company | null;
-};
-
 type Account = {
     id: number;
     company_id?: number | null;
-    service_type_id: number;
     account_name: string;
     phone_number: string;
     balance: MoneyValue;
-    commission_rate: MoneyValue;
     is_active: boolean;
     is_fee_account: boolean;
     is_agent: boolean;
     features?: string[];
-    service_type?: ServiceType | null;
+    company?: Company | null;
 };
 
 type User = {
@@ -56,24 +45,6 @@ type User = {
     is_active: boolean;
     has_pin: boolean;
     created_at?: string | null;
-};
-
-type CommissionTier = {
-    id: number;
-    service_type_id: number;
-    amount_from: MoneyValue;
-    amount_to: MoneyValue;
-    fee_amount_type: 'FIXED' | 'PERCENTAGE' | string;
-    fee_amount_deposit: MoneyValue;
-    fee_amount_withdraw: MoneyValue;
-    comm_type: 'FIXED' | 'PERCENTAGE' | string;
-    comm_deposit: MoneyValue;
-    comm_withdraw: MoneyValue;
-    additional_fee_type: 'FIXED' | 'PERCENTAGE' | string;
-    additional_fee_deposit_amount: MoneyValue;
-    additional_fee_withdraw_amount: MoneyValue;
-    is_active: boolean;
-    service_type?: ServiceType | null;
 };
 
 type ExchangeRate = {
@@ -144,7 +115,6 @@ type FloatSnapshot = {
 type AccountSnapshot = {
     id: number;
     account_name: string;
-    service_type?: string | null;
     company?: string | null;
     balance: MoneyValue;
     is_fee_account?: boolean;
@@ -175,7 +145,6 @@ type Summary = {
 type AdminTab =
     | 'overview'
     | 'companies'
-    | 'service-types'
     | 'exchange-rates'
     | 'accounts'
     | 'fees'
@@ -198,7 +167,6 @@ type AdminBreadcrumbItem = {
 type AdminData = {
     dailySummary: Summary;
     companies: Company[];
-    serviceTypes: ServiceType[];
     accounts: Account[];
     users: User[];
     transactions: Transaction[];
@@ -206,7 +174,6 @@ type AdminData = {
     cashFloats: CashFloat[];
     vaultInventory: VaultInventory | null;
     exchangeRates: ExchangeRate[];
-    commissionTiers: CommissionTier[];
 };
 
 const props = defineProps<{
@@ -224,7 +191,6 @@ const initialData = props.adminData ?? page.props.adminData;
 
 const setupSections: AdminTab[] = [
     'companies',
-    'service-types',
     'exchange-rates',
 ];
 
@@ -262,12 +228,10 @@ const companyLogoFile = ref<File | null>(null);
 const companyLogoInput = ref<HTMLInputElement | null>(null);
 const companyLogoUrls = ref<Record<number, string>>({});
 const companyPendingDelete = ref<Company | null>(null);
-const serviceTypePendingDelete = ref<ServiceType | null>(null);
 const accountPendingDelete = ref<Account | null>(null);
 
 const dailySummary = ref<Summary | null>(initialData?.dailySummary ?? null);
 const companies = ref<Company[]>(initialData?.companies ?? []);
-const serviceTypes = ref<ServiceType[]>(initialData?.serviceTypes ?? []);
 const accounts = ref<Account[]>(initialData?.accounts ?? []);
 const users = ref<User[]>(initialData?.users ?? []);
 const transactions = ref<Transaction[]>(initialData?.transactions ?? []);
@@ -275,7 +239,6 @@ const activityLogs = ref<ActivityLog[]>(initialData?.activityLogs ?? []);
 const cashFloats = ref<CashFloat[]>(initialData?.cashFloats ?? []);
 const vaultInventory = ref<VaultInventory | null>(initialData?.vaultInventory ?? null);
 const exchangeRates = ref<ExchangeRate[]>(initialData?.exchangeRates ?? []);
-const commissionTiers = ref<CommissionTier[]>(initialData?.commissionTiers ?? []);
 const adminListSearch = ref('');
 const adminListFilter = ref('');
 const adminListPageSize = ref(25);
@@ -304,46 +267,16 @@ const filteredCompanies = computed(() => filteredList(companies.value));
 const activeCompanies = computed(() =>
     companies.value.filter((company) => company.is_active),
 );
-const selectableServiceTypes = computed(() =>
-    serviceTypes.value.filter(
-        (serviceType) =>
-            serviceType.is_active && serviceType.company?.is_active !== false,
-    ),
-);
 const selectableAccounts = computed(() =>
-    accounts.value.filter(
-        (account) =>
-            account.is_active &&
-            account.service_type?.is_active !== false &&
-            account.service_type?.company?.is_active !== false,
-    ),
+    accounts.value.filter((account) => account.is_active && account.company?.is_active !== false),
 );
-const filteredServiceTypes = computed(() => filteredList(serviceTypes.value));
 const filteredExchangeRates = computed(() => filteredList(exchangeRates.value));
 const filteredAccounts = computed(() => filteredList(accounts.value));
 const filteredUsers = computed(() => filteredList(users.value));
-const filteredTiers = computed(() => {
-    const selectableIds = new Set(
-        selectableServiceTypes.value.map((serviceType) => serviceType.id),
-    );
-    const visibleTiers = commissionTiers.value.filter((tier) =>
-        selectableIds.has(tier.service_type_id),
-    );
-
-    return filteredList(
-        tierServiceTypeId.value === null
-            ? visibleTiers
-            : visibleTiers.filter(
-                  (tier) => tier.service_type_id === tierServiceTypeId.value,
-              ),
-    );
-});
 const currentAdminList = computed(() => {
     if (activeTab.value === 'companies') return filteredCompanies.value;
-    if (activeTab.value === 'service-types') return filteredServiceTypes.value;
     if (activeTab.value === 'exchange-rates') return filteredExchangeRates.value;
     if (activeTab.value === 'accounts') return filteredAccounts.value;
-    if (activeTab.value === 'fees') return filteredTiers.value;
     if (activeTab.value === 'users') return filteredUsers.value;
     return [];
 });
@@ -351,10 +284,8 @@ const adminListPageCount = computed(() =>
     Math.max(1, Math.ceil(currentAdminList.value.length / adminListPageSize.value)),
 );
 const paginatedCompanies = computed(() => pagedList(filteredCompanies.value));
-const paginatedServiceTypes = computed(() => pagedList(filteredServiceTypes.value));
 const paginatedExchangeRates = computed(() => pagedList(filteredExchangeRates.value));
 const paginatedAccounts = computed(() => pagedList(filteredAccounts.value));
-const paginatedTiers = computed(() => pagedList(filteredTiers.value));
 const paginatedUsers = computed(() => pagedList(filteredUsers.value));
 const statusFilterOptions = [
     { value: 'true', label: 'Active' },
@@ -378,18 +309,11 @@ const companyForm = ref({
     category: 'Pay',
     is_active: true,
 });
-const serviceForm = ref({
-    company_id: null as number | null,
-    name: '',
-    operation: 'CashIn',
-    is_active: true,
-});
 const accountForm = ref({
-    service_type_id: null as number | null,
+    company_id: null as number | null,
     account_name: '',
     phone_number: '',
     balance: 0,
-    commission_rate: 0,
     features: ['cash_in'] as string[],
     is_fee_account: false,
     is_agent: false,
@@ -399,22 +323,6 @@ const adjustForm = ref({
     account_id: null as number | null,
     amount: 0,
     remark: '',
-});
-const tierServiceTypeId = ref<number | null>(null);
-const tierForm = ref({
-    service_type_id: null as number | null,
-    amount_from: 1,
-    amount_to: 999999999,
-    fee_amount_type: 'FIXED',
-    fee_amount_deposit: 0,
-    fee_amount_withdraw: 0,
-    comm_type: 'FIXED',
-    comm_deposit: 0,
-    comm_withdraw: 0,
-    additional_fee_type: 'FIXED',
-    additional_fee_deposit_amount: 0,
-    additional_fee_withdraw_amount: 0,
-    is_active: true,
 });
 const userForm = ref({
     username: '',
@@ -515,11 +423,6 @@ watch(activityPageCount, (count) => {
 const activeCompanyCount = computed(
     () => companies.value.filter((company) => company.is_active).length,
 );
-const activeServiceCount = computed(
-    () =>
-        serviceTypes.value.filter((serviceType) => serviceType.is_active)
-            .length,
-);
 const activeAccountCount = computed(
     () => accounts.value.filter((account) => account.is_active).length,
 );
@@ -528,12 +431,6 @@ const digitalTotal = computed(() =>
 );
 const feeAccounts = computed(() =>
     accounts.value.filter((account) => account.is_fee_account),
-);
-const selectedTierService = computed(
-    () =>
-        serviceTypes.value.find(
-            (serviceType) => serviceType.id === tierServiceTypeId.value,
-        ) ?? null,
 );
 const latestRates = computed(() => exchangeRates.value.slice(0, 8));
 const vaultDenominations = computed(() =>
@@ -554,20 +451,9 @@ const currentCompany = computed(
         companies.value.find((company) => company.id === resourceId.value) ??
         null,
 );
-const currentServiceType = computed(
-    () =>
-        serviceTypes.value.find(
-            (serviceType) => serviceType.id === resourceId.value,
-        ) ?? null,
-);
 const currentAccount = computed(
     () =>
         accounts.value.find((account) => account.id === resourceId.value) ??
-        null,
-);
-const currentTier = computed(
-    () =>
-        commissionTiers.value.find((tier) => tier.id === resourceId.value) ??
         null,
 );
 const currentUser = computed(
@@ -584,19 +470,9 @@ const currentTransaction = computed(
             (transaction) => transaction.id === resourceId.value,
         ) ?? null,
 );
-const visibleCommissionTiers = computed(() => {
-    if (tierServiceTypeId.value === null) {
-        return commissionTiers.value;
-    }
-
-    return commissionTiers.value.filter(
-        (tier) => tier.service_type_id === tierServiceTypeId.value,
-    );
-});
 const sectionSlugs: Record<AdminTab, string> = {
     overview: '',
     companies: 'companies',
-    'service-types': 'service-types',
     'exchange-rates': 'exchange-rates',
     accounts: 'accounts',
     fees: 'fees',
@@ -608,7 +484,6 @@ const sectionSlugs: Record<AdminTab, string> = {
 const adminTabLabels: Record<AdminTab, string> = {
     overview: 'Owner Console',
     companies: 'Companies',
-    'service-types': 'Service Types',
     'exchange-rates': 'Exchange Rates',
     accounts: 'Accounts',
     fees: 'Fees',
@@ -672,8 +547,8 @@ watch(
     companies,
     (values) => {
         const firstActiveCompany = values.find((company) => company.is_active);
-        if (serviceForm.value.company_id === null && firstActiveCompany) {
-            serviceForm.value.company_id = firstActiveCompany.id;
+        if (accountForm.value.company_id === null && firstActiveCompany) {
+            accountForm.value.company_id = firstActiveCompany.id;
         }
 
         void refreshCompanyLogoUrls(values);
@@ -682,53 +557,12 @@ watch(
 );
 
 watch(
-    serviceTypes,
-    (values) => {
-        const firstId = values.find(
-            (serviceType) =>
-                serviceType.is_active &&
-                serviceType.company?.is_active !== false,
-        )?.id ?? null;
-
-        if (accountForm.value.service_type_id === null) {
-            accountForm.value.service_type_id = firstId;
-        }
-
-        if (
-            tierServiceTypeId.value === null &&
-            activeTab.value === 'fees' &&
-            activeMode.value !== 'list'
-        ) {
-            tierServiceTypeId.value = firstId;
-        }
-    },
-    { immediate: true },
-);
-
-watch(tierServiceTypeId, (value) => {
-    tierForm.value.service_type_id = value;
-});
-
-watch(selectableServiceTypes, (values) => {
-    if (
-        tierServiceTypeId.value !== null &&
-        !values.some(
-            (serviceType) => serviceType.id === tierServiceTypeId.value,
-        )
-    ) {
-        tierServiceTypeId.value = null;
-    }
-});
-
-watch(
     [
         activeTab,
         activeMode,
         resourceId,
         currentCompany,
-        currentServiceType,
         currentAccount,
-        currentTier,
         currentUser,
         currentExchangeRate,
     ],
@@ -838,7 +672,7 @@ function isSetupSection(tab: AdminTab): boolean {
 }
 
 function showSetupCard(
-    tab: 'companies' | 'service-types' | 'exchange-rates',
+    tab: 'companies' | 'exchange-rates',
 ): boolean {
     return activeTab.value === tab;
 }
@@ -888,44 +722,15 @@ function resetCompanyForm(): void {
     resetCompanyLogoInput();
 }
 
-function resetServiceForm(): void {
-    serviceForm.value = {
-        company_id: activeCompanies.value[0]?.id ?? null,
-        name: '',
-        operation: 'CashIn',
-        is_active: true,
-    };
-}
-
 function resetAccountForm(): void {
     accountForm.value = {
-        service_type_id: selectableServiceTypes.value[0]?.id ?? null,
+        company_id: activeCompanies.value[0]?.id ?? null,
         account_name: '',
         phone_number: '',
         balance: 0,
-        commission_rate: 0,
         features: ['cash_in'],
         is_fee_account: false,
         is_agent: false,
-        is_active: true,
-    };
-}
-
-function resetTierForm(): void {
-    tierForm.value = {
-        service_type_id:
-            tierServiceTypeId.value ?? selectableServiceTypes.value[0]?.id ?? null,
-        amount_from: 1,
-        amount_to: 999999999,
-        fee_amount_type: 'FIXED',
-        fee_amount_deposit: 0,
-        fee_amount_withdraw: 0,
-        comm_type: 'FIXED',
-        comm_deposit: 0,
-        comm_withdraw: 0,
-        additional_fee_type: 'FIXED',
-        additional_fee_deposit_amount: 0,
-        additional_fee_withdraw_amount: 0,
         is_active: true,
     };
 }
@@ -956,12 +761,10 @@ function syncFormsFromRoute(): void {
     if (activeMode.value === 'create') {
         if (activeTab.value === 'companies') {
             resetCompanyForm();
-        } else if (activeTab.value === 'service-types') {
-            resetServiceForm();
+
         } else if (activeTab.value === 'accounts') {
             resetAccountForm();
-        } else if (activeTab.value === 'fees') {
-            resetTierForm();
+
         } else if (activeTab.value === 'users') {
             resetUserForm();
         } else if (activeTab.value === 'exchange-rates') {
@@ -991,23 +794,13 @@ function syncFormsFromRoute(): void {
             category: currentCompany.value.category,
             is_active: currentCompany.value.is_active,
         };
-    } else if (
-        activeTab.value === 'service-types' &&
-        currentServiceType.value
-    ) {
-        serviceForm.value = {
-            company_id: currentServiceType.value.company_id,
-            name: currentServiceType.value.name,
-            operation: currentServiceType.value.operation,
-            is_active: currentServiceType.value.is_active,
-        };
+
     } else if (activeTab.value === 'accounts' && currentAccount.value) {
         accountForm.value = {
-            service_type_id: currentAccount.value.service_type_id,
+            company_id: currentAccount.value.company_id ?? null,
             account_name: currentAccount.value.account_name,
             phone_number: currentAccount.value.phone_number,
             balance: numeric(currentAccount.value.balance),
-            commission_rate: numeric(currentAccount.value.commission_rate),
             features:
                 currentAccount.value.features &&
                 currentAccount.value.features.length > 0
@@ -1016,27 +809,6 @@ function syncFormsFromRoute(): void {
             is_fee_account: currentAccount.value.is_fee_account,
             is_agent: currentAccount.value.is_agent,
             is_active: currentAccount.value.is_active,
-        };
-    } else if (activeTab.value === 'fees' && currentTier.value) {
-        tierServiceTypeId.value = currentTier.value.service_type_id;
-        tierForm.value = {
-            service_type_id: currentTier.value.service_type_id,
-            amount_from: numeric(currentTier.value.amount_from),
-            amount_to: numeric(currentTier.value.amount_to),
-            fee_amount_type: currentTier.value.fee_amount_type,
-            fee_amount_deposit: numeric(currentTier.value.fee_amount_deposit),
-            fee_amount_withdraw: numeric(currentTier.value.fee_amount_withdraw),
-            comm_type: currentTier.value.comm_type,
-            comm_deposit: numeric(currentTier.value.comm_deposit),
-            comm_withdraw: numeric(currentTier.value.comm_withdraw),
-            additional_fee_type: currentTier.value.additional_fee_type,
-            additional_fee_deposit_amount: numeric(
-                currentTier.value.additional_fee_deposit_amount,
-            ),
-            additional_fee_withdraw_amount: numeric(
-                currentTier.value.additional_fee_withdraw_amount,
-            ),
-            is_active: currentTier.value.is_active,
         };
     } else if (activeTab.value === 'users' && currentUser.value) {
         userForm.value = {
@@ -1100,11 +872,6 @@ function money(value: MoneyValue | undefined): string {
     });
 }
 
-function percent(value: MoneyValue | undefined): string {
-    return numeric(value).toLocaleString(undefined, {
-        maximumFractionDigits: 4,
-    });
-}
 
 function dateTime(value: string | null | undefined): string {
     return value ? new Date(value).toLocaleString() : '-';
@@ -1118,30 +885,6 @@ function userName(userId: number | null | undefined): string {
     const user = users.value.find((row) => row.id === userId);
 
     return user?.full_name ?? user?.username ?? `#${userId}`;
-}
-
-function companyName(serviceType: ServiceType | null | undefined): string {
-    if (serviceType?.company?.name) {
-        return serviceType.company.name;
-    }
-
-    const company = companies.value.find(
-        (row) => row.id === serviceType?.company_id,
-    );
-
-    return company?.name ?? '-';
-}
-
-function serviceLabel(serviceType: ServiceType | null | undefined): string {
-    if (!serviceType) {
-        return '-';
-    }
-
-    return `${companyName(serviceType)} / ${serviceType.name}`;
-}
-
-function serviceOptionLabel(serviceType: ServiceType): string {
-    return `${serviceLabel(serviceType)} (${serviceType.operation})`;
 }
 
 function accountFeatureLabel(value: string): string {
@@ -1255,7 +998,6 @@ function syncAdminData(): void {
     if (!data) return;
     dailySummary.value = data.dailySummary;
     companies.value = data.companies;
-    serviceTypes.value = data.serviceTypes;
     accounts.value = data.accounts;
     users.value = data.users;
     transactions.value = data.transactions;
@@ -1263,7 +1005,6 @@ function syncAdminData(): void {
     cashFloats.value = data.cashFloats;
     vaultInventory.value = data.vaultInventory;
     exchangeRates.value = data.exchangeRates;
-    commissionTiers.value = data.commissionTiers;
     void refreshCompanyLogoUrls();
 }
 
@@ -1329,68 +1070,9 @@ async function confirmCompanyDelete(): Promise<void> {
     });
 }
 
-async function saveServiceType(): Promise<void> {
-    if (serviceForm.value.company_id === null) {
-        error.value = 'Select a company first.';
-
-        return;
-    }
-
-    await runAction('Service type saved.', async () => {
-        const isEdit = activeMode.value === 'edit' && resourceId.value !== null;
-        await request(
-            isEdit
-                ? `/admin/actions/service-types/${resourceId.value}`
-                : '/admin/actions/service-types',
-            {
-                method: isEdit ? 'PATCH' : 'POST',
-                body: {
-                    ...serviceForm.value,
-                    company_id: serviceForm.value.company_id,
-                },
-            },
-        );
-        resetServiceForm();
-    });
-}
-
-async function toggleServiceType(serviceType: ServiceType): Promise<void> {
-    await runAction('Service type status updated.', async () => {
-        await request(`/admin/actions/service-types/${serviceType.id}/status`, {
-            method: 'PATCH',
-            body: { is_active: !serviceType.is_active },
-        });
-    });
-}
-
-function openServiceTypeDeleteModal(serviceType: ServiceType): void {
-    serviceTypePendingDelete.value = serviceType;
-}
-
-function closeServiceTypeDeleteModal(): void {
-    if (busy.value === '') {
-        serviceTypePendingDelete.value = null;
-    }
-}
-
-async function confirmServiceTypeDelete(): Promise<void> {
-    const serviceType = serviceTypePendingDelete.value;
-
-    if (!serviceType) {
-        return;
-    }
-
-    await runAction('Service type deleted.', async () => {
-        await request(`/admin/actions/service-types/${serviceType.id}`, {
-            method: 'DELETE',
-        });
-        serviceTypePendingDelete.value = null;
-    });
-}
-
 async function saveAccount(): Promise<void> {
-    if (accountForm.value.service_type_id === null) {
-        error.value = 'Select a service type first.';
+    if (accountForm.value.company_id === null) {
+        error.value = 'Select a provider first.';
 
         return;
     }
@@ -1403,7 +1085,7 @@ async function saveAccount(): Promise<void> {
                 method: isEdit ? 'PATCH' : 'POST',
                 body: {
                     ...accountForm.value,
-                    service_type_id: accountForm.value.service_type_id,
+                    company_id: accountForm.value.company_id,
                 },
             },
         );
@@ -1468,37 +1150,6 @@ async function adjustAccountBalance(): Promise<void> {
             amount: 0,
             remark: '',
         };
-    });
-}
-
-async function saveTier(): Promise<void> {
-    if (tierForm.value.service_type_id === null) {
-        error.value = 'Select a service type first.';
-
-        return;
-    }
-
-    await runAction('Commission tier saved.', async () => {
-        const isEdit = activeMode.value === 'edit' && resourceId.value !== null;
-        await request(
-            isEdit
-                ? `/admin/actions/commission-tiers/${resourceId.value}`
-                : '/admin/actions/commission-tiers',
-            {
-                method: isEdit ? 'PATCH' : 'POST',
-                body: {
-                    ...tierForm.value,
-                    service_type_id: tierForm.value.service_type_id,
-                },
-            },
-        );
-        resetTierForm();
-    });
-}
-
-async function deleteTier(tier: CommissionTier): Promise<void> {
-    await runAction('Commission tier deleted.', async () => {
-        await request(`/admin/actions/commission-tiers/${tier.id}`, { method: 'DELETE' });
     });
 }
 
@@ -1800,7 +1451,7 @@ async function sendBroadcastTest(): Promise<void> {
                                 <tr>
                                     <th class="px-4 py-3">Account</th>
                                     <th class="px-4 py-3">Company</th>
-                                    <th class="px-4 py-3">Service</th>
+                                    <th class="px-4 py-3">Provider</th>
                                     <th class="px-4 py-3 text-right">
                                         Balance
                                     </th>
@@ -1818,7 +1469,7 @@ async function sendBroadcastTest(): Promise<void> {
                                         {{ account.company ?? '-' }}
                                     </td>
                                     <td class="px-4 py-3 text-slate">
-                                        {{ account.service_type ?? '-' }}
+                                        {{ account.company ?? '-' }}
                                     </td>
                                     <td
                                         class="money px-4 py-3 text-right font-bold text-ink"
@@ -1861,11 +1512,10 @@ async function sendBroadcastTest(): Promise<void> {
                             class="flex items-center justify-between rounded-lg bg-mist px-4 py-3"
                         >
                             <span class="text-sm font-bold text-slate"
-                                >Service Types</span
+                                >Account Features</span
                             >
                             <strong class="money text-ink"
-                                >{{ activeServiceCount }} /
-                                {{ serviceTypes.length }}</strong
+                                >{{ accountFeatureOptions.length }}</strong
                             >
                         </div>
                         <div
@@ -2211,280 +1861,6 @@ async function sendBroadcastTest(): Promise<void> {
                 </div>
 
                 <div
-                    v-if="showSetupCard('service-types')"
-                    class="rounded-xl border border-line bg-card p-5 shadow-sm"
-                >
-                    <div class="flex items-center justify-between gap-3">
-                        <h2
-                            v-if="activeMode !== 'list'"
-                            class="text-lg font-black text-ink"
-                        >
-                            Service Types
-                        </h2>
-                        <div class="ml-auto flex gap-2">
-                            <Link
-                                v-if="activeMode !== 'list'"
-                                :href="adminPath('service-types')"
-                                :headers="authHeaders()"
-                                class="bank-button bank-button-secondary py-2"
-                            >
-                                List
-                            </Link>
-                            <Link
-                                v-if="activeMode === 'list'"
-                                :href="adminPath('service-types', 'create')"
-                                :headers="authHeaders()"
-                                class="bank-button bank-button-primary py-2"
-                            >
-                                Create
-                            </Link>
-                            <Link
-                                v-if="
-                                    shouldShowDetail('service-types') &&
-                                    currentServiceType
-                                "
-                                :href="
-                                    adminPath(
-                                        'service-types',
-                                        'edit',
-                                        currentServiceType.id,
-                                    )
-                                "
-                                :headers="authHeaders()"
-                                class="bank-button bank-button-primary py-2"
-                            >
-                                Edit
-                            </Link>
-                        </div>
-                    </div>
-                    <form
-                        v-if="shouldShowCreateEdit('service-types')"
-                        class="mt-4 grid gap-3"
-                        @submit.prevent="saveServiceType"
-                    >
-                        <label>
-                            <span class="bank-label">Company</span>
-                            <select
-                                v-model.number="serviceForm.company_id"
-                                class="bank-input"
-                                required
-                            >
-                                <option
-                                    v-for="company in activeCompanies"
-                                    :key="company.id"
-                                    :value="company.id"
-                                >
-                                    {{ company.name }}
-                                </option>
-                            </select>
-                        </label>
-                        <label>
-                            <span class="bank-label">Service Value</span>
-                            <input
-                                v-model.trim="serviceForm.name"
-                                class="bank-input"
-                                required
-                                placeholder="WST, P2P"
-                            />
-                        </label>
-                        <label>
-                            <span class="bank-label">Operation</span>
-                            <select
-                                v-model="serviceForm.operation"
-                                class="bank-input"
-                            >
-                                <option>CashIn</option>
-                                <option>CashOut</option>
-                                <option>Transfer</option>
-                                <option>Exchange</option>
-                                <option>All</option>
-                            </select>
-                        </label>
-                        <label
-                            class="flex items-center gap-2 text-sm font-bold text-ink"
-                        >
-                            <input
-                                v-model="serviceForm.is_active"
-                                type="checkbox"
-                                class="size-4 accent-brand"
-                            />
-                            Active
-                        </label>
-                        <button
-                            type="submit"
-                            class="bank-button bank-button-primary"
-                            :disabled="busy !== ''"
-                        >
-                            {{
-                                activeMode === 'edit'
-                                    ? 'Update Service'
-                                    : 'Save Service'
-                            }}
-                        </button>
-                    </form>
-                    <div
-                        v-else-if="shouldShowDetail('service-types')"
-                        class="mt-4 rounded-lg border border-line bg-mist p-4"
-                    >
-                        <template v-if="currentServiceType">
-                            <div class="mb-4 flex justify-end">
-                                <button
-                                    v-if="currentServiceType.is_active"
-                                    type="button"
-                                    class="bank-button bank-button-danger py-2"
-                                    :disabled="busy !== ''"
-                                    @click="
-                                        openServiceTypeDeleteModal(
-                                            currentServiceType,
-                                        )
-                                    "
-                                >
-                                    Delete
-                                </button>
-                            </div>
-                            <dl class="grid gap-3 text-sm sm:grid-cols-2">
-                                <div>
-                                    <dt class="font-bold text-slate">
-                                        Service
-                                    </dt>
-                                    <dd class="font-black text-ink">
-                                        {{ currentServiceType.name }}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt class="font-bold text-slate">
-                                        Company
-                                    </dt>
-                                    <dd class="font-black text-ink">
-                                        {{ companyName(currentServiceType) }}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt class="font-bold text-slate">
-                                        Operation
-                                    </dt>
-                                    <dd class="font-black text-ink">
-                                        {{ currentServiceType.operation }}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt class="font-bold text-slate">Status</dt>
-                                    <dd class="font-black text-ink">
-                                        {{
-                                            currentServiceType.is_active
-                                                ? 'Active'
-                                                : 'Inactive'
-                                        }}
-                                    </dd>
-                                </div>
-                            </dl>
-                        </template>
-                        <p v-else class="text-sm font-semibold text-slate">
-                            Service type not found.
-                        </p>
-                    </div>
-                    <AdminListFrame
-                        v-else
-                        v-model:search="adminListSearch"
-                        v-model:filter="adminListFilter"
-                        v-model:page="adminListPage"
-                        v-model:page-size="adminListPageSize"
-                        :total="filteredServiceTypes.length"
-                        :page-count="adminListPageCount"
-                        :filter-options="statusFilterOptions"
-                        search-placeholder="Search service type, company, operation"
-                    >
-                    <div class="mt-4 overflow-auto rounded-lg border border-line">
-                        <table class="w-full text-left text-sm">
-                            <tbody class="divide-y divide-line">
-                                <tr
-                                    v-for="serviceType in paginatedServiceTypes"
-                                    :key="serviceType.id"
-                                >
-                                    <td class="px-3 py-3">
-                                        <p class="font-bold text-ink">
-                                            {{ serviceType.name }}
-                                        </p>
-                                        <p
-                                            class="text-xs font-semibold text-slate"
-                                        >
-                                            {{ companyName(serviceType) }} /
-                                            {{ serviceType.operation }}
-                                        </p>
-                                    </td>
-                                    <td class="px-3 py-3 text-right">
-                                        <div class="flex justify-end gap-1.5">
-                                            <Link
-                                                :href="
-                                                    adminPath(
-                                                        'service-types',
-                                                        'detail',
-                                                        serviceType.id,
-                                                    )
-                                                "
-                                                :headers="authHeaders()"
-                                                class="rounded-pill bg-mist px-3 py-1 text-xs font-black text-slate"
-                                            >
-                                                View
-                                            </Link>
-                                            <Link
-                                                :href="
-                                                    adminPath(
-                                                        'service-types',
-                                                        'edit',
-                                                        serviceType.id,
-                                                    )
-                                                "
-                                                :headers="authHeaders()"
-                                                class="rounded-pill bg-ink px-3 py-1 text-xs font-black text-white"
-                                            >
-                                                Edit
-                                            </Link>
-                                            <button
-                                                v-if="serviceType.is_active"
-                                                type="button"
-                                                class="rounded-pill bg-[#d92d45] px-3 py-1 text-xs font-black text-white"
-                                                :disabled="busy !== ''"
-                                                @click="
-                                                    openServiceTypeDeleteModal(
-                                                        serviceType,
-                                                    )
-                                                "
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </td>
-                                    <td class="px-3 py-3 text-right">
-                                        <button
-                                            type="button"
-                                            class="rounded-pill px-3 py-1 text-xs font-black"
-                                            :class="
-                                                statusClass(
-                                                    statusTone(
-                                                        serviceType.is_active,
-                                                    ),
-                                                )
-                                            "
-                                            @click="
-                                                toggleServiceType(serviceType)
-                                            "
-                                        >
-                                            {{
-                                                serviceType.is_active
-                                                    ? 'Active'
-                                                    : 'Inactive'
-                                            }}
-                                        </button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    </AdminListFrame>
-                </div>
-
-                <div
                     v-if="showSetupCard('exchange-rates')"
                     class="rounded-xl border border-line bg-card p-5 shadow-sm"
                 >
@@ -2760,18 +2136,18 @@ async function sendBroadcastTest(): Promise<void> {
                         @submit.prevent="saveAccount"
                     >
                         <label>
-                            <span class="bank-label">Service Type</span>
+                            <span class="bank-label">Provider</span>
                             <select
-                                v-model.number="accountForm.service_type_id"
+                                v-model.number="accountForm.company_id"
                                 class="bank-input"
                                 required
                             >
                                 <option
-                                    v-for="serviceType in selectableServiceTypes"
-                                    :key="serviceType.id"
-                                    :value="serviceType.id"
+                                    v-for="company in activeCompanies"
+                                    :key="company.id"
+                                    :value="company.id"
                                 >
-                                    {{ serviceOptionLabel(serviceType) }}
+                                    {{ company.name }}
                                 </option>
                             </select>
                         </label>
@@ -2798,16 +2174,6 @@ async function sendBroadcastTest(): Promise<void> {
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                class="bank-input"
-                            />
-                        </label>
-                        <label>
-                            <span class="bank-label">Commission Rate</span>
-                            <input
-                                v-model.number="accountForm.commission_rate"
-                                type="number"
-                                min="0"
-                                step="0.0001"
                                 class="bank-input"
                             />
                         </label>
@@ -2943,14 +2309,10 @@ async function sendBroadcastTest(): Promise<void> {
                                 </div>
                                 <div>
                                     <dt class="font-bold text-slate">
-                                        Service
+                                        Provider
                                     </dt>
                                     <dd class="font-black text-ink">
-                                        {{
-                                            serviceLabel(
-                                                currentAccount.service_type,
-                                            )
-                                        }}
+                                        {{ currentAccount.company?.name ?? '-' }}
                                     </dd>
                                 </div>
                                 <div>
@@ -2959,18 +2321,6 @@ async function sendBroadcastTest(): Promise<void> {
                                     </dt>
                                     <dd class="money font-black text-ink">
                                         {{ money(currentAccount.balance) }}
-                                    </dd>
-                                </div>
-                                <div>
-                                    <dt class="font-bold text-slate">
-                                        Commission Rate
-                                    </dt>
-                                    <dd class="money font-black text-ink">
-                                        {{
-                                            percent(
-                                                currentAccount.commission_rate,
-                                            )
-                                        }}
                                     </dd>
                                 </div>
                                 <div>
@@ -3110,12 +2460,11 @@ async function sendBroadcastTest(): Promise<void> {
                             <thead class="bg-mist text-xs text-slate uppercase">
                                 <tr>
                                     <th class="px-4 py-3">Account</th>
-                                    <th class="px-4 py-3">Service</th>
+                                    <th class="px-4 py-3">Provider</th>
                                     <th class="px-4 py-3">Phone</th>
                                     <th class="px-4 py-3 text-right">
                                         Balance
                                     </th>
-                                    <th class="px-4 py-3 text-right">Rate</th>
                                     <th class="px-4 py-3 text-right">Action</th>
                                     <th class="px-4 py-3 text-right">Status</th>
                                 </tr>
@@ -3143,7 +2492,7 @@ async function sendBroadcastTest(): Promise<void> {
                                         </p>
                                     </td>
                                     <td class="px-4 py-3 text-slate">
-                                        {{ serviceLabel(account.service_type) }}
+                                        {{ account.company?.name ?? '-' }}
                                     </td>
                                     <td class="px-4 py-3 text-slate">
                                         {{ account.phone_number }}
@@ -3152,11 +2501,6 @@ async function sendBroadcastTest(): Promise<void> {
                                         class="money px-4 py-3 text-right font-bold text-ink"
                                     >
                                         {{ money(account.balance) }}
-                                    </td>
-                                    <td
-                                        class="money px-4 py-3 text-right text-slate"
-                                    >
-                                        {{ percent(account.commission_rate) }}
                                     </td>
                                     <td class="px-4 py-3 text-right">
                                         <div class="flex justify-end gap-1.5">
@@ -3220,437 +2564,6 @@ async function sendBroadcastTest(): Promise<void> {
                                                     : 'Inactive'
                                             }}
                                         </button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    </AdminListFrame>
-                </div>
-            </section>
-
-            <section v-if="activeTab === 'fees'" class="grid gap-5">
-                <div
-                    v-if="shouldShowCreateEdit('fees')"
-                    class="rounded-xl border border-line bg-card p-5 shadow-sm"
-                >
-                    <div class="flex items-center justify-between gap-3">
-                        <h2 class="text-lg font-black text-ink">
-                            {{
-                                activeMode === 'edit'
-                                    ? 'Update Commission Tier'
-                                    : 'Create Commission Tier'
-                            }}
-                        </h2>
-                        <Link
-                            :href="adminPath('fees')"
-                            :headers="authHeaders()"
-                            class="bank-button bank-button-secondary py-2"
-                        >
-                            List
-                        </Link>
-                    </div>
-                    <label class="mt-4 block">
-                        <span class="bank-label">Service Type</span>
-                        <select
-                            v-model.number="tierServiceTypeId"
-                            class="bank-input"
-                        >
-                            <option
-                                v-for="serviceType in selectableServiceTypes"
-                                :key="serviceType.id"
-                                :value="serviceType.id"
-                            >
-                                {{ serviceLabel(serviceType) }}
-                            </option>
-                        </select>
-                    </label>
-                    <form class="mt-4 grid gap-3" @submit.prevent="saveTier">
-                        <div class="grid grid-cols-2 gap-3">
-                            <label>
-                                <span class="bank-label">Amount From</span>
-                                <input
-                                    v-model.number="tierForm.amount_from"
-                                    type="number"
-                                    min="1"
-                                    step="0.01"
-                                    class="bank-input"
-                                    required
-                                />
-                            </label>
-                            <label>
-                                <span class="bank-label">Amount To</span>
-                                <input
-                                    v-model.number="tierForm.amount_to"
-                                    type="number"
-                                    min="1"
-                                    step="0.01"
-                                    class="bank-input"
-                                    required
-                                />
-                            </label>
-                        </div>
-                        <label>
-                            <span class="bank-label">Fee Type</span>
-                            <select
-                                v-model="tierForm.fee_amount_type"
-                                class="bank-input"
-                            >
-                                <option>FIXED</option>
-                                <option>PERCENTAGE</option>
-                            </select>
-                        </label>
-                        <div class="grid grid-cols-2 gap-3">
-                            <label>
-                                <span class="bank-label">Cash In Fee</span>
-                                <input
-                                    v-model.number="tierForm.fee_amount_deposit"
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    class="bank-input"
-                                />
-                            </label>
-                            <label>
-                                <span class="bank-label">Cash Out Fee</span>
-                                <input
-                                    v-model.number="
-                                        tierForm.fee_amount_withdraw
-                                    "
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    class="bank-input"
-                                />
-                            </label>
-                        </div>
-                        <label>
-                            <span class="bank-label">Commission Type</span>
-                            <select
-                                v-model="tierForm.comm_type"
-                                class="bank-input"
-                            >
-                                <option>FIXED</option>
-                                <option>PERCENTAGE</option>
-                            </select>
-                        </label>
-                        <div class="grid grid-cols-2 gap-3">
-                            <label>
-                                <span class="bank-label">Cash In Comm.</span>
-                                <input
-                                    v-model.number="tierForm.comm_deposit"
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    class="bank-input"
-                                />
-                            </label>
-                            <label>
-                                <span class="bank-label">Cash Out Comm.</span>
-                                <input
-                                    v-model.number="tierForm.comm_withdraw"
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    class="bank-input"
-                                />
-                            </label>
-                        </div>
-                        <label>
-                            <span class="bank-label">Additional Fee Type</span>
-                            <select
-                                v-model="tierForm.additional_fee_type"
-                                class="bank-input"
-                            >
-                                <option>FIXED</option>
-                                <option>PERCENTAGE</option>
-                            </select>
-                        </label>
-                        <div class="grid grid-cols-2 gap-3">
-                            <label>
-                                <span class="bank-label">Cash In Add.</span>
-                                <input
-                                    v-model.number="
-                                        tierForm.additional_fee_deposit_amount
-                                    "
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    class="bank-input"
-                                />
-                            </label>
-                            <label>
-                                <span class="bank-label">Cash Out Add.</span>
-                                <input
-                                    v-model.number="
-                                        tierForm.additional_fee_withdraw_amount
-                                    "
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    class="bank-input"
-                                />
-                            </label>
-                        </div>
-                        <label
-                            class="flex items-center gap-2 text-sm font-bold text-ink"
-                        >
-                            <input
-                                v-model="tierForm.is_active"
-                                type="checkbox"
-                                class="size-4 accent-brand"
-                            />
-                            Active
-                        </label>
-                        <button
-                            type="submit"
-                            class="bank-button bank-button-primary"
-                            :disabled="busy !== ''"
-                        >
-                            {{
-                                activeMode === 'edit'
-                                    ? 'Update Tier'
-                                    : 'Save Tier'
-                            }}
-                        </button>
-                    </form>
-                </div>
-
-                <div
-                    v-else-if="shouldShowDetail('fees')"
-                    class="rounded-xl border border-line bg-card p-5 shadow-sm"
-                >
-                    <div class="flex items-center justify-between gap-3">
-                        <h2 class="text-lg font-black text-ink">
-                            Commission Tier Detail
-                        </h2>
-                        <div class="flex gap-2">
-                            <Link
-                                :href="adminPath('fees')"
-                                :headers="authHeaders()"
-                                class="bank-button bank-button-secondary py-2"
-                            >
-                                List
-                            </Link>
-                            <Link
-                                v-if="currentTier"
-                                :href="
-                                    adminPath('fees', 'edit', currentTier.id)
-                                "
-                                :headers="authHeaders()"
-                                class="bank-button bank-button-primary py-2"
-                            >
-                                Edit
-                            </Link>
-                        </div>
-                    </div>
-                    <template v-if="currentTier">
-                        <dl
-                            class="mt-4 grid gap-3 rounded-lg bg-mist p-4 text-sm sm:grid-cols-2 xl:grid-cols-3"
-                        >
-                            <div>
-                                <dt class="font-bold text-slate">Service</dt>
-                                <dd class="font-black text-ink">
-                                    {{ serviceLabel(currentTier.service_type) }}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt class="font-bold text-slate">Range</dt>
-                                <dd class="money font-black text-ink">
-                                    {{ money(currentTier.amount_from) }} -
-                                    {{ money(currentTier.amount_to) }}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt class="font-bold text-slate">Status</dt>
-                                <dd class="font-black text-ink">
-                                    {{
-                                        currentTier.is_active
-                                            ? 'Active'
-                                            : 'Inactive'
-                                    }}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt class="font-bold text-slate">
-                                    Cash In Fee
-                                </dt>
-                                <dd class="money font-black text-ink">
-                                    {{ currentTier.fee_amount_type }} /
-                                    {{ money(currentTier.fee_amount_deposit) }}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt class="font-bold text-slate">
-                                    Cash Out Fee
-                                </dt>
-                                <dd class="money font-black text-ink">
-                                    {{ currentTier.fee_amount_type }} /
-                                    {{ money(currentTier.fee_amount_withdraw) }}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt class="font-bold text-slate">Commission</dt>
-                                <dd class="money font-black text-ink">
-                                    {{ currentTier.comm_type }} /
-                                    {{ money(currentTier.comm_deposit) }} /
-                                    {{ money(currentTier.comm_withdraw) }}
-                                </dd>
-                            </div>
-                        </dl>
-                    </template>
-                    <p v-else class="mt-4 text-sm font-semibold text-slate">
-                        Commission tier not found.
-                    </p>
-                </div>
-
-                <div
-                    v-else
-                    class="rounded-xl border border-line bg-card p-5 shadow-sm"
-                >
-                    <div class="grid items-center gap-2 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
-                        <input
-                            v-model="adminListSearch"
-                            type="search"
-                            class="bank-input"
-                            placeholder="Search tier, service or amount"
-                        />
-                        <div class="flex items-end gap-2">
-                            <label>
-                                <select
-                                    v-model.number="tierServiceTypeId"
-                                    class="bank-input py-2.5"
-                                >
-                                    <option :value="null">Service Type</option>
-                                    <option
-                                        v-for="serviceType in selectableServiceTypes"
-                                        :key="serviceType.id"
-                                        :value="serviceType.id"
-                                    >
-                                        {{ serviceLabel(serviceType) }}
-                                    </option>
-                                </select>
-                            </label>
-                        </div>
-                        <label>
-                            <select v-model="adminListFilter" class="bank-input py-2.5">
-                                <option value="">Status</option>
-                                <option
-                                    v-for="option in statusFilterOptions"
-                                    :key="option.value"
-                                    :value="option.value"
-                                >
-                                    {{ option.label }}
-                                </option>
-                            </select>
-                        </label>
-                        <Link
-                            :href="adminPath('fees', 'create')"
-                            :headers="authHeaders()"
-                            class="bank-button bank-button-primary"
-                        >
-                            Create
-                        </Link>
-                    </div>
-                    <AdminListFrame
-                        v-model:search="adminListSearch"
-                        v-model:filter="adminListFilter"
-                        v-model:page="adminListPage"
-                        v-model:page-size="adminListPageSize"
-                        :total="filteredTiers.length"
-                        :page-count="adminListPageCount"
-                        hide-toolbar
-                    >
-                    <div class="mt-4 overflow-auto rounded-lg border border-line">
-                        <table class="w-full min-w-[860px] text-left text-sm">
-                            <thead class="bg-mist text-xs text-slate uppercase">
-                                <tr>
-                                    <th class="px-4 py-3">Range</th>
-                                    <th class="px-4 py-3">Fee In / Out</th>
-                                    <th class="px-4 py-3">Comm. In / Out</th>
-                                    <th class="px-4 py-3">Add. In / Out</th>
-                                    <th class="px-4 py-3 text-right">Action</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-line">
-                                <tr
-                                    v-for="tier in paginatedTiers"
-                                    :key="tier.id"
-                                >
-                                    <td
-                                        class="money px-4 py-3 font-bold text-ink"
-                                    >
-                                        {{ money(tier.amount_from) }} -
-                                        {{ money(tier.amount_to) }}
-                                    </td>
-                                    <td class="money px-4 py-3 text-slate">
-                                        {{ tier.fee_amount_type }} /
-                                        {{ money(tier.fee_amount_deposit) }} /
-                                        {{ money(tier.fee_amount_withdraw) }}
-                                    </td>
-                                    <td class="money px-4 py-3 text-slate">
-                                        {{ tier.comm_type }} /
-                                        {{ money(tier.comm_deposit) }} /
-                                        {{ money(tier.comm_withdraw) }}
-                                    </td>
-                                    <td class="money px-4 py-3 text-slate">
-                                        {{ tier.additional_fee_type }} /
-                                        {{
-                                            money(
-                                                tier.additional_fee_deposit_amount,
-                                            )
-                                        }}
-                                        /
-                                        {{
-                                            money(
-                                                tier.additional_fee_withdraw_amount,
-                                            )
-                                        }}
-                                    </td>
-                                    <td class="px-4 py-3 text-right">
-                                        <div class="flex justify-end gap-1.5">
-                                            <Link
-                                                :href="
-                                                    adminPath(
-                                                        'fees',
-                                                        'detail',
-                                                        tier.id,
-                                                    )
-                                                "
-                                                :headers="authHeaders()"
-                                                class="rounded-pill bg-mist px-3 py-1 text-xs font-black text-slate"
-                                            >
-                                                View
-                                            </Link>
-                                            <Link
-                                                :href="
-                                                    adminPath(
-                                                        'fees',
-                                                        'edit',
-                                                        tier.id,
-                                                    )
-                                                "
-                                                :headers="authHeaders()"
-                                                class="rounded-pill bg-ink px-3 py-1 text-xs font-black text-white"
-                                            >
-                                                Edit
-                                            </Link>
-                                            <button
-                                                type="button"
-                                                class="rounded-pill bg-brand-soft px-3 py-1 text-xs font-black text-brand"
-                                                @click="deleteTier(tier)"
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </td>
-                                </tr>
-                                <tr v-if="visibleCommissionTiers.length === 0">
-                                    <td
-                                        colspan="5"
-                                        class="px-4 py-6 text-center text-sm font-semibold text-slate"
-                                    >
-                                        No tier for this service type.
                                     </td>
                                 </tr>
                             </tbody>
@@ -4801,59 +3714,6 @@ async function sendBroadcastTest(): Promise<void> {
                             @click="confirmCompanyDelete"
                         >
                             {{ busy === 'Company deleted.' ? 'Deleting…' : 'Delete company' }}
-                        </button>
-                    </div>
-                </section>
-            </div>
-        </Teleport>
-
-        <Teleport to="body">
-            <div
-                v-if="serviceTypePendingDelete"
-                class="fixed inset-0 z-[80] grid place-items-center bg-ink/60 p-4 backdrop-blur-sm"
-                @click.self="closeServiceTypeDeleteModal"
-            >
-                <section
-                    role="dialog"
-                    aria-modal="true"
-                    aria-labelledby="service-type-delete-title"
-                    class="w-full max-w-md rounded-2xl border border-line bg-card p-5 shadow-2xl sm:p-6"
-                >
-                    <h2
-                        id="service-type-delete-title"
-                        class="text-lg font-black text-ink"
-                    >
-                        Delete service type?
-                    </h2>
-                    <p class="mt-2 text-sm font-semibold leading-6 text-slate">
-                        <strong class="text-ink">{{
-                            serviceTypePendingDelete.name
-                        }}</strong>
-                        will be marked inactive and removed from selection lists.
-                        Existing accounts, fees and transactions will be kept.
-                    </p>
-                    <div
-                        class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
-                    >
-                        <button
-                            type="button"
-                            class="bank-button bank-button-secondary"
-                            :disabled="busy !== ''"
-                            @click="closeServiceTypeDeleteModal"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="button"
-                            class="bank-button bank-button-danger"
-                            :disabled="busy !== ''"
-                            @click="confirmServiceTypeDelete"
-                        >
-                            {{
-                                busy === 'Service type deleted.'
-                                    ? 'Deleting...'
-                                    : 'Delete service type'
-                            }}
                         </button>
                     </div>
                 </section>

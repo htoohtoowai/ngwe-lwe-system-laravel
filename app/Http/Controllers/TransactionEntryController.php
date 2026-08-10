@@ -13,7 +13,6 @@ use App\Http\Requests\ExchangeRequest;
 use App\Http\Requests\TransferRequest;
 use App\Models\Account;
 use App\Models\CashFloatAssignment;
-use App\Models\ServiceType;
 use App\Models\Transaction;
 use App\Repositories\AccountRepository;
 use App\Repositories\CashDenominationRepository;
@@ -135,7 +134,8 @@ class TransactionEntryController extends Controller
         $feature = match ($transactionType) {
             'cash_in' => AccountFeature::CashIn,
             'cash_out' => AccountFeature::CashOut,
-            default => null,
+            'transfer' => AccountFeature::Transfer,
+            'exchange' => AccountFeature::Exchange,
         };
 
         return [
@@ -154,18 +154,13 @@ class TransactionEntryController extends Controller
                 : ($float ? $this->floats->getDenominationBalance($float->id) : []),
             'accounts' => $transactionType === 'transfer'
                 ? []
-                : $this->accountProps(
-                    $feature !== null
-                    ? $this->accounts->activeForFeature($feature, $operation)
-                    : $this->accounts->activeForOperation($operation)
-                ),
+                : $this->accountProps($this->accounts->activeForFeature($feature)),
             'sendMoneyAccounts' => $transactionType === 'transfer'
                 ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::SendMoney))
                 : [],
             'receiveMoneyAccounts' => $transactionType === 'transfer'
                 ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::ReceiveMoney))
                 : [],
-            'serviceTypes' => in_array($transactionType, ['cash_in', 'transfer'], true) ? [] : $this->serviceTypeProps($operation),
             'feeAccounts' => $this->accountProps($this->accounts->feeAccounts()),
             'fee' => $transactionType === 'transfer'
                 ? $this->transferFee($request)
@@ -174,10 +169,10 @@ class TransactionEntryController extends Controller
                 ? $this->exchangeCommission($request)
                 : $this->commission($request, $commissionDirection),
             'receiveCommission' => $transactionType === 'transfer'
-                ? $this->commissionForAccount($request, 'receive_account_id', AccountFeature::ReceiveMoney, TransactionFeeCalculator::COMMISSION_RECEIVE)
+                ? $this->commissionForAccount($request, 'receive_account_id', AccountFeature::ReceiveMoney)
                 : '0.00',
             'payoutCommission' => $transactionType === 'transfer'
-                ? $this->commissionForAccount($request, 'payout_account_id', AccountFeature::SendMoney, TransactionFeeCalculator::COMMISSION_SEND)
+                ? $this->commissionForAccount($request, 'payout_account_id', AccountFeature::SendMoney)
                 : '0.00',
             'requiresDenominations' => $user?->role === 'teller',
             'completed' => $this->pullCompleted($request),
@@ -225,22 +220,18 @@ class TransactionEntryController extends Controller
     }
 
     /**
-     * @return array<int, array{id:int,company:string,company_id:int|null,company_category:string|null,company_logo_url:string|null,service:string,service_type_id:int|null,features:list<string>,name:string,number:string|null,balance:string}>
+     * @return array<int, array{id:int,company:string,company_id:int|null,company_category:string|null,company_logo_url:string|null,service:string,features:list<string>,name:string,number:string|null,balance:string}>
      */
     private function accountProps($accounts = null): array
     {
         return ($accounts ?? $this->accounts->active())
             ->map(fn (Account $account): array => [
                 'id' => $account->id,
-                'company' => $account->company?->name ?? $account->serviceType?->company?->name ?? 'Account',
-                'company_id' => $account->company_id ?? $account->serviceType?->company_id,
-                'company_category' => $account->company?->category ?? $account->serviceType?->company?->category,
-                'company_logo_url' => $this->companyLogoUrl(
-                    $account->company_id ?? $account->serviceType?->company_id,
-                    $account->company?->logo_path ?? $account->serviceType?->company?->logo_path,
-                ),
-                'service' => $account->serviceType?->name ?? 'Account',
-                'service_type_id' => $account->service_type_id,
+                'company' => $account->company?->name ?? 'Account',
+                'company_id' => $account->company_id,
+                'company_category' => $account->company?->category,
+                'company_logo_url' => $this->companyLogoUrl($account->company_id, $account->company?->logo_path),
+                'service' => 'Account',
                 'features' => $account->featureAssignments
                     ->pluck('feature')
                     ->map(fn ($feature) => $feature instanceof \BackedEnum ? $feature->value : $feature)
@@ -249,34 +240,6 @@ class TransactionEntryController extends Controller
                 'name' => $account->account_name,
                 'number' => $account->phone_number,
                 'balance' => Money::normalize($account->balance ?? 0),
-            ])
-            ->values()
-            ->all();
-    }
-
-    /**
-     * @return array<int, array{id:int,company_id:int|null,company:string,company_category:string|null,company_logo_url:string|null,name:string,operation:string}>
-     */
-    private function serviceTypeProps(string $operation): array
-    {
-        return ServiceType::query()
-            ->with('company')
-            ->where('is_active', true)
-            ->whereIn('operation', [$operation, 'All'])
-            ->whereHas('company', fn ($query) => $query->where('is_active', true))
-            ->orderBy('name')
-            ->get()
-            ->map(fn (ServiceType $serviceType): array => [
-                'id' => $serviceType->id,
-                'company_id' => $serviceType->company_id,
-                'company' => $serviceType->company?->name ?? 'Account',
-                'company_category' => $serviceType->company?->category,
-                'company_logo_url' => $this->companyLogoUrl(
-                    $serviceType->company_id,
-                    $serviceType->company?->logo_path,
-                ),
-                'name' => $serviceType->name,
-                'operation' => $serviceType->operation,
             ])
             ->values()
             ->all();
@@ -347,8 +310,8 @@ class TransactionEntryController extends Controller
             return '0.00';
         }
 
-        $fromCompanyId = $receiveAccount->company_id ?? $receiveAccount->serviceType?->company_id;
-        $toCompanyId = $payoutAccount->company_id ?? $payoutAccount->serviceType?->company_id;
+        $fromCompanyId = $receiveAccount->company_id;
+        $toCompanyId = $payoutAccount->company_id;
 
         if ($fromCompanyId === null || $toCompanyId === null) {
             return '0.00';
@@ -376,7 +339,7 @@ class TransactionEntryController extends Controller
         return $this->fees->commission($account, $amount, $direction);
     }
 
-    private function commissionForAccount(Request $request, string $accountKey, AccountFeature $feature, string $legacyDirection): string
+    private function commissionForAccount(Request $request, string $accountKey, AccountFeature $feature): string
     {
         $amount = $request->float('amount');
         $accountId = $request->integer($accountKey);
@@ -388,7 +351,7 @@ class TransactionEntryController extends Controller
         $account = $this->accounts->find($accountId);
 
         return $account !== null && $account->is_active
-            ? $this->fees->commissionForFeature($account, $amount, $feature, $legacyDirection)
+            ? $this->fees->commissionForFeature($account, $amount, $feature)
             : '0.00';
     }
 
@@ -411,9 +374,6 @@ class TransactionEntryController extends Controller
             $account,
             $mmkAmount,
             $currency === 'MMK' ? AccountFeature::CashIn : AccountFeature::CashOut,
-            $currency === 'MMK'
-                ? TransactionFeeCalculator::COMMISSION_SEND
-                : TransactionFeeCalculator::COMMISSION_RECEIVE,
         );
     }
 
@@ -484,7 +444,7 @@ class TransactionEntryController extends Controller
             return null;
         }
 
-        $company = $account->company?->name ?? $account->serviceType?->company?->name;
+        $company = $account->company?->name;
 
         return trim(($company ? "{$company} - " : '').$account->account_name);
     }

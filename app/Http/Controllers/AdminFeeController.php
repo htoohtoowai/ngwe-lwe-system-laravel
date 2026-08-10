@@ -52,11 +52,7 @@ class AdminFeeController extends Controller
         $data = $request->validated();
         $this->assertProviderRangeAvailable($data);
 
-        CommissionTier::query()->create([
-            ...$data,
-            'service_type_id' => null,
-            'fee_amount_type' => $data['fee_type'],
-        ]);
+        CommissionTier::query()->create($data);
 
         return redirect('/admin/fees?kind=provider');
     }
@@ -67,11 +63,7 @@ class AdminFeeController extends Controller
     ): RedirectResponse {
         $data = $request->validated();
         $this->assertProviderRangeAvailable($data, $commissionTier->id);
-        $commissionTier->fill([
-            ...$data,
-            'service_type_id' => null,
-            'fee_amount_type' => $data['fee_type'],
-        ])->save();
+        $commissionTier->fill($data)->save();
 
         return redirect('/admin/fees?kind=provider');
     }

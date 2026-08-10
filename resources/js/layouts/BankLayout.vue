@@ -288,11 +288,6 @@ const NAV: NavItem[] = [
                 href: '/admin/companies',
             },
             {
-                label: 'Services',
-                labelMm: 'ဝန်ဆောင်မှု',
-                href: '/admin/service-types',
-            },
-            {
                 label: 'Exchange Rates',
                 labelMm: 'ငွေလဲနှုန်း',
                 href: '/admin/exchange-rates',
@@ -304,14 +299,6 @@ const NAV: NavItem[] = [
         labelMm: 'ဝန်ဆောင်မှုပေးသူ',
         href: '/admin/companies',
         icon: 'companies',
-        roles: [],
-        section: 'Admin',
-    },
-    {
-        label: 'Services',
-        labelMm: 'ဝန်ဆောင်မှု',
-        href: '/admin/service-types',
-        icon: 'services',
         roles: [],
         section: 'Admin',
     },

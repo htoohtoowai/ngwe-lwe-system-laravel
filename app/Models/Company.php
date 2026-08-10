@@ -16,8 +16,8 @@ class Company extends Model
         ];
     }
 
-    public function serviceTypes(): HasMany
+    public function accounts(): HasMany
     {
-        return $this->hasMany(ServiceType::class);
+        return $this->hasMany(Account::class);
     }
 }

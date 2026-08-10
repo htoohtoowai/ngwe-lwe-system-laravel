@@ -11,7 +11,6 @@ use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\ExchangeRateController;
 use App\Http\Controllers\Api\RealtimeBroadcastController;
 use App\Http\Controllers\Api\ReportController;
-use App\Http\Controllers\Api\ServiceTypeController;
 use App\Http\Controllers\Api\SystemCompatibilityController;
 use App\Http\Controllers\Api\TransactionController;
 use App\Http\Controllers\Api\UserController;
@@ -52,11 +51,7 @@ Route::middleware('ngwe.auth')->group(function (): void {
     Route::post('/ws-ticket', [SystemCompatibilityController::class, 'wsTicket']);
     Route::get('/companies', [CompanyController::class, 'index']);
     Route::get('/companies/{company}', [CompanyController::class, 'show']);
-    Route::get('/companies/{company}/service-types', [CompanyController::class, 'serviceTypes']);
     Route::get('/companies/{company}/logo', [CompanyController::class, 'logo']);
-    Route::get('/service-types', [ServiceTypeController::class, 'index']);
-    Route::get('/services', [ServiceTypeController::class, 'index']);
-    Route::get('/service-types/{serviceType}', [ServiceTypeController::class, 'show']);
     Route::get('/accounts', [AccountController::class, 'index']);
     Route::get('/accounts/{account}', [AccountController::class, 'show']);
 
@@ -165,12 +160,7 @@ Route::middleware(['ngwe.auth', 'role:admin'])->group(function (): void {
     Route::post('/companies', [CompanyController::class, 'store']);
     Route::patch('/companies/{company}', [CompanyController::class, 'update']);
     Route::delete('/companies/{company}', [CompanyController::class, 'destroy']);
-    Route::post('/companies/{company}/service-types', [CompanyController::class, 'storeServiceType']);
     Route::post('/companies/{company}/logo', [CompanyController::class, 'uploadLogo']);
-
-    Route::post('/service-types', [ServiceTypeController::class, 'store']);
-    Route::patch('/service-types/{serviceType}', [ServiceTypeController::class, 'update']);
-    Route::delete('/service-types/{serviceType}', [ServiceTypeController::class, 'destroy']);
 
     Route::post('/accounts', [AccountController::class, 'store']);
     Route::patch('/accounts/{account}', [AccountController::class, 'update']);

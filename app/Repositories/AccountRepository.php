@@ -12,26 +12,17 @@ use Illuminate\Support\Facades\DB;
 class AccountRepository
 {
     public function all(
-        ?int $serviceTypeId = null,
         ?int $companyId = null,
         bool $feeOnly = false,
         bool $includeInactive = false
     ): Collection {
         return Account::query()
-            ->with(['company', 'serviceType.company', 'featureAssignments'])
-            ->when($serviceTypeId !== null, fn ($query) => $query->where('service_type_id', $serviceTypeId))
-            ->when($companyId !== null, function ($query) use ($companyId): void {
-                $query->where(function ($query) use ($companyId): void {
-                    $query->where('company_id', $companyId)
-                        ->orWhereHas('serviceType', fn ($serviceTypeQuery) => $serviceTypeQuery->where('company_id', $companyId));
-                });
-            })
+            ->with(['company', 'featureAssignments'])
+            ->when($companyId !== null, fn ($query) => $query->where('company_id', $companyId))
             ->when($feeOnly, fn ($query) => $query->where('is_fee_account', true))
             ->when(! $includeInactive, fn ($query) => $query
                 ->where('is_active', true)
-                ->whereHas('serviceType', fn ($serviceQuery) => $serviceQuery
-                    ->where('is_active', true)
-                    ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true))))
+                ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true)))
             ->orderBy('account_name')
             ->get();
     }
@@ -40,42 +31,19 @@ class AccountRepository
     {
         return Account::query()
             ->where('is_active', true)
-            ->whereHas('serviceType', fn ($serviceQuery) => $serviceQuery
-                ->where('is_active', true)
-                ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true)))
-            ->with(['company', 'serviceType.company', 'featureAssignments'])
+            ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true))
+            ->with(['company', 'featureAssignments'])
             ->orderBy('account_name')
             ->get();
     }
 
-    public function activeForOperation(string $operation): Collection
+    public function activeForFeature(AccountFeature $feature): Collection
     {
         return Account::query()
             ->where('is_active', true)
-            ->whereHas('serviceType', fn ($serviceQuery) => $serviceQuery
-                ->where('is_active', true)
-                ->whereIn('operation', [$operation, 'All'])
-                ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true)))
-            ->with(['company', 'serviceType.company', 'featureAssignments'])
-            ->orderBy('account_name')
-            ->get();
-    }
-
-    public function activeForFeature(AccountFeature $feature, ?string $legacyOperation = null): Collection
-    {
-        return Account::query()
-            ->where('is_active', true)
-            ->where(function ($query) use ($feature, $legacyOperation): void {
-                $query->whereHas('featureAssignments', fn ($featureQuery) => $featureQuery->where('feature', $feature->value));
-
-                if ($legacyOperation !== null) {
-                    $query->orWhereHas('serviceType', fn ($serviceQuery) => $serviceQuery
-                        ->where('is_active', true)
-                        ->whereIn('operation', [$legacyOperation, 'All'])
-                        ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true)));
-                }
-            })
-            ->with(['company', 'serviceType.company', 'featureAssignments'])
+            ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true))
+            ->whereHas('featureAssignments', fn ($featureQuery) => $featureQuery->where('feature', $feature->value))
+            ->with(['company', 'featureAssignments'])
             ->orderBy('account_name')
             ->get();
     }
@@ -85,10 +53,8 @@ class AccountRepository
         return Account::query()
             ->where('is_fee_account', true)
             ->where('is_active', true)
-            ->whereHas('serviceType', fn ($serviceQuery) => $serviceQuery
-                ->where('is_active', true)
-                ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true)))
-            ->with(['company', 'serviceType.company', 'featureAssignments'])
+            ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true))
+            ->with(['company', 'featureAssignments'])
             ->orderBy('account_name')
             ->get();
     }
@@ -97,37 +63,35 @@ class AccountRepository
     {
         return Account::query()
             ->where('is_active', true)
-            ->whereHas('serviceType', fn ($serviceQuery) => $serviceQuery
-                ->where('is_active', true)
-                ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true)))
-            ->with(['company', 'serviceType.company', 'featureAssignments'])
+            ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true))
+            ->with(['company', 'featureAssignments'])
             ->find($id);
     }
 
     public function find(int $id): ?Account
     {
         return Account::query()
-            ->with(['company', 'serviceType.company', 'featureAssignments'])
+            ->with(['company', 'featureAssignments'])
             ->find($id);
     }
 
     /**
-     * @param  array{service_type_id:int,account_name:string,phone_number:string,balance:string,commission_rate?:string,is_active?:bool,is_fee_account?:bool,is_agent?:bool}  $data
+     * @param  array{company_id:int,account_name:string,phone_number:string,balance:string,is_active?:bool,is_fee_account?:bool,is_agent?:bool}  $data
      */
     public function create(array $data): Account
     {
-        return Account::query()->create($data)->load(['company', 'serviceType.company', 'featureAssignments']);
+        return Account::query()->create($data)->load(['company', 'featureAssignments']);
     }
 
     /**
-     * @param  array{service_type_id?:int,account_name?:string,phone_number?:string,balance?:string,commission_rate?:string,is_active?:bool,is_fee_account?:bool,is_agent?:bool}  $data
+     * @param  array{company_id?:int,account_name?:string,phone_number?:string,balance?:string,is_active?:bool,is_fee_account?:bool,is_agent?:bool}  $data
      */
     public function update(Account $account, array $data): Account
     {
         $account->fill($data);
         $account->save();
 
-        return $account->refresh()->load(['company', 'serviceType.company', 'featureAssignments']);
+        return $account->refresh()->load(['company', 'featureAssignments']);
     }
 
     public function deactivate(Account $account): Account
@@ -135,7 +99,7 @@ class AccountRepository
         $account->is_active = false;
         $account->save();
 
-        return $account->refresh()->load(['company', 'serviceType.company', 'featureAssignments']);
+        return $account->refresh()->load(['company', 'featureAssignments']);
     }
 
     /**

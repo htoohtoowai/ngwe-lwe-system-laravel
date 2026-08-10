@@ -59,7 +59,6 @@ Route::middleware('ngwe.auth')
 $adminSections = [
     'overview' => 'overview',
     'companies' => 'companies',
-    'service-types' => 'service-types',
     'exchange-rates' => 'exchange-rates',
     'accounts' => 'accounts',
     'fees' => 'fees',
@@ -70,7 +69,6 @@ $adminSections = [
 ];
 $adminCrudSections = [
     'companies',
-    'service-types',
     'exchange-rates',
     'accounts',
     'fees',
@@ -83,7 +81,6 @@ $adminDetailSections = [
 $adminPageComponents = [
     'overview' => 'admin/Overview',
     'companies' => 'admin/Companies',
-    'service-types' => 'admin/ServiceTypes',
     'exchange-rates' => 'admin/ExchangeRates',
     'accounts' => 'admin/Accounts',
     'fees' => 'admin/Fees',
@@ -136,10 +133,6 @@ Route::middleware(['ngwe.auth', 'role:admin'])
             Route::post('/companies/{company}', 'updateCompany')->name('companies.update-with-logo');
             Route::patch('/companies/{company}/status', 'toggleCompany')->name('companies.status');
             Route::delete('/companies/{company}', 'destroyCompany')->name('companies.destroy');
-            Route::post('/service-types', 'storeServiceType')->name('service-types.store');
-            Route::patch('/service-types/{serviceType}', 'updateServiceType')->name('service-types.update');
-            Route::patch('/service-types/{serviceType}/status', 'toggleServiceType')->name('service-types.status');
-            Route::delete('/service-types/{serviceType}', 'destroyServiceType')->name('service-types.destroy');
             Route::post('/accounts', 'storeAccount')->name('accounts.store');
             Route::patch('/accounts/{account}', 'updateAccount')->name('accounts.update');
             Route::patch('/accounts/{account}/status', 'toggleAccount')->name('accounts.status');

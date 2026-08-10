@@ -242,8 +242,6 @@ const messages: Record<Locale, Record<string, string>> = {
             'Choose a company, then choose the account that will receive the Cash Out credit.',
         'transaction.cashOutFilteredAccountHint':
             'Only accounts under the selected company are shown.',
-        'transaction.serviceType': 'Service type',
-        'transaction.chooseServiceType': 'Choose a service type',
         'transaction.screenshot': 'Screenshot',
         'transaction.attachScreenshot': 'Attach screenshot',
         'transaction.screenshotHint': 'PNG, JPG, BMP, or GIF up to 4 MB.',
@@ -808,8 +806,6 @@ const messages: Record<Locale, Record<string, string>> = {
             'Company ကို အရင်ရွေးပြီး Cash Out credit ဝင်မည့်အကောင့်ကို ရွေးပါ။',
         'transaction.cashOutFilteredAccountHint':
             'ရွေးထားတဲ့ company နဲ့ဆိုင်တဲ့ accounts တွေပဲ ပြပါမယ်။',
-        'transaction.serviceType': 'ဝန်ဆောင်မှုအမျိုးအစား',
-        'transaction.chooseServiceType': 'ဝန်ဆောင်မှုအမျိုးအစား ရွေးပါ',
         'transaction.screenshot': 'Screenshot',
         'transaction.attachScreenshot': 'Screenshot တွဲရန်',
         'transaction.screenshotHint': 'PNG, JPG, BMP သို့မဟုတ် GIF 4 MB အထိ။',

@@ -7,7 +7,6 @@ use App\Models\AccountFeatureAssignment;
 use App\Models\CashFloatAssignment;
 use App\Models\CommissionTier;
 use App\Models\Company;
-use App\Models\ServiceType;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\NgweLweTokenService;
@@ -54,8 +53,8 @@ class CashInRoleFlowTest extends TestCase
     public function test_admin_cannot_submit_cash_in_from_web_or_api(): void
     {
         [, $adminToken] = $this->userWithToken('admin');
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
 
         $this->from('/transactions/cash-in')
             ->withHeader('Authorization', 'Bearer '.$adminToken)
@@ -110,8 +109,8 @@ class CashInRoleFlowTest extends TestCase
     public function test_teller_submits_cash_in_through_web_inertia_route(): void
     {
         [, $tellerToken] = $this->activeTellerWithEmptyFloat();
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
 
         $this->from('/transactions/cash-in')
             ->withHeader('Authorization', 'Bearer '.$tellerToken)
@@ -139,8 +138,8 @@ class CashInRoleFlowTest extends TestCase
     {
         [, $tellerToken] = $this->activeTellerWithEmptyFloat();
         [$cashier, $cashierToken] = $this->userWithToken('cashier');
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
 
         $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
             ->postJson('/api/transactions/cash-in', [
@@ -210,7 +209,7 @@ class CashInRoleFlowTest extends TestCase
     }
 
     /**
-     * @return array{0: Account, 1: ServiceType}
+     * @return array{0: Account, 1: Company}
      */
     private function accountWithBalance(int $balance, string $operation = 'CashIn'): array
     {
@@ -218,36 +217,30 @@ class CashInRoleFlowTest extends TestCase
             'name' => 'Wave-'.uniqid('', true),
             'category' => 'Pay',
         ]);
-        $serviceType = ServiceType::query()->create([
-            'company_id' => $company->id,
-            'name' => 'WST',
-            'operation' => $operation,
-            'is_active' => true,
-        ]);
         $account = Account::query()->create([
             'company_id' => $company->id,
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => 'Wave Main',
             'phone_number' => '0900000000',
             'balance' => $balance,
             'is_active' => true,
         ]);
 
-        return [$account, $serviceType];
+        return [$account, $company];
     }
 
-    private function fixedTier(int $serviceTypeId): CommissionTier
-    {
-        return CommissionTier::query()->create([
-            'service_type_id' => $serviceTypeId,
-            'amount_from' => 1,
-            'amount_to' => 999_999_999_999,
-            'fee_amount_type' => 'FIXED',
-            'fee_amount_deposit' => 0,
-            'fee_amount_withdraw' => 0,
-            'comm_type' => 'FIXED',
-            'additional_fee_type' => 'FIXED',
-            'is_active' => true,
-        ]);
-    }
-}
+    private function fixedTier(
+        int $companyId,
+        int $feeDeposit = 0,
+        int $feeWithdraw = 0,
+        int $commDeposit = 0,
+        int $commWithdraw = 0,
+    ): CommissionTier {
+        return $this->createCompanyTierFixtures(
+            $companyId,
+            $feeDeposit,
+            $feeWithdraw,
+            $commDeposit,
+            $commWithdraw,
+        );
+    }}
