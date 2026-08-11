@@ -2,61 +2,15 @@
 import { Link, router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { readStoredToken } from '@/lib/auth-token';
+import type {
+    FeeKind,
+    FeeManagementProps,
+    FeeType,
+    ProviderTier,
+    TransferTier,
+} from './fee-management';
 
-type FeeKind = 'provider' | 'transfer';
-type FeeType = 'FIXED' | 'PERCENTAGE';
-type PageMode = 'list' | 'create' | 'edit' | 'detail';
-type Company = {
-    id: number;
-    name: string;
-    logo_url: string | null;
-    is_active: boolean;
-};
-type Feature = { value: string; label: string };
-type ProviderTier = {
-    id: number;
-    company_id: number;
-    company_name: string;
-    feature: string;
-    amount_from: string;
-    amount_to: string;
-    fee_type: FeeType;
-    fee_amount: string;
-    additional_fee_type: FeeType;
-    additional_fee_amount: string;
-    comm_type: FeeType;
-    comm_amount: string;
-    is_active: boolean;
-};
-type TransferTier = {
-    id: number;
-    company_from_id: number;
-    company_from_name: string;
-    company_to_id: number;
-    company_to_name: string;
-    amount_from: string;
-    amount_to: string;
-    fee_type: FeeType;
-    fee_amount: string;
-    additional_fee_type: FeeType;
-    additional_fee_amount: string;
-    is_active: boolean;
-};
-
-const props = defineProps<{
-    role: 'admin';
-    announcement?: string | null;
-    notificationCount?: number;
-    mode: PageMode;
-    editorKind: FeeKind;
-    initialKind: FeeKind;
-    resourceId?: number | null;
-    companies: Company[];
-    features: Feature[];
-    providerTiers: ProviderTier[];
-    transferTiers: TransferTier[];
-}>();
+const props = defineProps<FeeManagementProps>();
 
 const activeKind = ref<FeeKind>(props.initialKind);
 const search = ref('');
@@ -215,7 +169,9 @@ const paginatedTransferTiers = computed(() => {
 
 watch([activeKind, search, status], () => (page.value = 1));
 watch(pageCount, (count) => {
-    if (page.value > count) page.value = count;
+    if (page.value > count) {
+        page.value = count;
+    }
 });
 
 const providerPreview = computed(() => {
@@ -254,9 +210,7 @@ const transferPreview = computed(() => {
 });
 
 function authHeaders(): Record<string, string> {
-    const token = readStoredToken();
-
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return {};
 }
 
 function featureLabel(value: string): string {
@@ -277,23 +231,14 @@ function applyType(amount: number, value: number, type: FeeType): number {
 }
 
 function roundMmkFee(value: number): number {
-    if (value <= 0) return 0;
+    if (value <= 0) {
+        return 0;
+    }
+
     const base = Math.floor(value / 100) * 100;
     const fee = value - base <= 20 ? base : base + 100;
 
     return Math.max(fee, 100);
-}
-
-function chooseKind(kind: FeeKind): void {
-    if (isEditor.value || props.mode === 'detail') {
-        router.visit(`/admin/fees?kind=${kind}`, { headers: authHeaders() });
-        return;
-    }
-
-    activeKind.value = kind;
-    search.value = '';
-    status.value = 'all';
-    page.value = 1;
 }
 
 function submitProvider(): void {
@@ -349,8 +294,10 @@ function deleteProvider(tier: ProviderTier): void {
         !window.confirm(
             `Delete ${tier.company_name} ${featureLabel(tier.feature)} tier?`,
         )
-    )
+    ) {
         return;
+    }
+
     router.delete(`/admin/fees/provider/${tier.id}`, {
         headers: authHeaders(),
         preserveScroll: true,
@@ -362,8 +309,10 @@ function deleteTransfer(tier: TransferTier): void {
         !window.confirm(
             `Delete ${tier.company_from_name} to ${tier.company_to_name} tier?`,
         )
-    )
+    ) {
         return;
+    }
+
     router.delete(`/admin/fees/transfer/${tier.id}`, {
         headers: authHeaders(),
         preserveScroll: true,
@@ -386,13 +335,21 @@ function markLogoFailed(companyId: number): void {
         >
             <div>
                 <p class="text-xs font-black text-brand uppercase">
-                    Owner Console / Fees
+                    Owner Console / Fee Rules
                 </p>
                 <h1 class="mt-1 text-2xl font-black text-ink sm:text-3xl">
-                    Fee setup
+                    {{
+                        activeKind === 'provider'
+                            ? 'Provider fees'
+                            : 'Transfer fees'
+                    }}
                 </h1>
                 <p class="mt-1 text-sm text-slate">
-                    Provider fees, agent commissions and transfer route fees.
+                    {{
+                        activeKind === 'provider'
+                            ? 'Customer fees and agent commissions by provider and feature.'
+                            : 'Customer fees for each provider-to-provider transfer route.'
+                    }}
                 </p>
             </div>
             <Link
@@ -408,40 +365,6 @@ function markLogoFailed(companyId: number): void {
                 Add tier
             </Link>
         </header>
-
-        <div
-            class="mt-4 grid min-h-12 grid-cols-2 rounded-field border border-line bg-mist p-1"
-            role="tablist"
-        >
-            <button
-                type="button"
-                role="tab"
-                :aria-selected="activeKind === 'provider'"
-                class="rounded-[10px] px-3 py-2 text-sm font-black transition"
-                :class="
-                    activeKind === 'provider'
-                        ? 'bg-card text-ink shadow-sm'
-                        : 'text-slate'
-                "
-                @click="chooseKind('provider')"
-            >
-                Provider fees
-            </button>
-            <button
-                type="button"
-                role="tab"
-                :aria-selected="activeKind === 'transfer'"
-                class="rounded-[10px] px-3 py-2 text-sm font-black transition"
-                :class="
-                    activeKind === 'transfer'
-                        ? 'bg-card text-ink shadow-sm'
-                        : 'text-slate'
-                "
-                @click="chooseKind('transfer')"
-            >
-                Transfer routes
-            </button>
-        </div>
 
         <form
             v-if="isEditor && activeKind === 'provider'"
@@ -465,7 +388,7 @@ function markLogoFailed(companyId: number): void {
                     </p>
                 </div>
                 <Link
-                    href="/admin/fees?kind=provider"
+                    href="/admin/fees/provider"
                     :headers="authHeaders()"
                     class="bank-button bank-button-secondary px-4 py-2"
                     >Cancel</Link
@@ -717,7 +640,7 @@ function markLogoFailed(companyId: number): void {
                     </p>
                 </div>
                 <Link
-                    href="/admin/fees?kind=transfer"
+                    href="/admin/fees/transfer"
                     :headers="authHeaders()"
                     class="bank-button bank-button-secondary px-4 py-2"
                     >Cancel</Link

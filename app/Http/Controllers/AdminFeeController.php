@@ -17,9 +17,19 @@ use Inertia\Response;
 
 class AdminFeeController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(): RedirectResponse
     {
-        return $this->render($request);
+        return redirect('/admin/fees/provider');
+    }
+
+    public function provider(Request $request): Response
+    {
+        return $this->render($request, editorKind: 'provider');
+    }
+
+    public function transfer(Request $request): Response
+    {
+        return $this->render($request, editorKind: 'transfer');
     }
 
     public function createProvider(Request $request): Response
@@ -54,7 +64,7 @@ class AdminFeeController extends Controller
 
         CommissionTier::query()->create($data);
 
-        return redirect('/admin/fees?kind=provider');
+        return redirect('/admin/fees/provider');
     }
 
     public function updateProvider(
@@ -65,14 +75,14 @@ class AdminFeeController extends Controller
         $this->assertProviderRangeAvailable($data, $commissionTier->id);
         $commissionTier->fill($data)->save();
 
-        return redirect('/admin/fees?kind=provider');
+        return redirect('/admin/fees/provider');
     }
 
     public function destroyProvider(CommissionTier $commissionTier): RedirectResponse
     {
         $commissionTier->delete();
 
-        return redirect('/admin/fees?kind=provider');
+        return redirect('/admin/fees/provider');
     }
 
     public function storeTransfer(TransferFeeTierRequest $request): RedirectResponse
@@ -81,7 +91,7 @@ class AdminFeeController extends Controller
         $this->assertTransferRangeAvailable($data);
         TransferFeeTier::query()->create($data);
 
-        return redirect('/admin/fees?kind=transfer');
+        return redirect('/admin/fees/transfer');
     }
 
     public function updateTransfer(
@@ -92,14 +102,14 @@ class AdminFeeController extends Controller
         $this->assertTransferRangeAvailable($data, $transferFeeTier->id);
         $transferFeeTier->fill($data)->save();
 
-        return redirect('/admin/fees?kind=transfer');
+        return redirect('/admin/fees/transfer');
     }
 
     public function destroyTransfer(TransferFeeTier $transferFeeTier): RedirectResponse
     {
         $transferFeeTier->delete();
 
-        return redirect('/admin/fees?kind=transfer');
+        return redirect('/admin/fees/transfer');
     }
 
     private function render(
@@ -115,51 +125,54 @@ class AdminFeeController extends Controller
             AccountFeature::ReceiveMoney,
         ];
 
-        return Inertia::render('admin/Fees', [
-            'role' => 'admin',
-            'section' => 'fees',
-            'announcement' => 'Configure provider fees, agent commissions and transfer route fees.',
-            'notificationCount' => Transaction::query()
-                ->where('transaction_type', 'cash_in')
-                ->where('status', 'PENDING_CASHIER_CONFIRM')
-                ->count(),
-            'mode' => $mode,
-            'editorKind' => $editorKind,
-            'resourceId' => $resourceId,
-            'initialKind' => $request->query('kind') === 'transfer' ? 'transfer' : $editorKind,
-            'features' => collect($features)->map(fn (AccountFeature $feature): array => [
-                'value' => $feature->value,
-                'label' => $feature->label(),
-            ])->all(),
-            'companies' => Company::query()
-                ->orderByDesc('is_active')
-                ->orderBy('name')
-                ->get(['id', 'name', 'logo_path', 'is_active'])
-                ->map(fn (Company $company): array => [
-                    'id' => $company->id,
-                    'name' => $company->name,
-                    'logo_url' => $company->logo_path ? route('companies.logo', $company) : null,
-                    'is_active' => (bool) $company->is_active,
+        return Inertia::render(
+            $editorKind === 'transfer' ? 'admin/TransferFees' : 'admin/ProviderFees',
+            [
+                'role' => 'admin',
+                'section' => 'fees',
+                'announcement' => 'Configure provider fees, agent commissions and transfer route fees.',
+                'notificationCount' => Transaction::query()
+                    ->where('transaction_type', 'cash_in')
+                    ->where('status', 'PENDING_CASHIER_CONFIRM')
+                    ->count(),
+                'mode' => $mode,
+                'editorKind' => $editorKind,
+                'resourceId' => $resourceId,
+                'initialKind' => $editorKind,
+                'features' => collect($features)->map(fn (AccountFeature $feature): array => [
+                    'value' => $feature->value,
+                    'label' => $feature->label(),
                 ])->all(),
-            'providerTiers' => CommissionTier::query()
-                ->with('company:id,name')
-                ->whereNotNull('company_id')
-                ->whereIn('feature', collect($features)->map->value->all())
-                ->orderBy('company_id')
-                ->orderBy('feature')
-                ->orderBy('amount_from')
-                ->get()
-                ->map(fn (CommissionTier $tier): array => $this->providerTierData($tier))
-                ->all(),
-            'transferTiers' => TransferFeeTier::query()
-                ->with(['fromCompany:id,name', 'toCompany:id,name'])
-                ->orderBy('company_from_id')
-                ->orderBy('company_to_id')
-                ->orderBy('amount_from')
-                ->get()
-                ->map(fn (TransferFeeTier $tier): array => $this->transferTierData($tier))
-                ->all(),
-        ]);
+                'companies' => Company::query()
+                    ->orderByDesc('is_active')
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'logo_path', 'is_active'])
+                    ->map(fn (Company $company): array => [
+                        'id' => $company->id,
+                        'name' => $company->name,
+                        'logo_url' => $company->logo_path ? route('companies.logo', $company) : null,
+                        'is_active' => (bool) $company->is_active,
+                    ])->all(),
+                'providerTiers' => CommissionTier::query()
+                    ->with('company:id,name')
+                    ->whereNotNull('company_id')
+                    ->whereIn('feature', collect($features)->map->value->all())
+                    ->orderBy('company_id')
+                    ->orderBy('feature')
+                    ->orderBy('amount_from')
+                    ->get()
+                    ->map(fn (CommissionTier $tier): array => $this->providerTierData($tier))
+                    ->all(),
+                'transferTiers' => TransferFeeTier::query()
+                    ->with(['fromCompany:id,name', 'toCompany:id,name'])
+                    ->orderBy('company_from_id')
+                    ->orderBy('company_to_id')
+                    ->orderBy('amount_from')
+                    ->get()
+                    ->map(fn (TransferFeeTier $tier): array => $this->transferTierData($tier))
+                    ->all(),
+            ],
+        );
     }
 
     private function providerTierData(CommissionTier $tier): array

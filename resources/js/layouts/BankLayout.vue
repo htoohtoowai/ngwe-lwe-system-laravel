@@ -130,11 +130,31 @@ const NAV: NavItem[] = [
         roles: ['cashier'],
         section: 'Banking',
         children: [
-            { label: 'All', labelMm: 'အားလုံး', href: '/cashier/teller-entry-history' },
-            { label: 'Cash In', labelMm: 'ငွေသွင်း', href: '/cashier/teller-entry-history-cash-in' },
-            { label: 'Cash Out', labelMm: 'ငွေထုတ်', href: '/cashier/teller-entry-history-cash-out' },
-            { label: 'Transfer', labelMm: 'ငွေလွှဲ', href: '/cashier/teller-entry-history-transfer' },
-            { label: 'Exchange', labelMm: 'ငွေလဲ', href: '/cashier/teller-entry-history-exchange' },
+            {
+                label: 'All',
+                labelMm: 'အားလုံး',
+                href: '/cashier/teller-entry-history',
+            },
+            {
+                label: 'Cash In',
+                labelMm: 'ငွေသွင်း',
+                href: '/cashier/teller-entry-history-cash-in',
+            },
+            {
+                label: 'Cash Out',
+                labelMm: 'ငွေထုတ်',
+                href: '/cashier/teller-entry-history-cash-out',
+            },
+            {
+                label: 'Transfer',
+                labelMm: 'ငွေလွှဲ',
+                href: '/cashier/teller-entry-history-transfer',
+            },
+            {
+                label: 'Exchange',
+                labelMm: 'ငွေလဲ',
+                href: '/cashier/teller-entry-history-exchange',
+            },
         ],
     },
     {
@@ -287,11 +307,6 @@ const NAV: NavItem[] = [
                 labelMm: 'ဝန်ဆောင်မှုပေးသူ',
                 href: '/admin/companies',
             },
-            {
-                label: 'Exchange Rates',
-                labelMm: 'ငွေလဲနှုန်း',
-                href: '/admin/exchange-rates',
-            },
         ],
     },
     {
@@ -325,6 +340,23 @@ const NAV: NavItem[] = [
         icon: 'fees',
         roles: ['admin'],
         section: 'Admin',
+        children: [
+            {
+                label: 'Provider Fees',
+                labelMm: 'Provider ဝန်ဆောင်ခများ',
+                href: '/admin/fees/provider',
+            },
+            {
+                label: 'Transfer Fees',
+                labelMm: 'ငွေလွှဲဝန်ဆောင်ခများ',
+                href: '/admin/fees/transfer',
+            },
+            {
+                label: 'Exchange Rates',
+                labelMm: 'ငွေလဲနှုန်းများ',
+                href: '/admin/exchange-rates',
+            },
+        ],
     },
     {
         label: 'Staff & Access',
@@ -382,8 +414,16 @@ const NAV: NavItem[] = [
         roles: ['admin'],
         section: 'Admin',
         children: [
-            { label: 'Overview', labelMm: 'ငွေတိုက်အနှစ်ချုပ်', href: '/admin/vault' },
-            { label: 'Vault Log', labelMm: 'ငွေတိုက်မှတ်တမ်း', href: '/admin/vault/log' },
+            {
+                label: 'Overview',
+                labelMm: 'ငွေတိုက်အနှစ်ချုပ်',
+                href: '/admin/vault',
+            },
+            {
+                label: 'Vault Log',
+                labelMm: 'ငွေတိုက်မှတ်တမ်း',
+                href: '/admin/vault/log',
+            },
         ],
     },
     {
@@ -394,8 +434,16 @@ const NAV: NavItem[] = [
         roles: ['admin'],
         section: 'Admin',
         children: [
-            { label: 'Daily Closing', labelMm: 'နေ့စဉ်စာရင်းပိတ်', href: '/admin/reports' },
-            { label: 'Reconciliation History', labelMm: 'စာရင်းညှိမှတ်တမ်း', href: '/admin/reports/reconciliations' },
+            {
+                label: 'Daily Closing',
+                labelMm: 'နေ့စဉ်စာရင်းပိတ်',
+                href: '/admin/reports',
+            },
+            {
+                label: 'Reconciliation History',
+                labelMm: 'စာရင်းညှိမှတ်တမ်း',
+                href: '/admin/reports/reconciliations',
+            },
         ],
     },
 ];

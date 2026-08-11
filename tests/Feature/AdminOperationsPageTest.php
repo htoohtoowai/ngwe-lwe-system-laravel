@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\Account;
-use App\Models\CommissionTier;
 use App\Models\Company;
 use App\Models\ExchangeRate;
 use App\Models\User;
@@ -55,7 +54,8 @@ class AdminOperationsPageTest extends TestCase
             '/admin/companies' => ['companies', 'admin/Companies'],
             '/admin/exchange-rates' => ['exchange-rates', 'admin/ExchangeRates'],
             '/admin/accounts' => ['accounts', 'admin/Accounts'],
-            '/admin/fees' => ['fees', 'admin/Fees'],
+            '/admin/fees/provider' => ['fees', 'admin/ProviderFees'],
+            '/admin/fees/transfer' => ['fees', 'admin/TransferFees'],
             '/admin/users' => ['users', 'admin/Users'],
             '/admin/vault' => ['vault', 'admin/Vault'],
             '/admin/reports' => ['reports', 'admin/Reports'],
@@ -111,9 +111,9 @@ class AdminOperationsPageTest extends TestCase
             '/admin/accounts/create' => ['accounts', 'create', null, 'admin/Accounts'],
             '/admin/accounts/'.$account->id => ['accounts', 'detail', $account->id, 'admin/Accounts'],
             '/admin/accounts/'.$account->id.'/edit' => ['accounts', 'edit', $account->id, 'admin/Accounts'],
-            '/admin/fees/create' => ['fees', 'create', null, 'admin/Fees'],
-            '/admin/fees/'.$tier->id => ['fees', 'detail', $tier->id, 'admin/Fees'],
-            '/admin/fees/'.$tier->id.'/edit' => ['fees', 'edit', $tier->id, 'admin/Fees'],
+            '/admin/fees/create' => ['fees', 'create', null, 'admin/ProviderFees'],
+            '/admin/fees/'.$tier->id => ['fees', 'detail', $tier->id, 'admin/ProviderFees'],
+            '/admin/fees/'.$tier->id.'/edit' => ['fees', 'edit', $tier->id, 'admin/ProviderFees'],
             '/admin/users/create' => ['users', 'create', null, 'admin/Users'],
             '/admin/users/'.$admin->id => ['users', 'detail', $admin->id, 'admin/Users'],
             '/admin/users/'.$admin->id.'/edit' => ['users', 'edit', $admin->id, 'admin/Users'],
@@ -222,7 +222,6 @@ class AdminOperationsPageTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.0.name', 'Wave Money');
 
-
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->getJson('/api/accounts?include_inactive=1')
             ->assertOk()
@@ -277,7 +276,6 @@ class AdminOperationsPageTest extends TestCase
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->get('/companies/'.$companyId.'/logo')
             ->assertOk();
-
 
         $accountId = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/accounts', [

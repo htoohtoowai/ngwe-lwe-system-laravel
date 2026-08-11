@@ -19,11 +19,12 @@ class RequireNgweLweToken
         try {
             $authorization = $request->header('Authorization');
 
-            if ($authorization === null && ! $request->is('api/*')) {
+            if (! $request->is('api/*')) {
                 $token = $request->cookie('ngwe_lwe_api_token');
-                $authorization = is_string($token) && $token !== ''
-                    ? 'Bearer '.rawurldecode($token)
-                    : null;
+
+                if (is_string($token) && $token !== '') {
+                    $authorization = 'Bearer '.rawurldecode($token);
+                }
             }
 
             $user = $this->tokens->userFromBearer($authorization);
