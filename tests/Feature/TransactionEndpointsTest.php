@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\Account;
 use App\Models\ActivityLog;
+use App\Models\CashFloatAssignment;
+use App\Models\CashFloatDenomination;
 use App\Models\CommissionTier;
 use App\Models\Company;
-use App\Models\ServiceType;
 use App\Models\Transaction;
+use App\Models\TransferFeeTier;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
 use App\Services\NgweLweTokenService;
@@ -30,9 +32,9 @@ class TransactionEndpointsTest extends TestCase
 
     public function test_cash_in_debits_account_and_creates_pending_transaction(): void
     {
-        [$owner, $token] = $this->owner();
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id, feeDeposit: 500);
+        [$teller, $token] = $this->activeTellerWithEmptyFloat();
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id, feeDeposit: 500);
 
         $response = $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/transactions/cash-in', [
@@ -41,6 +43,7 @@ class TransactionEndpointsTest extends TestCase
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
                 'received_denominations' => [10_000 => 1],
+                'handoff_denominations' => [10_000 => 1],
             ])
             ->assertCreated()
             ->assertJsonPath('data.transaction_type', 'cash_in')
@@ -52,17 +55,119 @@ class TransactionEndpointsTest extends TestCase
 
         $this->assertSame('40000.00', $account->fresh()->balance);
         $this->assertSame(1, ActivityLog::query()->where('action', 'transaction_created')->count());
-        $this->assertSame($owner->id, ActivityLog::query()->first()->user_id);
+        $this->assertSame($teller->id, ActivityLog::query()->first()->user_id);
 
         $txnId = $response->json('data.id');
         $this->assertNotNull(Transaction::query()->find($txnId));
     }
 
+    public function test_cash_in_account_paid_fee_credits_fee_account_without_debiting_source_fee(): void
+    {
+        [, $token] = $this->activeTellerWithEmptyFloat();
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $feeAccount = Account::query()->create([
+            'company_id' => $company->id,
+            'account_name' => 'Fee Collection',
+            'phone_number' => '0911111111',
+            'balance' => 0,
+            'is_fee_account' => true,
+            'is_active' => true,
+        ]);
+        $this->fixedTier($company->id, feeDeposit: 500);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 10_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'fee_payment_method' => 'account',
+                'fee_account_id' => $feeAccount->id,
+                'amount_received' => 10_000,
+                'received_denominations' => [10_000 => 1],
+                'handoff_denominations' => [10_000 => 1],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.customer_fee', '500.00')
+            ->assertJsonPath('data.fee_payment_method', 'account')
+            ->assertJsonPath('data.fee_account_id', $feeAccount->id)
+            ->assertJsonPath('data.balance_change', '-10000.00');
+
+        $this->assertSame('40000.00', $account->fresh()->balance);
+        $this->assertSame('500.00', $feeAccount->fresh()->balance);
+    }
+
+    public function test_cash_in_accepts_reference_breakdown_aliases(): void
+    {
+        [, $token] = $this->activeTellerWithEmptyFloat();
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 10_000,
+                'amount_received' => 10_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'received_breakdown' => [10_000 => 1],
+                'handoff_denominations' => [10_000 => 1],
+                'change_breakdown' => [],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.received_denominations.10000', 1);
+    }
+
+    public function test_cash_in_credits_agent_commission_to_account_balance(): void
+    {
+        [, $token] = $this->activeTellerWithEmptyFloat();
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id, feeDeposit: 500, commDeposit: 250);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 10_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'received_denominations' => [10_000 => 1],
+                'handoff_denominations' => [10_000 => 1],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.commission_amount', '250.00')
+            ->assertJsonPath('data.balance_change', '-9750.00');
+
+        $this->assertSame('40250.00', $account->fresh()->balance);
+    }
+
+    public function test_cash_in_does_not_credit_commission_to_non_agent_account(): void
+    {
+        [, $token] = $this->activeTellerWithEmptyFloat();
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $account->forceFill(['is_agent' => false])->save();
+        $this->fixedTier($company->id, feeDeposit: 500, commDeposit: 250);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 10_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'received_denominations' => [10_000 => 1],
+                'handoff_denominations' => [10_000 => 1],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.commission_amount', '0.00')
+            ->assertJsonPath('data.balance_change', '-10000.00');
+
+        $this->assertSame('40000.00', $account->fresh()->balance);
+    }
+
     public function test_cash_in_rejects_overdraw(): void
     {
-        [, $token] = $this->owner();
-        [$account, $serviceType] = $this->accountWithBalance(1_000);
-        $this->fixedTier($serviceType->id);
+        [, $token] = $this->activeTellerWithEmptyFloat();
+        [$account, $company] = $this->accountWithBalance(1_000);
+        $this->fixedTier($company->id);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/transactions/cash-in', [
@@ -71,6 +176,7 @@ class TransactionEndpointsTest extends TestCase
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
                 'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
             ])
             ->assertStatus(409);
 
@@ -81,8 +187,8 @@ class TransactionEndpointsTest extends TestCase
     public function test_cash_out_credits_account_and_marks_completed(): void
     {
         [$owner, $token] = $this->owner();
-        [$account, $serviceType] = $this->accountWithBalance(20_000);
-        $this->fixedTier($serviceType->id, feeWithdraw: 700);
+        [$account, $company] = $this->accountWithBalance(20_000);
+        $this->fixedTier($company->id, feeWithdraw: 700);
         app(CashDenominationRepository::class)->recordBulk('vault_in', [10_000 => 1, 5_000 => 1], $owner->id);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
@@ -105,8 +211,8 @@ class TransactionEndpointsTest extends TestCase
     public function test_owner_cash_out_rejects_when_main_vault_stock_is_insufficient(): void
     {
         [$owner, $token] = $this->owner();
-        [$account, $serviceType] = $this->accountWithBalance(20_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(20_000);
+        $this->fixedTier($company->id);
         app(CashDenominationRepository::class)->recordBulk('vault_in', [10_000 => 1], $owner->id);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
@@ -126,23 +232,28 @@ class TransactionEndpointsTest extends TestCase
     public function test_transfer_moves_balance_between_accounts_and_rejects_overdraw(): void
     {
         [, $token] = $this->owner();
-        [$from, $serviceType] = $this->accountWithBalance(30_000, 'From');
+        [$from, $company] = $this->accountWithBalance(30_000, 'From');
         $to = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => 'To',
             'phone_number' => '0900000000',
             'balance' => 0,
         ]);
-        $this->fixedTier($serviceType->id, feeDeposit: 300);
+        $this->fixedTier($company->id, feeDeposit: 300);
+        $this->fixedTransferTier($company->id, $company->id, 300);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/transactions/transfer', [
                 'from_account_id' => $from->id,
                 'to_account_id' => $to->id,
                 'amount' => 10_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
             ])
             ->assertCreated()
             ->assertJsonPath('data.transaction_type', 'transfer')
+            ->assertJsonPath('data.customer_name', 'Aung')
+            ->assertJsonPath('data.customer_phone', '09')
             ->assertJsonPath('data.customer_fee', '300.00');
 
         $this->assertSame('20000.00', $from->fresh()->balance);
@@ -154,6 +265,8 @@ class TransactionEndpointsTest extends TestCase
                 'from_account_id' => $from->id,
                 'to_account_id' => $to->id,
                 'amount' => 100_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
             ])
             ->assertStatus(409);
 
@@ -161,17 +274,116 @@ class TransactionEndpointsTest extends TestCase
         $this->assertSame('10000.00', $to->fresh()->balance);
     }
 
+    public function test_customer_transfer_posts_both_system_legs_and_account_fee(): void
+    {
+        [, $token] = $this->owner();
+        [$systemReceive, $company] = $this->accountWithBalance(0, 'System KPay');
+        [$systemPayout, $payoutCompany] = $this->accountWithBalance(50_000, 'System CB Bank');
+        $this->fixedTier($company->id, feeDeposit: 500, commWithdraw: 80);
+        $this->fixedTier($payoutCompany->id, commDeposit: 100);
+        $this->fixedTransferTier($company->id, $payoutCompany->id, 500);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/transfer', [
+                'from_account_id' => $systemPayout->id,
+                'source_account_type' => 'pay',
+                'source_provider' => 'KPay',
+                'source_account_number' => '09123456789',
+                'to_account_id' => $systemReceive->id,
+                'destination_provider' => 'CB Bank',
+                'destination_customer_name' => 'Mya Mya',
+                'destination_account_number' => 'CB-001122',
+                'amount' => 10_000,
+                'customer_name' => 'Aung',
+                'fee_payment_method' => 'account',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.transaction_type', 'transfer')
+            ->assertJsonPath('data.account_id', $systemPayout->id)
+            ->assertJsonPath('data.to_account_id', $systemReceive->id)
+            ->assertJsonPath('data.source_account_type', 'pay')
+            ->assertJsonPath('data.source_provider', 'KPay')
+            ->assertJsonPath('data.source_account_number', '09123456789')
+            ->assertJsonPath('data.destination_provider', 'CB Bank')
+            ->assertJsonPath('data.destination_customer_name', 'Mya Mya')
+            ->assertJsonPath('data.destination_account_number', 'CB-001122')
+            ->assertJsonPath('data.customer_fee', '500.00')
+            ->assertJsonPath('data.fee_account_id', $systemReceive->id)
+            ->assertJsonPath('data.commission_amount', '180.00')
+            ->assertJsonPath('data.receive_commission_amount', '80.00')
+            ->assertJsonPath('data.payout_commission_amount', '100.00')
+            ->assertJsonPath('data.balance_change', '-9900.00');
+
+        $this->assertSame('10580.00', $systemReceive->fresh()->balance);
+        $this->assertSame('40100.00', $systemPayout->fresh()->balance);
+    }
+
+    public function test_customer_transfer_uses_company_route_transfer_fee_tier(): void
+    {
+        [, $token] = $this->owner();
+        [$receiveAccount, $receiveCompany] = $this->accountWithBalance(0, 'System Receive');
+        [$payoutAccount, $payoutCompany] = $this->accountWithBalance(500_000, 'System Payout');
+
+        TransferFeeTier::query()->create([
+            'company_from_id' => $receiveCompany->id,
+            'company_to_id' => $payoutCompany->id,
+            'amount_from' => 1,
+            'amount_to' => 999_999_999,
+            'fee_type' => 'FIXED',
+            'fee_amount' => 100,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_amount' => 0,
+            'is_active' => true,
+        ]);
+        TransferFeeTier::query()->create([
+            'company_from_id' => $receiveCompany->id,
+            'company_to_id' => $payoutCompany->id,
+            'amount_from' => 200_000,
+            'amount_to' => 300_000,
+            'fee_type' => 'PERCENTAGE',
+            'fee_amount' => 0.2,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_amount' => 0,
+            'is_active' => true,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/transactions/transfer', [
+                'from_account_id' => $payoutAccount->id,
+                'to_account_id' => $receiveAccount->id,
+                'source_account_type' => 'account',
+                'source_provider' => $receiveCompany->name,
+                'source_account_number' => '09123456789',
+                'destination_provider' => $payoutCompany->name,
+                'destination_customer_name' => 'Mya Mya',
+                'destination_account_number' => '001-001122-001',
+                'amount' => 210_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'fee_payment_method' => 'account',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.customer_fee', '400.00')
+            ->assertJsonPath('data.from_company_id', $receiveCompany->id)
+            ->assertJsonPath('data.to_company_id', $payoutCompany->id);
+
+        $this->assertSame('210400.00', $receiveAccount->fresh()->balance);
+        $this->assertSame('290000.00', $payoutAccount->fresh()->balance);
+    }
+
     public function test_transfer_rejects_same_account(): void
     {
         [, $token] = $this->owner();
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
 
         $this->withHeader('Authorization', 'Bearer '.$token)
             ->postJson('/api/transactions/transfer', [
                 'from_account_id' => $account->id,
                 'to_account_id' => $account->id,
                 'amount' => 1_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
             ])
             ->assertStatus(422);
     }
@@ -179,8 +391,8 @@ class TransactionEndpointsTest extends TestCase
     public function test_cashier_cannot_create_transactions(): void
     {
         [$cashier, $cashierToken] = $this->userWithToken('cashier');
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
             ->postJson('/api/transactions/cash-in', [
@@ -194,23 +406,24 @@ class TransactionEndpointsTest extends TestCase
 
     public function test_cashier_can_confirm_pending_cash_in(): void
     {
-        [$owner, $ownerToken] = $this->owner();
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
         [$cashier, $cashierToken] = $this->userWithToken('cashier');
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id, feeDeposit: 500);
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id, feeDeposit: 500);
 
-        $txnId = $this->withHeader('Authorization', 'Bearer '.$ownerToken)
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
             ->postJson('/api/transactions/cash-in', [
                 'account_id' => $account->id,
                 'amount' => 5_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
                 'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
             ])
             ->json('data.id');
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk()
             ->assertJsonPath('data.status', 'COMPLETED')
             ->assertJsonPath('data.vault_impact', 'main_vault_increase')
@@ -221,20 +434,153 @@ class TransactionEndpointsTest extends TestCase
         $this->assertSame('45000.00', $account->fresh()->balance);
     }
 
-    public function test_owner_cash_in_posts_received_notes_to_main_vault_after_cashier_confirmation(): void
+    public function test_cashier_confirm_pending_cash_in_requires_pin(): void
     {
-        [$owner, $ownerToken] = $this->owner();
-        [$cashier, $cashierToken] = $this->userWithToken('cashier');
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id);
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
+        [, $cashierToken] = $this->userWithToken('cashier');
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
 
-        $txnId = $this->withHeader('Authorization', 'Bearer '.$ownerToken)
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
             ->postJson('/api/transactions/cash-in', [
                 'account_id' => $account->id,
                 'amount' => 5_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '09',
                 'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
+            ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in')
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('pin');
+
+        $this->assertSame(
+            'PENDING_CASHIER_CONFIRM',
+            Transaction::query()->findOrFail($txnId)->status,
+        );
+    }
+
+    public function test_cashier_confirm_pending_cash_in_rejects_wrong_pin(): void
+    {
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
+        [, $cashierToken] = $this->userWithToken('cashier');
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
+
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 5_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
+            ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in', [
+                'pin' => '0000',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Incorrect PIN.');
+
+        $this->assertSame(
+            'PENDING_CASHIER_CONFIRM',
+            Transaction::query()->findOrFail($txnId)->status,
+        );
+    }
+
+    public function test_reference_cashier_approve_and_payment_endpoints_are_supported(): void
+    {
+        [$owner, $ownerToken] = $this->owner();
+        [$cashier, $cashierToken] = $this->userWithToken('cashier');
+        [$account, $company] = $this->accountWithBalance(20_000);
+        $this->fixedTier($company->id, feeWithdraw: 500);
+        app(CashDenominationRepository::class)->recordBulk('vault_in', [10_000 => 2, 1_000 => 5, 500 => 1], $owner->id);
+
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$ownerToken)
+            ->postJson('/api/transactions/cash-out', [
+                'account_id' => $account->id,
+                'amount' => 10_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'denominations' => [10_000 => 1],
+            ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/cashier/transactions/'.$txnId.'/approve', [
+                'receives' => [1_000 => 1],
+                'note' => 'cash reviewed',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.cash_approved_by', $cashier->id);
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/cashier/transactions/'.$txnId.'/payment', [
+                'fee_amount' => 500,
+                'received_denominations' => [1_000 => 1],
+                'change_denominations' => [500 => 1],
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.transaction_id', $txnId)
+            ->assertJsonPath('data.fee_amount', '500.00');
+
+        $this->assertSame(1, ActivityLog::query()->where('action', 'transaction_cash_approved')->count());
+        $this->assertSame(1, ActivityLog::query()->where('action', 'transaction_payment_recorded')->count());
+    }
+
+    public function test_reference_employee_and_pending_float_aliases_are_supported(): void
+    {
+        [, $cashierToken] = $this->userWithToken('cashier');
+        [$teller, $tellerToken] = $this->userWithToken('teller');
+
+        $float = CashFloatAssignment::query()->create([
+            'employee_id' => $teller->id,
+            'issued_by' => User::query()->where('role', 'cashier')->first()->id,
+            'status' => 'PENDING_RECEIPT',
+            'total_amount' => 10_000,
+            'current_balance' => 10_000,
+        ]);
+        CashFloatDenomination::query()->create([
+            'float_id' => $float->id,
+            'denomination' => 10_000,
+            'quantity' => 1,
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->getJson('/api/users/employees')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $teller->id]);
+
+        $this->withHeader('Authorization', 'Bearer '.$tellerToken)
+            ->getJson('/api/cashier/floats/my-pending')
+            ->assertOk()
+            ->assertJsonPath('data.id', $float->id);
+    }
+
+    public function test_teller_cash_in_posts_handoff_notes_to_main_vault_after_cashier_confirmation(): void
+    {
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
+        [$cashier, $cashierToken] = $this->userWithToken('cashier');
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
+
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 5_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
             ])
             ->assertCreated()
             ->json('data.id');
@@ -242,7 +588,7 @@ class TransactionEndpointsTest extends TestCase
         $this->assertSame(0, app(CashDenominationRepository::class)->getVaultBalance()[5_000]);
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk()
             ->assertJsonPath('data.confirmed_by', $cashier->id);
 
@@ -251,25 +597,29 @@ class TransactionEndpointsTest extends TestCase
 
     public function test_cashier_can_cancel_pending_cash_in_and_balance_is_reversed(): void
     {
-        [, $ownerToken] = $this->owner();
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
         [, $cashierToken] = $this->userWithToken('cashier');
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
 
-        $txnId = $this->withHeader('Authorization', 'Bearer '.$ownerToken)
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
             ->postJson('/api/transactions/cash-in', [
                 'account_id' => $account->id,
                 'amount' => 5_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
                 'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
             ])
             ->json('data.id');
 
         $this->assertSame('45000.00', $account->fresh()->balance);
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', ['note' => 'customer left'])
+            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', [
+                'pin' => '9999',
+                'note' => 'customer left',
+            ])
             ->assertOk()
             ->assertJsonPath('data.status', 'CANCELLED')
             ->assertJsonPath('data.vault_impact', 'none')
@@ -278,37 +628,102 @@ class TransactionEndpointsTest extends TestCase
         $this->assertSame('50000.00', $account->fresh()->balance);
     }
 
-    public function test_cash_in_confirm_is_idempotent_safe(): void
+    public function test_cashier_cancel_pending_cash_in_reverses_agent_commission(): void
     {
-        [, $ownerToken] = $this->owner();
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
         [, $cashierToken] = $this->userWithToken('cashier');
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id, commDeposit: 250);
 
-        $txnId = $this->withHeader('Authorization', 'Bearer '.$ownerToken)
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
             ->postJson('/api/transactions/cash-in', [
                 'account_id' => $account->id,
                 'amount' => 5_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
                 'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
+            ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->assertSame('45250.00', $account->fresh()->balance);
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', [
+                'pin' => '9999',
+                'note' => 'customer left',
+            ])
+            ->assertOk();
+
+        $this->assertSame('50000.00', $account->fresh()->balance);
+    }
+
+    public function test_cashier_cancel_pending_cash_in_requires_pin(): void
+    {
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
+        [, $cashierToken] = $this->userWithToken('cashier');
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
+
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 5_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
+            ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $this->withHeader('Authorization', 'Bearer '.$cashierToken)
+            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', [
+                'note' => 'customer left',
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('pin');
+
+        $this->assertSame('45000.00', $account->fresh()->balance);
+        $this->assertSame(
+            'PENDING_CASHIER_CONFIRM',
+            Transaction::query()->findOrFail($txnId)->status,
+        );
+    }
+
+    public function test_cash_in_confirm_is_idempotent_safe(): void
+    {
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
+        [, $cashierToken] = $this->userWithToken('cashier');
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
+
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
+            ->postJson('/api/transactions/cash-in', [
+                'account_id' => $account->id,
+                'amount' => 5_000,
+                'customer_name' => 'Aung',
+                'customer_phone' => '0912345678',
+                'received_denominations' => [5_000 => 1],
+                'handoff_denominations' => [5_000 => 1],
             ])
             ->json('data.id');
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk();
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$txnId.'/confirm-cash-in', ['pin' => '9999'])
             ->assertStatus(409);
     }
 
     public function test_owner_transactions_list_supports_filters(): void
     {
         [$owner, $ownerToken] = $this->owner();
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
         app(CashDenominationRepository::class)->recordBulk('vault_in', [1_000 => 3], $owner->id);
 
         for ($i = 0; $i < 3; $i++) {
@@ -332,8 +747,8 @@ class TransactionEndpointsTest extends TestCase
     public function test_hard_delete_is_disabled(): void
     {
         [$owner, $ownerToken] = $this->owner();
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id);
         app(CashDenominationRepository::class)->recordBulk('vault_in', [1_000 => 1], $owner->id);
 
         $txnId = $this->withHeader('Authorization', 'Bearer '.$ownerToken)
@@ -363,6 +778,26 @@ class TransactionEndpointsTest extends TestCase
     /**
      * @return array{0: User, 1: string}
      */
+    private function activeTellerWithEmptyFloat(): array
+    {
+        [$cashier] = $this->userWithToken('cashier');
+        [$teller, $token] = $this->userWithToken('teller');
+
+        CashFloatAssignment::query()->create([
+            'employee_id' => $teller->id,
+            'issued_by' => $cashier->id,
+            'status' => 'ACTIVE',
+            'total_amount' => 0,
+            'current_balance' => 0,
+            'received_at' => now(),
+        ]);
+
+        return [$teller, $token];
+    }
+
+    /**
+     * @return array{0: User, 1: string}
+     */
     private function userWithToken(string $role): array
     {
         $user = User::factory()->create([
@@ -370,13 +805,14 @@ class TransactionEndpointsTest extends TestCase
             'role' => $role,
             'is_active' => true,
             'password' => Hash::make('password123'),
+            'pin_hash' => $role === 'cashier' ? Hash::make('9999') : null,
         ]);
 
         return [$user, app(NgweLweTokenService::class)->create($user)];
     }
 
     /**
-     * @return array{0: Account, 1: ServiceType}
+     * @return array{0: Account, 1: Company}
      */
     private function accountWithBalance(int $balance, string $name = 'Wave Main'): array
     {
@@ -384,32 +820,43 @@ class TransactionEndpointsTest extends TestCase
             'name' => 'Wave-'.uniqid('', true),
             'category' => 'Pay',
         ]);
-        $serviceType = ServiceType::query()->create([
-            'company_id' => $company->id,
-            'name' => 'Cash In',
-            'operation' => 'CashIn',
-        ]);
         $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => $name,
             'phone_number' => '0900000000',
             'balance' => $balance,
+            'is_agent' => true,
         ]);
 
-        return [$account, $serviceType];
+        return [$account, $company];
     }
 
-    private function fixedTier(int $serviceTypeId, int $feeDeposit = 0, int $feeWithdraw = 0): CommissionTier
+    private function fixedTier(
+        int $companyId,
+        int $feeDeposit = 0,
+        int $feeWithdraw = 0,
+        int $commDeposit = 0,
+        int $commWithdraw = 0,
+    ): CommissionTier {
+        return $this->createCompanyTierFixtures(
+            $companyId,
+            $feeDeposit,
+            $feeWithdraw,
+            $commDeposit,
+            $commWithdraw,
+        );
+    }
+    private function fixedTransferTier(int $fromCompanyId, int $toCompanyId, int $fee): TransferFeeTier
     {
-        return CommissionTier::query()->create([
-            'service_type_id' => $serviceTypeId,
+        return TransferFeeTier::query()->create([
+            'company_from_id' => $fromCompanyId,
+            'company_to_id' => $toCompanyId,
             'amount_from' => 1,
             'amount_to' => 999_999_999_999,
-            'fee_amount_type' => 'FIXED',
-            'fee_amount_deposit' => $feeDeposit,
-            'fee_amount_withdraw' => $feeWithdraw,
-            'comm_type' => 'FIXED',
+            'fee_type' => 'FIXED',
+            'fee_amount' => $fee,
             'additional_fee_type' => 'FIXED',
+            'additional_fee_amount' => 0,
             'is_active' => true,
         ]);
     }

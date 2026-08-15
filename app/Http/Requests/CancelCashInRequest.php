@@ -14,7 +14,7 @@ class CancelCashInRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'pin' => ['sometimes', 'nullable', 'string', 'regex:/^[0-9]{4,8}$/'],
+            'pin' => ['required', 'string', 'regex:/^[0-9]{4,8}$/'],
             'note' => ['sometimes', 'nullable', 'string', 'max:2000'],
         ];
     }

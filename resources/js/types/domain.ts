@@ -42,25 +42,16 @@ export type Company = {
     is_active: boolean;
 };
 
-export type ServiceType = {
-    id: number;
-    company_id: number;
-    name: string;
-    operation: string;
-    is_active: boolean;
-    company?: Company;
-};
-
 export type Account = {
     id: number;
-    service_type_id: number;
+    company_id: number | null;
     account_name: string;
     phone_number: string | null;
     balance: string;
-    commission_rate: string | null;
     is_active: boolean;
     is_fee_account: boolean;
-    service_type?: ServiceType;
+    is_agent: boolean;
+    features?: string[];
 };
 
 export type Transaction = {
@@ -82,6 +73,22 @@ export type Transaction = {
     created_at: string | null;
     status: string;
     vault_impact: string | null;
+};
+
+export type TransactionHistoryRow = {
+    id: number;
+    transaction_type: string;
+    amount: string;
+    fee_amount: string;
+    currency: string | null;
+    exchange_rate: string | null;
+    status: string;
+    created_at: string | null;
+    account_label: string | null;
+    to_account_label: string | null;
+    customer_name: string | null;
+    customer_phone: string | null;
+    note: string | null;
 };
 
 export type FloatDenomination = {
@@ -153,18 +160,16 @@ export type ActivityLog = {
 
 export type CommissionTier = {
     id: number;
-    service_type_id: number;
+    company_id?: number | null;
+    feature?: string | null;
     amount_from: string;
     amount_to: string;
-    fee_amount_type: 'FIXED' | 'PERCENTAGE';
-    fee_amount_deposit: string;
-    fee_amount_withdraw: string;
+    fee_type?: 'FIXED' | 'PERCENTAGE';
+    fee_amount?: string;
     comm_type: 'FIXED' | 'PERCENTAGE';
-    comm_deposit: string;
-    comm_withdraw: string;
+    comm_amount: string;
     additional_fee_type: 'FIXED' | 'PERCENTAGE';
-    additional_fee_deposit_amount: string;
-    additional_fee_withdraw_amount: string;
+    additional_fee_amount: string;
     is_active: boolean;
 };
 
@@ -188,10 +193,10 @@ export type ReportEmployeeSnapshot = {
 export type ReportAccountSnapshot = {
     id: number;
     account_name: string;
-    service_type: string | null;
     company: string | null;
     balance: string;
     is_fee_account: boolean;
+    is_agent?: boolean;
 };
 
 export type ReportVaultSnapshot = {

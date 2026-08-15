@@ -7,14 +7,15 @@ use App\Http\Requests\ActivateCashFloatRequest;
 use App\Http\Requests\ConfirmFloatReturnRequest;
 use App\Http\Requests\InitiateFloatReturnRequest;
 use App\Http\Requests\IssueCashFloatRequest;
+use App\Http\Requests\RejectCashFloatRequest;
 use App\Http\Resources\CashFloatResource;
 use App\Models\CashFloatAssignment;
 use App\Repositories\CashFloatRepository;
 use App\Services\CashFloatService;
+use App\Support\Money;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use App\Support\Money;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -39,6 +40,17 @@ class CashFloatController extends Controller
         return CashFloatResource::collection(
             $this->repository->list($employeeId, $status)
         );
+    }
+
+    public function myPending(Request $request): CashFloatResource|JsonResponse
+    {
+        $float = $this->repository->pendingForEmployee($request->user()->id);
+
+        if ($float === null) {
+            return response()->json(['data' => null]);
+        }
+
+        return new CashFloatResource($float->load(['denominations', 'employee', 'issuer']));
     }
 
     public function show(Request $request, CashFloatAssignment $float): CashFloatResource|JsonResponse
@@ -82,6 +94,8 @@ class CashFloatController extends Controller
             );
         } catch (InvalidArgumentException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 409);
         }
 
         return (new CashFloatResource($float))->response()->setStatusCode(201);
@@ -109,6 +123,28 @@ class CashFloatController extends Controller
         return new CashFloatResource($activated);
     }
 
+    public function reject(RejectCashFloatRequest $request, CashFloatAssignment $float): CashFloatResource|JsonResponse
+    {
+        if ($float->employee_id !== $request->user()->id) {
+            return response()->json(['message' => "Float #{$float->id} does not belong to this Teller."], 403);
+        }
+
+        try {
+            $rejected = $this->service->rejectReceipt(
+                $request->user(),
+                $float,
+                $request->validated()['pin'],
+                $request->validated()['note'] ?? null,
+            );
+        } catch (InvalidArgumentException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 422);
+        } catch (RuntimeException $exception) {
+            return response()->json(['message' => $exception->getMessage()], 409);
+        }
+
+        return new CashFloatResource($rejected);
+    }
+
     public function initiateReturn(InitiateFloatReturnRequest $request, CashFloatAssignment $float): CashFloatResource|JsonResponse
     {
         try {
@@ -116,6 +152,7 @@ class CashFloatController extends Controller
                 $request->user(),
                 $float,
                 $request->validated()['return_denominations'],
+                $request->validated()['pin'],
             );
         } catch (InvalidArgumentException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);
@@ -134,6 +171,7 @@ class CashFloatController extends Controller
                 $float,
                 $request->validated()['closing_total'],
                 $request->validated()['pin'],
+                $request->validated()['return_denominations'] ?? null,
             );
         } catch (InvalidArgumentException $exception) {
             return response()->json(['message' => $exception->getMessage()], 422);

@@ -6,7 +6,7 @@ use App\Models\Account;
 use App\Models\CommissionTier;
 use App\Models\Company;
 use App\Models\ExchangeRate;
-use App\Models\ServiceType;
+use App\Models\TransferFeeTier;
 use App\Models\User;
 use App\Models\VaultTransaction;
 use App\Repositories\CashDenominationRepository;
@@ -63,23 +63,23 @@ class VaultTransactionAuditTest extends TestCase
             performedBy: $employee->id,
         );
 
-        $service->initiateReturn($employee, $float->fresh(), [10_000 => 1, 5_000 => 1]);
+        $service->initiateReturn($employee, $float->fresh(), [10_000 => 2, 5_000 => 3], '1234');
 
         $this->assertVaultRows(
             txnType: 'return_initiate',
             floatId: $float->id,
             transactionId: null,
-            denominations: [10_000 => 1, 5_000 => 1],
+            denominations: [10_000 => 2, 5_000 => 3],
             performedBy: $employee->id,
         );
 
-        $service->confirmReturn($cashier, $float->fresh(), 15_000, '9999');
+        $service->confirmReturn($cashier, $float->fresh(), 35_000, '9999');
 
         $this->assertVaultRows(
             txnType: 'return_confirm',
             floatId: $float->id,
             transactionId: null,
-            denominations: [10_000 => 1, 5_000 => 1],
+            denominations: [10_000 => 2, 5_000 => 3],
             performedBy: $cashier->id,
             verifiedBy: $cashier->id,
         );
@@ -90,10 +90,12 @@ class VaultTransactionAuditTest extends TestCase
         [$employee, $employeeToken, $floatId] = $this->activeEmployeeWithFloat([
             10_000 => 10,
             5_000 => 10,
+            1_000 => 5,
+            500 => 2,
         ]);
 
-        [$cashOutAccount, $cashOutServiceType] = $this->accountWithServiceType('Cash Out', 'CashOut', 0);
-        $this->fixedTier($cashOutServiceType->id, feeWithdraw: 500);
+        [$cashOutAccount, $cashOutCompany] = $this->accountWithCompany('Cash Out', 'CashOut', 0);
+        $this->fixedTier($cashOutCompany->id, feeWithdraw: 500);
 
         $cashOutId = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/cash-out', [
@@ -108,45 +110,61 @@ class VaultTransactionAuditTest extends TestCase
 
         $this->assertVaultRows('cash_out', $floatId, $cashOutId, [10_000 => 1, 5_000 => 2], $employee->id);
 
-        [$fromAccount, $fromServiceType] = $this->accountWithServiceType('Transfer From', 'Transfer', 60_000);
+        [$fromAccount, $fromCompany] = $this->accountWithCompany('Transfer From', 'Transfer', 60_000);
         $toAccount = Account::query()->create([
-            'service_type_id' => $fromServiceType->id,
+            'company_id' => $fromCompany->id,
             'account_name' => 'Transfer To',
             'phone_number' => '0900000002',
             'balance' => 0,
         ]);
-        $this->fixedTier($fromServiceType->id, feeDeposit: 300);
+        $this->fixedTier($fromCompany->id, feeDeposit: 300);
+        TransferFeeTier::query()->create([
+            'company_from_id' => $fromCompany->id,
+            'company_to_id' => $fromCompany->id,
+            'amount_from' => 1,
+            'amount_to' => 999_999_999_999,
+            'fee_type' => 'FIXED',
+            'fee_amount' => 300,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_amount' => 0,
+            'is_active' => true,
+        ]);
 
         $transferId = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/transfer', [
                 'from_account_id' => $fromAccount->id,
                 'to_account_id' => $toAccount->id,
                 'amount' => 10_000,
-                'denominations' => [10_000 => 1],
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'fee_payment_method' => 'cash',
+                'fee_denominations' => [100 => 3],
             ])
             ->assertCreated()
             ->json('data.id');
 
-        $this->assertVaultRows('cash_out', $floatId, $transferId, [10_000 => 1], $employee->id);
+        $this->assertVaultRows('transfer_fee_received', $floatId, $transferId, [100 => 3], $employee->id);
 
-        [$exchangeAccount, $exchangeServiceType] = $this->accountWithServiceType('Exchange', 'Exchange', 0);
-        $this->fixedTier($exchangeServiceType->id, feeDeposit: 200);
+        [$exchangeAccount, $exchangeCompany] = $this->accountWithCompany('Exchange', 'Exchange', 0);
+        $this->fixedTier($exchangeCompany->id, feeDeposit: 200);
         $this->exchangeRate();
 
         $exchangeId = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/exchange', [
                 'account_id' => $exchangeAccount->id,
-                'amount' => 10_000,
-                'currency' => 'MMK',
-                'denominations' => [5_000 => 2],
+                'amount' => 100,
+                'currency' => 'THB',
+                'customer_name' => 'Aung',
+                'customer_phone' => '09',
+                'denominations' => [10_000 => 1, 1_000 => 4, 500 => 1],
             ])
             ->assertCreated()
             ->json('data.id');
 
-        $this->assertVaultRows('cash_out', $floatId, $exchangeId, [5_000 => 2], $employee->id);
+        $this->assertVaultRows('cash_out', $floatId, $exchangeId, [10_000 => 1, 1_000 => 4, 500 => 1], $employee->id);
 
-        [$cashInAccount, $cashInServiceType] = $this->accountWithServiceType('Cash In', 'CashIn', 80_000);
-        $this->fixedTier($cashInServiceType->id, feeDeposit: 100);
+        [$cashInAccount, $cashInCompany] = $this->accountWithCompany('Cash In', 'CashIn', 80_000);
+        $this->fixedTier($cashInCompany->id, feeDeposit: 100);
 
         $cashInId = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/cash-in', [
@@ -170,8 +188,8 @@ class VaultTransactionAuditTest extends TestCase
     public function test_vault_log_endpoint_is_owner_only_paginated_and_filterable(): void
     {
         [$employee, $employeeToken, $floatId] = $this->activeEmployeeWithFloat([10_000 => 3]);
-        [$account, $serviceType] = $this->accountWithServiceType('Cash Out', 'CashOut', 0);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithCompany('Cash Out', 'CashOut', 0);
+        $this->fixedTier($company->id);
         $ownerToken = app(NgweLweTokenService::class)->create($this->createUser('admin'));
 
         $txnId = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
@@ -226,27 +244,22 @@ class VaultTransactionAuditTest extends TestCase
     }
 
     /**
-     * @return array{0: Account, 1: ServiceType}
+     * @return array{0: Account, 1: Company}
      */
-    private function accountWithServiceType(string $name, string $operation, int $balance): array
+    private function accountWithCompany(string $name, string $operation, int $balance): array
     {
         $company = Company::query()->create([
             'name' => 'Wave-'.uniqid('', true),
             'category' => 'Pay',
         ]);
-        $serviceType = ServiceType::query()->create([
-            'company_id' => $company->id,
-            'name' => $name,
-            'operation' => $operation,
-        ]);
         $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => $name.' Main',
             'phone_number' => '0900000000',
             'balance' => $balance,
         ]);
 
-        return [$account, $serviceType];
+        return [$account, $company];
     }
 
     private function createUser(string $role): User
@@ -259,21 +272,21 @@ class VaultTransactionAuditTest extends TestCase
         ]);
     }
 
-    private function fixedTier(int $serviceTypeId, int $feeDeposit = 0, int $feeWithdraw = 0): CommissionTier
-    {
-        return CommissionTier::query()->create([
-            'service_type_id' => $serviceTypeId,
-            'amount_from' => 1,
-            'amount_to' => 999_999_999_999,
-            'fee_amount_type' => 'FIXED',
-            'fee_amount_deposit' => $feeDeposit,
-            'fee_amount_withdraw' => $feeWithdraw,
-            'comm_type' => 'FIXED',
-            'additional_fee_type' => 'FIXED',
-            'is_active' => true,
-        ]);
+    private function fixedTier(
+        int $companyId,
+        int $feeDeposit = 0,
+        int $feeWithdraw = 0,
+        int $commDeposit = 0,
+        int $commWithdraw = 0,
+    ): CommissionTier {
+        return $this->createCompanyTierFixtures(
+            $companyId,
+            $feeDeposit,
+            $feeWithdraw,
+            $commDeposit,
+            $commWithdraw,
+        );
     }
-
     private function exchangeRate(): ExchangeRate
     {
         return ExchangeRate::query()->create([

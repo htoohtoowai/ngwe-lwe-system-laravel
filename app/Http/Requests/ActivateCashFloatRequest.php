@@ -12,6 +12,15 @@ class ActivateCashFloatRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if (! $this->has('verified_denominations') && $this->has('denominations')) {
+            $this->merge([
+                'verified_denominations' => $this->input('denominations'),
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [

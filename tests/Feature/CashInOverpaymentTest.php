@@ -5,7 +5,6 @@ namespace Tests\Feature;
 use App\Models\Account;
 use App\Models\CommissionTier;
 use App\Models\Company;
-use App\Models\ServiceType;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
 use App\Repositories\CashFloatRepository;
@@ -31,8 +30,8 @@ class CashInOverpaymentTest extends TestCase
     public function test_cash_in_without_overpayment_keeps_employee_float_balanced_until_cashier_handoff(): void
     {
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 5]);
-        [$account, $serviceType] = $this->accountWithBalance(80_000);
-        $this->fixedTier($serviceType->id, feeDeposit: 300);
+        [$account, $company] = $this->accountWithBalance(80_000);
+        $this->fixedTier($company->id, feeDeposit: 300);
 
         $response = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/cash-in', [
@@ -57,7 +56,7 @@ class CashInOverpaymentTest extends TestCase
 
         [, $cashierToken] = $this->userWithToken('cashier');
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$response->json('data.id').'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$response->json('data.id').'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk();
 
         $this->assertSame(2, app(CashDenominationRepository::class)->getVaultBalance()[10_000]);
@@ -66,8 +65,8 @@ class CashInOverpaymentTest extends TestCase
     public function test_cash_in_with_overpayment_deducts_change_from_float(): void
     {
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 3, 5_000 => 4]);
-        [$account, $serviceType] = $this->accountWithBalance(100_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(100_000);
+        $this->fixedTier($company->id);
 
         $response = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/cash-in', [
@@ -101,8 +100,8 @@ class CashInOverpaymentTest extends TestCase
     public function test_teller_cash_in_keeps_value_balance_flat_but_changes_denominations(): void
     {
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([5_000 => 2]);
-        [$account, $serviceType] = $this->accountWithBalance(100_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(100_000);
+        $this->fixedTier($company->id);
 
         $response = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/cash-in', [
@@ -129,7 +128,7 @@ class CashInOverpaymentTest extends TestCase
 
         [, $cashierToken] = $this->userWithToken('cashier');
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$response->json('data.id').'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$response->json('data.id').'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk();
 
         $mainVault = app(CashDenominationRepository::class)->getVaultBalance();
@@ -141,8 +140,8 @@ class CashInOverpaymentTest extends TestCase
     public function test_cash_in_change_denomination_total_must_match_change_due(): void
     {
         [, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 3]);
-        [$account, $serviceType] = $this->accountWithBalance(100_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(100_000);
+        $this->fixedTier($company->id);
 
         // change_due would be 5000 but change_denominations total 10000.
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
@@ -161,8 +160,8 @@ class CashInOverpaymentTest extends TestCase
     public function test_cash_in_amount_received_less_than_amount_rejected(): void
     {
         [, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 3]);
-        [$account, $serviceType] = $this->accountWithBalance(100_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(100_000);
+        $this->fixedTier($company->id);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/cash-in', [
@@ -179,8 +178,8 @@ class CashInOverpaymentTest extends TestCase
     public function test_change_denominations_without_overpayment_rejected(): void
     {
         [, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 3]);
-        [$account, $serviceType] = $this->accountWithBalance(100_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(100_000);
+        $this->fixedTier($company->id);
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/cash-in', [
@@ -195,11 +194,11 @@ class CashInOverpaymentTest extends TestCase
             ->assertStatus(422);
     }
 
-    public function test_owner_cannot_do_overpayment_change(): void
+    public function test_admin_cannot_create_cash_in(): void
     {
         [, $ownerToken] = $this->userWithToken('admin');
-        [$account, $serviceType] = $this->accountWithBalance(100_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(100_000);
+        $this->fixedTier($company->id);
 
         $this->withHeader('Authorization', 'Bearer '.$ownerToken)
             ->postJson('/api/transactions/cash-in', [
@@ -211,14 +210,14 @@ class CashInOverpaymentTest extends TestCase
                 'received_denominations' => [10_000 => 2, 5_000 => 1],
                 'change_denominations' => [5_000 => 1],
             ])
-            ->assertStatus(422);
+            ->assertForbidden();
     }
 
     public function test_overpayment_rejected_when_float_stock_insufficient(): void
     {
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([5_000 => 1]);
-        [$account, $serviceType] = $this->accountWithBalance(100_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(100_000);
+        $this->fixedTier($company->id);
 
         // change_due = 10_000, but only 5_000 x 1 in float (5000).
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
@@ -244,8 +243,8 @@ class CashInOverpaymentTest extends TestCase
     {
         [$employee, $employeeToken] = $this->activeEmployeeWithFloat([10_000 => 5]);
         [, $cashierToken] = $this->userWithToken('cashier');
-        [$account, $serviceType] = $this->accountWithBalance(100_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(100_000);
+        $this->fixedTier($company->id);
 
         $txnId = $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/transactions/cash-in', [
@@ -263,7 +262,10 @@ class CashInOverpaymentTest extends TestCase
         $this->assertSame('50000.00', $activeFloat->current_balance);
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', ['note' => 'cash not received'])
+            ->postJson('/api/transactions/'.$txnId.'/cancel-cash-in', [
+                'pin' => '9999',
+                'note' => 'cash not received',
+            ])
             ->assertOk()
             ->assertJsonPath('data.status', 'CANCELLED');
 
@@ -315,11 +317,12 @@ class CashInOverpaymentTest extends TestCase
             'role' => $role,
             'is_active' => true,
             'password' => Hash::make('password123'),
+            'pin_hash' => $role === 'cashier' ? Hash::make('9999') : null,
         ]);
     }
 
     /**
-     * @return array{0: Account, 1: ServiceType}
+     * @return array{0: Account, 1: Company}
      */
     private function accountWithBalance(int $balance): array
     {
@@ -327,33 +330,28 @@ class CashInOverpaymentTest extends TestCase
             'name' => 'Wave-'.uniqid('', true),
             'category' => 'Pay',
         ]);
-        $serviceType = ServiceType::query()->create([
-            'company_id' => $company->id,
-            'name' => 'Cash In',
-            'operation' => 'CashIn',
-        ]);
         $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => 'Wave Main',
             'phone_number' => '0900000000',
             'balance' => $balance,
         ]);
 
-        return [$account, $serviceType];
+        return [$account, $company];
     }
 
-    private function fixedTier(int $serviceTypeId, int $feeDeposit = 0, int $feeWithdraw = 0): CommissionTier
-    {
-        return CommissionTier::query()->create([
-            'service_type_id' => $serviceTypeId,
-            'amount_from' => 1,
-            'amount_to' => 999_999_999_999,
-            'fee_amount_type' => 'FIXED',
-            'fee_amount_deposit' => $feeDeposit,
-            'fee_amount_withdraw' => $feeWithdraw,
-            'comm_type' => 'FIXED',
-            'additional_fee_type' => 'FIXED',
-            'is_active' => true,
-        ]);
-    }
-}
+    private function fixedTier(
+        int $companyId,
+        int $feeDeposit = 0,
+        int $feeWithdraw = 0,
+        int $commDeposit = 0,
+        int $commWithdraw = 0,
+    ): CommissionTier {
+        return $this->createCompanyTierFixtures(
+            $companyId,
+            $feeDeposit,
+            $feeWithdraw,
+            $commDeposit,
+            $commWithdraw,
+        );
+    }}

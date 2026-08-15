@@ -4,9 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\CompanyRequest;
-use App\Http\Requests\ServiceTypeRequest;
 use App\Http\Resources\CompanyResource;
-use App\Http\Resources\ServiceTypeResource;
 use App\Models\Company;
 use App\Repositories\CompanyRepository;
 use Illuminate\Database\QueryException;
@@ -40,32 +38,7 @@ class CompanyController extends Controller
 
     public function show(Company $company): CompanyResource
     {
-        return new CompanyResource($company->load('serviceTypes'));
-    }
-
-    public function serviceTypes(Request $request, Company $company): AnonymousResourceCollection
-    {
-        return ServiceTypeResource::collection(
-            $company->serviceTypes()
-                ->when(! $request->boolean('include_inactive'), fn ($query) => $query->where('is_active', true))
-                ->with('company')
-                ->orderBy('name')
-                ->get(),
-        );
-    }
-
-    public function storeServiceType(ServiceTypeRequest $request, Company $company): JsonResponse
-    {
-        $data = $request->validated();
-        $data['company_id'] = $company->id;
-
-        try {
-            $serviceType = $company->serviceTypes()->create($data)->load('company');
-        } catch (QueryException) {
-            return response()->json(['message' => 'Service type already exists.'], 409);
-        }
-
-        return (new ServiceTypeResource($serviceType))->response()->setStatusCode(201);
+        return new CompanyResource($company);
     }
 
     public function uploadLogo(Request $request, Company $company): CompanyResource|JsonResponse
@@ -86,9 +59,20 @@ class CompanyController extends Controller
 
     public function logo(Company $company): mixed
     {
-        abort_unless($company->logo_path !== null && Storage::disk('public')->exists($company->logo_path), 404, 'Logo not found.');
+        abort_unless($company->logo_path !== null, 404, 'Logo not found.');
 
-        return Storage::disk('public')->response($company->logo_path);
+        if (Storage::disk('public')->exists($company->logo_path)) {
+            return Storage::disk('public')->response($company->logo_path);
+        }
+
+        $seedLogo = database_path('seeders/company-logos/'.basename($company->logo_path));
+        abort_unless(
+            str_starts_with($company->logo_path, 'company-logos/') && is_file($seedLogo),
+            404,
+            'Logo not found.',
+        );
+
+        return response()->file($seedLogo);
     }
 
     public function update(CompanyRequest $request, Company $company): CompanyResource|JsonResponse

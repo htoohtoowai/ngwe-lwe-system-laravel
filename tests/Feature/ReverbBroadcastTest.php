@@ -8,10 +8,10 @@ use App\Events\CashInPending;
 use App\Events\FloatStatusChanged;
 use App\Events\NewTransaction;
 use App\Models\Account;
+use App\Models\CashFloatAssignment;
 use App\Models\CommissionTier;
 use App\Models\Company;
 use App\Models\ExchangeRate;
-use App\Models\ServiceType;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
 use App\Services\NgweLweTokenService;
@@ -35,19 +35,20 @@ class ReverbBroadcastTest extends TestCase
 
     public function test_pending_cash_in_broadcasts_transaction_pending_and_balance_events(): void
     {
-        [$owner, $ownerToken] = $this->userWithToken('admin');
-        [$account, $serviceType] = $this->accountWithBalance(50_000);
-        $this->fixedTier($serviceType->id, feeDeposit: 500);
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
+        [$account, $company] = $this->accountWithBalance(50_000);
+        $this->fixedTier($company->id, feeDeposit: 500);
 
         Event::fake([BalanceUpdated::class, CashInPending::class, NewTransaction::class]);
 
-        $txnId = $this->withHeader('Authorization', 'Bearer '.$ownerToken)
+        $txnId = $this->withHeader('Authorization', 'Bearer '.$tellerToken)
             ->postJson('/api/transactions/cash-in', [
                 'account_id' => $account->id,
                 'amount' => 10_000,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
                 'received_denominations' => [10_000 => 1],
+                'handoff_denominations' => [10_000 => 1],
             ])
             ->assertCreated()
             ->json('data.id');
@@ -63,14 +64,14 @@ class ReverbBroadcastTest extends TestCase
     public function test_completed_transaction_creates_broadcast_new_transaction_and_balance_events(): void
     {
         [$owner, $ownerToken] = $this->userWithToken('admin');
-        [$source, $serviceType] = $this->accountWithBalance(100_000, 'Source');
+        [$source, $company] = $this->accountWithBalance(100_000, 'Source');
         $target = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => 'Target',
             'phone_number' => '0900000001',
             'balance' => 5_000,
         ]);
-        $this->fixedTier($serviceType->id, feeDeposit: 300, feeWithdraw: 700);
+        $this->fixedTier($company->id, feeDeposit: 300, feeWithdraw: 700);
         $this->seedVaultBalance([10_000 => 1], $owner);
         $this->exchangeRate();
 
@@ -91,6 +92,8 @@ class ReverbBroadcastTest extends TestCase
                 'from_account_id' => $source->id,
                 'to_account_id' => $target->id,
                 'amount' => 5_000,
+                'customer_name' => 'Transfer Customer',
+                'customer_phone' => '09',
             ])
             ->assertCreated();
 
@@ -99,6 +102,9 @@ class ReverbBroadcastTest extends TestCase
                 'account_id' => $source->id,
                 'amount' => 2_000,
                 'currency' => 'MMK',
+                'customer_name' => 'Exchange Customer',
+                'customer_phone' => '09',
+                'exchange_payment_method' => 'account',
             ])
             ->assertCreated();
 
@@ -110,21 +116,22 @@ class ReverbBroadcastTest extends TestCase
     public function test_cash_in_confirm_cancel_and_balance_adjust_broadcast_balance_updates(): void
     {
         [, $ownerToken] = $this->userWithToken('admin');
+        [, $tellerToken] = $this->activeTellerWithEmptyFloat();
         [, $cashierToken] = $this->userWithToken('cashier');
-        [$account, $serviceType] = $this->accountWithBalance(100_000);
-        $this->fixedTier($serviceType->id);
+        [$account, $company] = $this->accountWithBalance(100_000);
+        $this->fixedTier($company->id);
 
-        $confirmTxnId = $this->createPendingCashIn($ownerToken, $account->id, 10_000);
-        $cancelTxnId = $this->createPendingCashIn($ownerToken, $account->id, 5_000);
+        $confirmTxnId = $this->createPendingCashIn($tellerToken, $account->id, 10_000);
+        $cancelTxnId = $this->createPendingCashIn($tellerToken, $account->id, 5_000);
 
         Event::fake([BalanceUpdated::class, NewTransaction::class]);
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$confirmTxnId.'/confirm-cash-in')
+            ->postJson('/api/transactions/'.$confirmTxnId.'/confirm-cash-in', ['pin' => '9999'])
             ->assertOk();
 
         $this->withHeader('Authorization', 'Bearer '.$cashierToken)
-            ->postJson('/api/transactions/'.$cancelTxnId.'/cancel-cash-in')
+            ->postJson('/api/transactions/'.$cancelTxnId.'/cancel-cash-in', ['pin' => '9999'])
             ->assertOk();
 
         $this->withHeader('Authorization', 'Bearer '.$ownerToken)
@@ -166,6 +173,7 @@ class ReverbBroadcastTest extends TestCase
 
         $this->withHeader('Authorization', 'Bearer '.$employeeToken)
             ->postJson('/api/cash-floats/'.$floatId.'/initiate-return', [
+                'pin' => '1234',
                 'return_denominations' => [10_000 => 2],
             ])
             ->assertOk();
@@ -209,15 +217,16 @@ class ReverbBroadcastTest extends TestCase
         Event::assertDispatched(BroadcastPing::class);
     }
 
-    private function createPendingCashIn(string $ownerToken, int $accountId, int $amount): int
+    private function createPendingCashIn(string $tellerToken, int $accountId, int $amount): int
     {
-        return (int) $this->withHeader('Authorization', 'Bearer '.$ownerToken)
+        return (int) $this->withHeader('Authorization', 'Bearer '.$tellerToken)
             ->postJson('/api/transactions/cash-in', [
                 'account_id' => $accountId,
                 'amount' => $amount,
                 'customer_name' => 'Aung',
                 'customer_phone' => '0912345678',
                 'received_denominations' => [$amount => 1],
+                'handoff_denominations' => [$amount => 1],
             ])
             ->assertCreated()
             ->json('data.id');
@@ -233,6 +242,7 @@ class ReverbBroadcastTest extends TestCase
             'role' => $role,
             'is_active' => true,
             'password' => Hash::make('password123'),
+            'pin_hash' => $role === 'cashier' ? Hash::make('9999') : null,
         ]);
 
         return [$user, app(NgweLweTokenService::class)->create($user)];
@@ -249,7 +259,27 @@ class ReverbBroadcastTest extends TestCase
     }
 
     /**
-     * @return array{0: Account, 1: ServiceType}
+     * @return array{0: User, 1: string}
+     */
+    private function activeTellerWithEmptyFloat(): array
+    {
+        [$cashier] = $this->userWithToken('cashier');
+        [$teller, $token] = $this->userWithToken('teller');
+
+        CashFloatAssignment::query()->create([
+            'employee_id' => $teller->id,
+            'issued_by' => $cashier->id,
+            'status' => 'ACTIVE',
+            'total_amount' => 0,
+            'current_balance' => 0,
+            'received_at' => now(),
+        ]);
+
+        return [$teller, $token];
+    }
+
+    /**
+     * @return array{0: Account, 1: Company}
      */
     private function accountWithBalance(int $balance, string $name = 'Wave Main'): array
     {
@@ -257,36 +287,31 @@ class ReverbBroadcastTest extends TestCase
             'name' => 'Wave-'.uniqid('', true),
             'category' => 'Pay',
         ]);
-        $serviceType = ServiceType::query()->create([
-            'company_id' => $company->id,
-            'name' => 'Cash In',
-            'operation' => 'CashIn',
-        ]);
         $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => $name,
             'phone_number' => '0900000000',
             'balance' => $balance,
         ]);
 
-        return [$account, $serviceType];
+        return [$account, $company];
     }
 
-    private function fixedTier(int $serviceTypeId, int $feeDeposit = 0, int $feeWithdraw = 0): CommissionTier
-    {
-        return CommissionTier::query()->create([
-            'service_type_id' => $serviceTypeId,
-            'amount_from' => 1,
-            'amount_to' => 999_999_999_999,
-            'fee_amount_type' => 'FIXED',
-            'fee_amount_deposit' => $feeDeposit,
-            'fee_amount_withdraw' => $feeWithdraw,
-            'comm_type' => 'FIXED',
-            'additional_fee_type' => 'FIXED',
-            'is_active' => true,
-        ]);
+    private function fixedTier(
+        int $companyId,
+        int $feeDeposit = 0,
+        int $feeWithdraw = 0,
+        int $commDeposit = 0,
+        int $commWithdraw = 0,
+    ): CommissionTier {
+        return $this->createCompanyTierFixtures(
+            $companyId,
+            $feeDeposit,
+            $feeWithdraw,
+            $commDeposit,
+            $commWithdraw,
+        );
     }
-
     private function exchangeRate(): ExchangeRate
     {
         return ExchangeRate::query()->create([

@@ -81,6 +81,25 @@ class VaultLedgerTest extends TestCase
             ->count());
     }
 
+    public function test_available_balance_does_not_double_subtract_pending_float(): void
+    {
+        $vault = app(CashDenominationRepository::class);
+        $cashier = $this->userWithRole('cashier');
+        $employee = $this->userWithRole('teller', 'emp');
+
+        $vault->recordBulk('vault_in', [20_000 => 300], $cashier->id);
+
+        app(CashFloatService::class)->issue(
+            $cashier,
+            $employee->id,
+            [20_000 => 92],
+        );
+
+        $this->assertSame(208, $vault->getVaultBalance()[20_000]);
+        $this->assertSame(92, $vault->getPendingReserved()[20_000]);
+        $this->assertSame(208, $vault->getAvailableBalance()[20_000]);
+    }
+
     public function test_float_issue_fails_when_vault_stock_is_insufficient(): void
     {
         $cashier = $this->userWithRole('cashier');
@@ -114,7 +133,7 @@ class VaultLedgerTest extends TestCase
         $service->activate($employee, $float->fresh(), '1234', [10_000 => 5]);
 
         $active = $float->fresh();
-        $service->initiateReturn($employee, $active, [10_000 => 5]);
+        $service->initiateReturn($employee, $active, [10_000 => 5], '1234');
 
         $service->confirmReturn($cashier, $active->fresh(), 50_000, '9999');
 
@@ -195,7 +214,7 @@ class VaultLedgerTest extends TestCase
         $service = app(CashFloatService::class);
         $float = $service->issue($cashier, $employee->id, [10_000 => 3]);
         $service->activate($employee, $float->fresh(), '1234', [10_000 => 3]);
-        $service->initiateReturn($employee, $float->fresh(), [10_000 => 3]);
+        $service->initiateReturn($employee, $float->fresh(), [10_000 => 3], '1234');
         $service->confirmReturn($cashier, $float->fresh(), 30_000, '9999');
 
         $this->assertSame('CLOSED', CashFloatAssignment::query()->find($float->id)->status);

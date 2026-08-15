@@ -200,15 +200,14 @@ class DailyReportService
     private function accountSnapshots(): array
     {
         return Account::query()
-            ->with('serviceType.company')
+            ->with(['company', 'featureAssignments'])
             ->where('is_active', true)
             ->orderBy('account_name')
             ->get()
             ->map(fn (Account $account): array => [
                 'id' => $account->id,
                 'account_name' => $account->account_name,
-                'service_type' => $account->serviceType?->name,
-                'company' => $account->serviceType?->company?->name,
+                'company' => $account->company?->name,
                 'balance' => Money::normalize($account->balance),
                 'is_fee_account' => (bool) $account->is_fee_account,
             ])

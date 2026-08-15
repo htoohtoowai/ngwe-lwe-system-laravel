@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { Link, router, usePage } from '@inertiajs/vue3'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { apiRequest } from '@/lib/api'
-import { readStoredToken, removeStoredToken } from '@/lib/auth-token'
-import { useLocale } from '@/lib/i18n'
+import { Link, router, usePage } from '@inertiajs/vue3';
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    onMounted,
+    ref,
+    watch,
+} from 'vue';
+import { useLocale } from '@/lib/i18n';
 
 /**
  * Bank shell — reference layout, three breakpoints:
@@ -12,418 +17,1242 @@ import { useLocale } from '@/lib/i18n'
  * Top bar: hamburger · logo · announcement ticker · bell(99+) · lang · avatar.
  */
 const props = defineProps<{
-  role: 'admin' | 'cashier' | 'teller'
-  announcement?: string | null
-  notificationCount?: number
-}>()
+    role: 'admin' | 'cashier' | 'teller';
+    announcement?: string | null;
+    notificationCount?: number;
+}>();
 
 const page = usePage<{
-  auth?: {
-    user?: {
-      full_name?: string | null
-      username?: string | null
-    } | null
-  }
-}>()
-const user = computed(() => page.props.auth?.user)
-const drawer = ref(false)
-const mobileMenuButton = ref<HTMLButtonElement | null>(null)
-const mobileCloseButton = ref<HTMLButtonElement | null>(null)
-const sidebarCollapsed = ref(false)
-const { lang, setLang, t } = useLocale()
-const SIDEBAR_STORAGE_KEY = 'ngwe-lwe:bank-sidebar-collapsed'
+    auth?: {
+        user?: {
+            full_name?: string | null;
+            username?: string | null;
+        } | null;
+    };
+}>();
+const user = computed(() => page.props.auth?.user);
+const drawer = ref(false);
+const mobileMenuButton = ref<HTMLButtonElement | null>(null);
+const mobileCloseButton = ref<HTMLButtonElement | null>(null);
+const sidebarCollapsed = ref(false);
+const { lang, setLang, t } = useLocale();
+const SIDEBAR_STORAGE_KEY = 'ngwe-lwe:bank-sidebar-collapsed';
 
-type NavSection = 'Banking' | 'Office' | 'Admin'
+type NavSection = 'Banking' | 'Office' | 'Admin';
 type NavIcon =
-  | 'overview'
-  | 'counter'
-  | 'cashIn'
-  | 'cashOut'
-  | 'transfer'
-  | 'accounts'
-  | 'exchange'
-  | 'floats'
-  | 'vault'
-  | 'reconcile'
-  | 'reports'
-  | 'settings'
+    | 'overview'
+    | 'counter'
+    | 'cashIn'
+    | 'cashOut'
+    | 'transfer'
+    | 'accounts'
+    | 'exchange'
+    | 'floats'
+    | 'vault'
+    | 'reconcile'
+    | 'reports'
+    | 'companies'
+    | 'services'
+    | 'fees'
+    | 'users'
+    | 'transactions'
+    | 'settings';
+type NavChild = {
+    label: string;
+    labelMm?: string;
+    href: string;
+    exactOnly?: boolean;
+};
 type NavItem = {
-  label: string
-  labelMm: string
-  href: string
-  icon: NavIcon
-  roles: string[]
-  section: NavSection
-}
+    label: string;
+    labelMm: string;
+    href: string;
+    icon: NavIcon;
+    roles: string[];
+    section: NavSection;
+    children?: NavChild[];
+};
 
 const NAV: NavItem[] = [
-  { label: 'Overview', labelMm: 'အနှစ်ချုပ်', href: '/dashboard', icon: 'overview', roles: ['admin', 'cashier', 'teller'], section: 'Banking' },
-  { label: 'Cashier Operations', labelMm: 'Cashier ငွေစီမံခန့်ခွဲမှု', href: '/cashier', icon: 'counter', roles: ['cashier'], section: 'Banking' },
-  { label: 'Profile', labelMm: 'ကိုယ်ရေးအချက်အလက်', href: '/cashier/profile', icon: 'settings', roles: ['cashier'], section: 'Office' },
-  { label: 'Counter', labelMm: 'ကောင်တာ', href: '/teller', icon: 'counter', roles: ['teller'], section: 'Banking' },
-  { label: 'My Float', labelMm: 'ကိုယ်ပိုင်ငွေသား', href: '/teller/float', icon: 'floats', roles: ['teller'], section: 'Banking' },
-  { label: 'Cash In', labelMm: 'ငွေသွင်း', href: '/transactions/cash-in', icon: 'cashIn', roles: ['teller'], section: 'Banking' },
-  { label: 'Cash Out', labelMm: 'ငွေထုတ်', href: '/transactions/cash-out', icon: 'cashOut', roles: ['teller'], section: 'Banking' },
-  { label: 'Transfer', labelMm: 'လွှဲပြောင်း', href: '/transactions/transfer', icon: 'transfer', roles: ['teller'], section: 'Banking' },
-  { label: 'Exchange', labelMm: 'ငွေလဲ', href: '/transactions/exchange', icon: 'exchange', roles: ['teller'], section: 'Banking' },
-]
+    {
+        label: 'Overview',
+        labelMm: 'လုပ်ငန်းအနှစ်ချုပ်',
+        href: '/dashboard',
+        icon: 'overview',
+        roles: ['teller'],
+        section: 'Banking',
+    },
+    {
+        label: 'Dashboard',
+        labelMm: 'လုပ်ငန်းအနှစ်ချုပ်',
+        href: '/cashier',
+        icon: 'overview',
+        roles: ['cashier'],
+        section: 'Banking',
+    },
+    {
+        label: 'Pending Cash In',
+        labelMm: 'စစ်ဆေးရန်ငွေသွင်း',
+        href: '/cashier/teller-entry-notifications',
+        icon: 'transactions',
+        roles: ['cashier'],
+        section: 'Banking',
+    },
+    {
+        label: 'Vault Stock',
+        labelMm: 'ငွေတိုက်လက်ကျန်',
+        href: '/cashier/main-vault-denomination-stock',
+        icon: 'vault',
+        roles: ['cashier'],
+        section: 'Banking',
+    },
+    {
+        label: 'Issue Float',
+        labelMm: 'ကောင်တာငွေထုတ်ပေး',
+        href: '/cashier/morning-issue',
+        icon: 'floats',
+        roles: ['cashier'],
+        section: 'Banking',
+    },
+    {
+        label: 'Close Floats',
+        labelMm: 'နေ့ကုန်ငွေပြန်စစ်',
+        href: '/cashier/end-of-day',
+        icon: 'reconcile',
+        roles: ['cashier'],
+        section: 'Banking',
+    },
+    {
+        label: 'Teller History',
+        labelMm: 'ကောင်တာမှတ်တမ်း',
+        href: '/cashier/teller-entry-history',
+        icon: 'reports',
+        roles: ['cashier'],
+        section: 'Banking',
+        children: [
+            {
+                label: 'All',
+                labelMm: 'အားလုံး',
+                href: '/cashier/teller-entry-history',
+            },
+            {
+                label: 'Cash In',
+                labelMm: 'ငွေသွင်း',
+                href: '/cashier/teller-entry-history-cash-in',
+            },
+            {
+                label: 'Cash Out',
+                labelMm: 'ငွေထုတ်',
+                href: '/cashier/teller-entry-history-cash-out',
+            },
+            {
+                label: 'Transfer',
+                labelMm: 'ငွေလွှဲ',
+                href: '/cashier/teller-entry-history-transfer',
+            },
+            {
+                label: 'Exchange',
+                labelMm: 'ငွေလဲ',
+                href: '/cashier/teller-entry-history-exchange',
+            },
+        ],
+    },
+    {
+        label: 'Vault Log',
+        labelMm: 'ငွေတိုက်မှတ်တမ်း',
+        href: '/cashier/main-vault-audit-log',
+        icon: 'settings',
+        roles: ['cashier'],
+        section: 'Banking',
+    },
+    {
+        label: 'Profile',
+        labelMm: 'ကိုယ်ရေးအချက်အလက်',
+        href: '/cashier/profile',
+        icon: 'settings',
+        roles: [],
+        section: 'Office',
+    },
+    {
+        label: 'Counter',
+        labelMm: 'ငွေလုပ်ငန်းကောင်တာ',
+        href: '/teller',
+        icon: 'counter',
+        roles: ['teller'],
+        section: 'Banking',
+    },
+    {
+        label: 'My Float',
+        labelMm: 'ကောင်တာငွေလက်ကျန်',
+        href: '/teller/float',
+        icon: 'floats',
+        roles: ['teller'],
+        section: 'Banking',
+        children: [
+            {
+                label: 'Current',
+                labelMm: 'လက်ရှိလက်ကျန်',
+                href: '/teller/float',
+                exactOnly: true,
+            },
+            {
+                label: 'History',
+                labelMm: 'လက်ကျန်မှတ်တမ်း',
+                href: '/teller/float/history',
+            },
+        ],
+    },
+    {
+        label: 'Cash In',
+        labelMm: 'ငွေသွင်း',
+        href: '/transactions/cash-in',
+        icon: 'cashIn',
+        roles: ['teller'],
+        section: 'Banking',
+        children: [
+            {
+                label: 'Entry',
+                labelMm: 'ငွေသွင်းစာရင်း',
+                href: '/transactions/cash-in',
+                exactOnly: true,
+            },
+            {
+                label: 'History',
+                labelMm: 'ငွေသွင်းမှတ်တမ်း',
+                href: '/transactions/cash-in/history',
+            },
+        ],
+    },
+    {
+        label: 'Cash Out',
+        labelMm: 'ငွေထုတ်',
+        href: '/transactions/cash-out',
+        icon: 'cashOut',
+        roles: ['teller'],
+        section: 'Banking',
+        children: [
+            {
+                label: 'Entry',
+                labelMm: 'ငွေထုတ်စာရင်း',
+                href: '/transactions/cash-out',
+                exactOnly: true,
+            },
+            {
+                label: 'History',
+                labelMm: 'ငွေထုတ်မှတ်တမ်း',
+                href: '/transactions/cash-out/history',
+            },
+        ],
+    },
+    {
+        label: 'Transfer',
+        labelMm: 'ငွေလွှဲ',
+        href: '/transactions/transfer',
+        icon: 'transfer',
+        roles: ['teller'],
+        section: 'Banking',
+        children: [
+            {
+                label: 'Entry',
+                labelMm: 'ငွေလွှဲစာရင်း',
+                href: '/transactions/transfer',
+                exactOnly: true,
+            },
+            {
+                label: 'History',
+                labelMm: 'ငွေလွှဲမှတ်တမ်း',
+                href: '/transactions/transfer/history',
+            },
+        ],
+    },
+    {
+        label: 'Exchange',
+        labelMm: 'ငွေလဲ',
+        href: '/transactions/exchange',
+        icon: 'exchange',
+        roles: ['teller'],
+        section: 'Banking',
+        children: [
+            {
+                label: 'Entry',
+                labelMm: 'ငွေလဲစာရင်း',
+                href: '/transactions/exchange',
+                exactOnly: true,
+            },
+            {
+                label: 'History',
+                labelMm: 'ငွေလဲမှတ်တမ်း',
+                href: '/transactions/exchange/history',
+            },
+        ],
+    },
+    {
+        label: 'Overview',
+        labelMm: 'လုပ်ငန်းအနှစ်ချုပ်',
+        href: '/admin',
+        icon: 'overview',
+        roles: ['admin'],
+        section: 'Admin',
+    },
+    {
+        label: 'Master Data',
+        labelMm: 'စနစ်အခြေခံစာရင်း',
+        href: '/admin/companies',
+        icon: 'settings',
+        roles: ['admin'],
+        section: 'Admin',
+        children: [
+            {
+                label: 'Providers',
+                labelMm: 'ဝန်ဆောင်မှုပေးသူ',
+                href: '/admin/companies',
+            },
+        ],
+    },
+    {
+        label: 'Providers',
+        labelMm: 'ဝန်ဆောင်မှုပေးသူ',
+        href: '/admin/companies',
+        icon: 'companies',
+        roles: [],
+        section: 'Admin',
+    },
+    {
+        label: 'Exchange Rates',
+        labelMm: 'ငွေလဲနှုန်း',
+        href: '/admin/exchange-rates',
+        icon: 'exchange',
+        roles: [],
+        section: 'Admin',
+    },
+    {
+        label: 'Accounts',
+        labelMm: 'ငွေစာရင်းအကောင့်',
+        href: '/admin/accounts',
+        icon: 'accounts',
+        roles: ['admin'],
+        section: 'Admin',
+    },
+    {
+        label: 'Fee Rules',
+        labelMm: 'ဝန်ဆောင်ခနှုန်းထား',
+        href: '/admin/fees',
+        icon: 'fees',
+        roles: ['admin'],
+        section: 'Admin',
+        children: [
+            {
+                label: 'Provider Fees',
+                labelMm: 'Provider ဝန်ဆောင်ခများ',
+                href: '/admin/fees/provider',
+            },
+            {
+                label: 'Transfer Fees',
+                labelMm: 'ငွေလွှဲဝန်ဆောင်ခများ',
+                href: '/admin/fees/transfer',
+            },
+            {
+                label: 'Exchange Rates',
+                labelMm: 'ငွေလဲနှုန်းများ',
+                href: '/admin/exchange-rates',
+            },
+        ],
+    },
+    {
+        label: 'Staff & Access',
+        labelMm: 'ဝန်ထမ်းနှင့်အသုံးပြုသူ',
+        href: '/admin/users',
+        icon: 'users',
+        roles: ['admin'],
+        section: 'Admin',
+    },
+    {
+        label: 'Transactions',
+        labelMm: 'ငွေလုပ်ငန်းမှတ်တမ်း',
+        href: '/admin/transactions',
+        icon: 'transactions',
+        roles: ['admin'],
+        section: 'Admin',
+        children: [
+            {
+                label: 'All Transactions',
+                labelMm: 'မှတ်တမ်းအားလုံး',
+                href: '/admin/transactions',
+            },
+            {
+                label: 'Cash In',
+                labelMm: 'ငွေသွင်း',
+                href: '/admin/transactions/cash-in',
+            },
+            {
+                label: 'Cash Out',
+                labelMm: 'ငွေထုတ်',
+                href: '/admin/transactions/cash-out',
+            },
+            {
+                label: 'Transfer',
+                labelMm: 'ငွေလွှဲ',
+                href: '/admin/transactions/transfer',
+            },
+            {
+                label: 'Exchange',
+                labelMm: 'ငွေလဲ',
+                href: '/admin/transactions/exchange',
+            },
+            {
+                label: 'Activity Logs',
+                labelMm: 'လုပ်ဆောင်ချက်မှတ်တမ်း',
+                href: '/admin/transactions/activity-logs',
+            },
+        ],
+    },
+    {
+        label: 'Vault',
+        labelMm: 'ပင်မငွေတိုက်',
+        href: '/admin/vault',
+        icon: 'vault',
+        roles: ['admin'],
+        section: 'Admin',
+        children: [
+            {
+                label: 'Overview',
+                labelMm: 'ငွေတိုက်အနှစ်ချုပ်',
+                href: '/admin/vault',
+            },
+            {
+                label: 'Vault Log',
+                labelMm: 'ငွေတိုက်မှတ်တမ်း',
+                href: '/admin/vault/log',
+            },
+        ],
+    },
+    {
+        label: 'Closing & Reports',
+        labelMm: 'စာရင်းပိတ်နှင့်အစီရင်ခံစာ',
+        href: '/admin/reports',
+        icon: 'reports',
+        roles: ['admin'],
+        section: 'Admin',
+        children: [
+            {
+                label: 'Daily Closing',
+                labelMm: 'နေ့စဉ်စာရင်းပိတ်',
+                href: '/admin/reports',
+            },
+            {
+                label: 'Reconciliation History',
+                labelMm: 'စာရင်းညှိမှတ်တမ်း',
+                href: '/admin/reports/reconciliations',
+            },
+        ],
+    },
+];
 const iconPaths: Record<NavIcon, string[]> = {
-  overview: ['M4 5.5A1.5 1.5 0 0 1 5.5 4h5v7h-6.5V5.5Z', 'M13.5 4h5A1.5 1.5 0 0 1 20 5.5V9h-6.5V4Z', 'M4 13.5h6.5V20h-5A1.5 1.5 0 0 1 4 18.5v-5Z', 'M13.5 11.5H20v7a1.5 1.5 0 0 1-1.5 1.5h-5v-8.5Z'],
-  counter: ['M5 6h14v12H5V6Z', 'M8 10h8', 'M8 14h3', 'M14 14h2'],
-  cashIn: ['M12 5v14', 'M7 10l5-5 5 5', 'M5 19h14'],
-  cashOut: ['M12 19V5', 'M7 14l5 5 5-5', 'M5 5h14'],
-  transfer: ['M7 7h11m0 0-3-3m3 3-3 3', 'M17 17H6m0 0 3 3m-3-3 3-3'],
-  accounts: ['M4 7.5A2.5 2.5 0 0 1 6.5 5H19v14H6.5A2.5 2.5 0 0 1 4 16.5v-9Z', 'M4 8h13', 'M15 13h4'],
-  exchange: ['M8 7h8m0 0-2-2m2 2-2 2', 'M16 17H8m0 0 2 2m-2-2 2-2', 'M12 4v16'],
-  floats: ['M6 8c0-2 2.7-4 6-4s6 2 6 4-2.7 4-6 4-6-2-6-4Z', 'M6 8v5c0 2 2.7 4 6 4s6-2 6-4V8', 'M6 13v3c0 2 2.7 4 6 4s6-2 6-4v-3'],
-  vault: ['M5 8h14v11H5V8Z', 'M8 8V5h8v3', 'M12 12.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z'],
-  reconcile: ['M5 7h9', 'M5 12h14', 'M5 17h7', 'M16 6l3 3-3 3'],
-  reports: ['M6 4h9l3 3v13H6V4Z', 'M14 4v4h4', 'M9 13h6', 'M9 17h4'],
-  settings: ['M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z', 'M19.4 15a1.8 1.8 0 0 0 .36 1.98l-1.8 3.12a1.8 1.8 0 0 0-1.98.2 1.8 1.8 0 0 0-.76 1.67H8.8a1.8 1.8 0 0 0-.76-1.67 1.8 1.8 0 0 0-1.98-.2l-1.8-3.12A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.4-1.27v-3.46A1.8 1.8 0 0 0 4.6 9a1.8 1.8 0 0 0-.36-1.98l1.8-3.12a1.8 1.8 0 0 0 1.98-.2A1.8 1.8 0 0 0 8.8 2h6.4a1.8 1.8 0 0 0 .76 1.67 1.8 1.8 0 0 0 1.98.2l1.8 3.12A1.8 1.8 0 0 0 19.4 9a1.8 1.8 0 0 0 1.4 1.27v3.46A1.8 1.8 0 0 0 19.4 15Z'],
-}
+    overview: [
+        'M4 5.5A1.5 1.5 0 0 1 5.5 4h5v7h-6.5V5.5Z',
+        'M13.5 4h5A1.5 1.5 0 0 1 20 5.5V9h-6.5V4Z',
+        'M4 13.5h6.5V20h-5A1.5 1.5 0 0 1 4 18.5v-5Z',
+        'M13.5 11.5H20v7a1.5 1.5 0 0 1-1.5 1.5h-5v-8.5Z',
+    ],
+    counter: ['M5 6h14v12H5V6Z', 'M8 10h8', 'M8 14h3', 'M14 14h2'],
+    cashIn: ['M12 5v14', 'M7 10l5-5 5 5', 'M5 19h14'],
+    cashOut: ['M12 19V5', 'M7 14l5 5 5-5', 'M5 5h14'],
+    transfer: ['M7 7h11m0 0-3-3m3 3-3 3', 'M17 17H6m0 0 3 3m-3-3 3-3'],
+    accounts: [
+        'M4 7.5A2.5 2.5 0 0 1 6.5 5H19v14H6.5A2.5 2.5 0 0 1 4 16.5v-9Z',
+        'M4 8h13',
+        'M15 13h4',
+    ],
+    exchange: [
+        'M8 7h8m0 0-2-2m2 2-2 2',
+        'M16 17H8m0 0 2 2m-2-2 2-2',
+        'M12 4v16',
+    ],
+    floats: [
+        'M6 8c0-2 2.7-4 6-4s6 2 6 4-2.7 4-6 4-6-2-6-4Z',
+        'M6 8v5c0 2 2.7 4 6 4s6-2 6-4V8',
+        'M6 13v3c0 2 2.7 4 6 4s6-2 6-4v-3',
+    ],
+    vault: [
+        'M5 8h14v11H5V8Z',
+        'M8 8V5h8v3',
+        'M12 12.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z',
+    ],
+    reconcile: ['M5 7h9', 'M5 12h14', 'M5 17h7', 'M16 6l3 3-3 3'],
+    reports: ['M6 4h9l3 3v13H6V4Z', 'M14 4v4h4', 'M9 13h6', 'M9 17h4'],
+    companies: [
+        'M4 21V7a2 2 0 0 1 2-2h7v16',
+        'M13 9h5a2 2 0 0 1 2 2v10',
+        'M8 9h1',
+        'M8 13h1',
+        'M8 17h1',
+        'M16 13h1',
+        'M16 17h1',
+    ],
+    services: ['M4 7h16', 'M4 17h16', 'M8 11V3', 'M16 21v-8'],
+    fees: ['M5 6h14', 'M5 12h14', 'M5 18h8', 'M16 15l3 3-3 3'],
+    users: [
+        'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2',
+        'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
+        'M22 21v-2a4 4 0 0 0-3-3.87',
+        'M16 3.13a4 4 0 0 1 0 7.75',
+    ],
+    transactions: [
+        'M6 3h12v18l-3-2-3 2-3-2-3 2V3Z',
+        'M9 8h6',
+        'M9 12h6',
+        'M9 16h4',
+    ],
+    settings: [
+        'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z',
+        'M19.4 15a1.8 1.8 0 0 0 .36 1.98l-1.8 3.12a1.8 1.8 0 0 0-1.98.2 1.8 1.8 0 0 0-.76 1.67H8.8a1.8 1.8 0 0 0-.76-1.67 1.8 1.8 0 0 0-1.98-.2l-1.8-3.12A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.4-1.27v-3.46A1.8 1.8 0 0 0 4.6 9a1.8 1.8 0 0 0-.36-1.98l1.8-3.12a1.8 1.8 0 0 0 1.98-.2A1.8 1.8 0 0 0 8.8 2h6.4a1.8 1.8 0 0 0 .76 1.67 1.8 1.8 0 0 0 1.98.2l1.8 3.12A1.8 1.8 0 0 0 19.4 9a1.8 1.8 0 0 0 1.4 1.27v3.46A1.8 1.8 0 0 0 19.4 15Z',
+    ],
+};
 
-const nav = computed(() => NAV.filter(n => n.roles.includes(props.role)))
+const nav = computed(() => NAV.filter((n) => n.roles.includes(props.role)));
+const currentPath = computed(() => page.url.split('?')[0] ?? page.url);
+const homeHref = computed(() => {
+    if (props.role === 'admin') {
+        return '/admin';
+    }
+
+    if (props.role === 'cashier') {
+        return '/cashier';
+    }
+
+    return '/dashboard';
+});
+const notificationHref = computed(() =>
+    props.role === 'admin'
+        ? '/admin/transactions'
+        : props.role === 'cashier'
+          ? '/cashier'
+          : '/dashboard',
+);
 const navSections = computed(() => {
-  const sections: NavSection[] = ['Banking', 'Office', 'Admin']
+    const sections: NavSection[] = ['Banking', 'Office', 'Admin'];
 
-  return sections
-    .map(section => ({
-      label: section,
-      items: nav.value.filter(item => item.section === section),
-    }))
-    .filter(section => section.items.length > 0)
-})
-const sectionLabel = (section: NavSection) => t(({ Banking: 'section.banking', Office: 'section.office', Admin: 'section.admin' }[section]), section)
-const navLabel = (item: NavItem) => lang.value === 'mm' ? item.labelMm : item.label
-const roleLabel = computed(() => t(`role.${props.role}`))
-const displayName = computed(() => user.value?.full_name ?? user.value?.username ?? roleLabel.value)
-const avatarInitial = computed(() => displayName.value.trim().slice(0, 1).toUpperCase())
+    return sections
+        .map((section) => ({
+            label: section,
+            items: nav.value.filter((item) => item.section === section),
+        }))
+        .filter((section) => section.items.length > 0);
+});
+const sectionLabel = (section: NavSection) =>
+    t(
+        {
+            Banking: 'section.banking',
+            Office: 'section.office',
+            Admin: 'section.admin',
+        }[section],
+        section,
+    );
+const navLabel = (item: NavItem) =>
+    lang.value === 'mm' ? item.labelMm : item.label;
+const navChildLabel = (item: NavChild) =>
+    lang.value === 'mm' ? (item.labelMm ?? item.label) : item.label;
+const roleLabel = computed(() => t(`role.${props.role}`));
+const displayName = computed(
+    () => user.value?.full_name ?? user.value?.username ?? roleLabel.value,
+);
+const avatarInitial = computed(() =>
+    displayName.value.trim().slice(0, 1).toUpperCase(),
+);
 const notificationLabel = computed(() => {
-  const count = props.notificationCount ?? 0
+    const count = props.notificationCount ?? 0;
 
-  return count > 0 ? `${count} ${t('common.pendingNotifications')}` : t('common.noPendingNotifications')
-})
+    return count > 0
+        ? `${count} ${t('common.pendingNotifications')}`
+        : t('common.noPendingNotifications');
+});
 const hrefFor = (href: string) => {
-  if (href === '/transactions') {
-    return '/transactions/transfer'
-  }
+    if (href === '/transactions') {
+        return '/transactions/transfer';
+    }
 
-  if (href === '/exchange-rates') {
-    return '/transactions/exchange'
-  }
+    if (href === '/exchange-rates') {
+        return '/transactions/exchange';
+    }
 
-  return href
-}
+    return href;
+};
 function authHeaders(): Record<string, string> {
-  const token = readStoredToken()
-
-  return token ? { Authorization: `Bearer ${token}` } : {}
+    return {};
 }
-const isActive = (href: string) => {
-  if (href === '/transactions') {
-    return page.url.startsWith('/transactions')
-  }
+const isTransactionRecordsPath = (path: string) =>
+    path === '/admin/transactions' || /^\/admin\/transactions\/\d+$/.test(path);
+const isChildActive = (child: NavChild) => {
+    const resolved = hrefFor(child.href);
 
-  const resolved = hrefFor(href)
+    if (child.exactOnly) {
+        return currentPath.value === resolved;
+    }
 
-  return page.url === resolved || (resolved !== '/dashboard' && page.url.startsWith(resolved))
-}
+    return isActive(child.href, true);
+};
+const isActive = (href: string, exact = false) => {
+    const path = currentPath.value;
+
+    if (href === '/transactions') {
+        return path.startsWith('/transactions');
+    }
+
+    const resolved = hrefFor(href);
+
+    if (exact && resolved === '/admin/transactions') {
+        return isTransactionRecordsPath(path);
+    }
+
+    if (exact) {
+        return path === resolved || path.startsWith(`${resolved}/`);
+    }
+
+    if (resolved === '/admin') {
+        return path === '/admin' || path === '/admin/overview';
+    }
+
+    if (resolved === '/cashier') {
+        return (
+            path === '/cashier' ||
+            path === '/cashier/teller-entry-notifications'
+        );
+    }
+
+    return (
+        path === resolved ||
+        (resolved !== '/dashboard' && path.startsWith(resolved))
+    );
+};
+const isNavItemActive = (item: NavItem) =>
+    isActive(item.href) ||
+    item.children?.some((child) => isChildActive(child)) === true;
 
 onMounted(() => {
-  sidebarCollapsed.value = window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1'
-})
+    sidebarCollapsed.value =
+        window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1';
+});
 
-watch(drawer, async isOpen => {
-  document.body.style.overflow = isOpen ? 'hidden' : ''
+watch(drawer, async (isOpen) => {
+    document.body.style.overflow = isOpen ? 'hidden' : '';
 
-  if (isOpen) {
-    await nextTick()
-    mobileCloseButton.value?.focus()
-  } else {
-    mobileMenuButton.value?.focus()
-  }
-})
+    if (isOpen) {
+        await nextTick();
+        mobileCloseButton.value?.focus();
+    } else {
+        mobileMenuButton.value?.focus();
+    }
+});
 
 onBeforeUnmount(() => {
-  document.body.style.overflow = ''
-})
+    document.body.style.overflow = '';
+});
 
-watch(sidebarCollapsed, collapsed => {
-  window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? '1' : '0')
-})
+watch(sidebarCollapsed, (collapsed) => {
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, collapsed ? '1' : '0');
+});
 
-async function signOut() {
-  const token = readStoredToken()
-
-  if (token) {
-    await apiRequest('/api/auth/logout', {
-      method: 'POST',
-      token,
-    }).catch(() => undefined)
-  }
-
-  removeStoredToken()
-  router.visit('/login')
+function signOut() {
+    router.post('/logout');
 }
 </script>
 
 <template>
-  <div class="min-h-screen bg-canvas font-sans text-ink antialiased">
-    <a
-      href="#bank-main-content"
-      class="sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:not-sr-only focus:rounded-lg focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-white"
-    >
-      Skip to content
-    </a>
-
-    <!-- ===== Top bar ===== -->
-    <header class="sticky top-0 z-40 border-b border-line bg-card">
-      <div class="flex h-14 items-center gap-3 px-4 lg:px-6">
-        <!-- hamburger: tablet & mobile -->
-        <button
-          ref="mobileMenuButton"
-          type="button"
-          class="grid size-9 place-items-center rounded-full text-slate transition hover:bg-mist hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70 lg:hidden"
-          :aria-label="t('common.openMenu')"
-          aria-controls="mobile-bank-menu"
-          :aria-expanded="drawer"
-          @click="drawer = true"
+    <div class="min-h-screen bg-canvas font-sans text-ink antialiased">
+        <a
+            href="#bank-main-content"
+            class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[60] focus:rounded-lg focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-white"
         >
-          <svg class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-            <path d="M4 7h16" />
-            <path d="M4 12h16" />
-            <path d="M4 17h16" />
-          </svg>
-        </button>
+            Skip to content
+        </a>
 
-        <Link href="/dashboard" :headers="authHeaders()" class="flex items-center gap-2">
-          <span class="grid size-8 place-items-center rounded-full bg-brand text-xs font-bold text-white">DP</span>
-          <span class="hidden text-[15px] font-bold tracking-tight sm:block">{{ t('brand.name') }}</span>
-        </Link>
-
-        <!-- announcement ticker -->
-        <div v-if="announcement" class="ml-2 hidden min-w-0 flex-1 items-center gap-2 md:flex">
-          <span class="shrink-0 rounded-pill bg-brand px-3 py-1 text-[11px] font-bold text-white">{{ t('common.announcement') }}</span>
-          <p class="truncate text-[13px] text-slate">{{ announcement }}</p>
-        </div>
-        <div v-else class="flex-1" />
-        <div v-if="announcement" class="min-w-0 flex-1 md:hidden" />
-
-        <div class="ml-auto flex items-center gap-1.5 sm:gap-2">
-          <!-- bell + 99+ badge -->
-          <Link
-            href="/dashboard"
-            :headers="authHeaders()"
-            class="relative grid size-10 place-items-center rounded-full border border-line bg-card text-slate transition hover:border-brand/30 hover:bg-brand-soft hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70"
-            :aria-label="notificationLabel"
-            :title="notificationLabel"
-          >
-            <svg class="size-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
-              <path d="M10 21h4" />
-            </svg>
-            <span v-if="notificationCount"
-                  class="absolute -right-0.5 -top-0.5 rounded-pill bg-brand px-1.5 py-px text-[9px] font-bold text-white">
-              {{ notificationCount > 99 ? '99+' : notificationCount }}
-            </span>
-          </Link>
-
-          <!-- language -->
-          <div class="hidden items-center rounded-pill border border-line bg-card p-0.5 text-[11px] font-bold shadow-sm sm:flex" :aria-label="t('common.language')">
-            <button
-              type="button"
-              class="rounded-pill px-2.5 py-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70"
-              :class="lang === 'en' ? 'bg-brand text-white' : 'text-slate hover:bg-mist hover:text-ink'"
-              :aria-pressed="lang === 'en'"
-              :title="t('language.english')"
-              @click="setLang('en')"
-            >
-              EN
-            </button>
-            <button
-              type="button"
-              class="rounded-pill px-2.5 py-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70"
-              :class="lang === 'mm' ? 'bg-brand text-white' : 'text-slate hover:bg-mist hover:text-ink'"
-              :aria-pressed="lang === 'mm'"
-              :title="t('language.myanmar')"
-              @click="setLang('mm')"
-            >
-              မြန်မာ
-            </button>
-          </div>
-
-          <!-- avatar -->
-          <div class="flex items-center gap-1.5 rounded-pill border border-line bg-card py-1 pl-1 pr-1 shadow-sm sm:gap-2 sm:pr-2">
-            <span class="grid size-7 place-items-center rounded-full bg-brand text-[11px] font-bold uppercase text-white">
-              {{ avatarInitial }}
-            </span>
-            <span class="hidden max-w-28 truncate text-[13px] font-bold sm:block">
-              {{ displayName }}
-            </span>
-            <button
-              type="button"
-              class="grid size-7 place-items-center rounded-full text-slate transition hover:bg-brand-soft hover:text-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70"
-              :aria-label="t('common.signOut')"
-              :title="t('common.signOut')"
-              @click="signOut"
-            >
-              <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M12 3v9" />
-                <path d="M6.7 6.7a7.5 7.5 0 1 0 10.6 0" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- announcement on mobile: its own row -->
-      <div v-if="announcement" class="flex items-center gap-2 border-t border-line px-4 py-1.5 md:hidden">
-        <span class="shrink-0 rounded-pill bg-brand px-2.5 py-0.5 text-[10px] font-bold text-white">{{ t('common.announcement') }}</span>
-        <p class="truncate text-xs text-slate">{{ announcement }}</p>
-      </div>
-    </header>
-
-    <div class="flex">
-      <!-- ===== Sidebar: desktop ===== -->
-      <aside
-        :aria-label="t('common.desktopNavigation')"
-        class="sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 border-r border-white/10 bg-[#2f3035] text-white shadow-[0_14px_32px_-24px_rgba(15,23,42,0.9)] transition-[width] duration-200 lg:block"
-        :class="sidebarCollapsed ? 'w-[84px]' : 'w-[260px]'"
-        :data-desktop-drawer="sidebarCollapsed ? 'collapsed' : 'expanded'"
-      >
-        <div class="flex h-full flex-col">
-          <div class="border-b border-white/10 py-5" :class="sidebarCollapsed ? 'px-2' : 'px-4'">
-            <div class="flex items-center justify-between gap-2" :class="sidebarCollapsed ? 'flex-col' : ''">
-              <span class="grid size-11 place-items-center rounded-[1.05rem] bg-brand text-sm font-black text-white shadow-[0_10px_24px_-14px_rgba(179,27,44,0.85)]">DP</span>
-              <div v-if="!sidebarCollapsed" class="min-w-0">
-                <p class="truncate text-base font-black tracking-tight">ဒေါက်တာဖုန်း</p>
-                <p class="mt-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-white/45">{{ t('brand.operations') }}</p>
-              </div>
-              <button
-                type="button"
-                class="grid size-8 shrink-0 place-items-center rounded-lg border border-white/10 text-[11px] font-black text-white/60 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70"
-                :aria-label="sidebarCollapsed ? t('common.expandMenu') : t('common.collapseMenu')"
-                aria-controls="desktop-bank-menu"
-                :aria-expanded="!sidebarCollapsed"
-                :title="sidebarCollapsed ? t('common.expandMenu') : t('common.collapseMenu')"
-                @click="sidebarCollapsed = !sidebarCollapsed"
-              >
-                <svg
-                  class="size-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  aria-hidden="true"
+        <!-- ===== Top bar ===== -->
+        <header class="sticky top-0 z-40 border-b border-line bg-card">
+            <div class="flex h-14 items-center gap-3 px-4 lg:px-6">
+                <!-- hamburger: tablet & mobile -->
+                <button
+                    ref="mobileMenuButton"
+                    type="button"
+                    class="grid size-9 place-items-center rounded-full text-slate transition hover:bg-mist hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none lg:hidden"
+                    :aria-label="t('common.openMenu')"
+                    aria-controls="mobile-bank-menu"
+                    :aria-expanded="drawer"
+                    @click="drawer = true"
                 >
-                  <path v-if="sidebarCollapsed" d="m7 6 6 6-6 6" />
-                  <path v-if="sidebarCollapsed" d="m13 6 6 6-6 6" />
-                  <path v-if="!sidebarCollapsed" d="m11 6-6 6 6 6" />
-                  <path v-if="!sidebarCollapsed" d="m17 6-6 6 6 6" />
-                </svg>
-              </button>
-            </div>
-          </div>
+                    <svg
+                        class="size-5"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2.2"
+                        stroke-linecap="round"
+                        aria-hidden="true"
+                    >
+                        <path d="M4 7h16" />
+                        <path d="M4 12h16" />
+                        <path d="M4 17h16" />
+                    </svg>
+                </button>
 
-          <nav id="desktop-bank-menu" class="min-h-0 flex-1 overflow-y-auto px-3 py-4">
-            <section
-              v-for="section in navSections"
-              :key="section.label"
-              class="last:mb-0"
-              :class="sidebarCollapsed ? 'mb-2' : 'mb-5'"
-            >
-              <p v-if="!sidebarCollapsed" class="px-3 pb-2 text-[10px] font-black uppercase tracking-[0.2em] text-white/40">{{ sectionLabel(section.label) }}</p>
-              <ul class="space-y-1">
-                <li v-for="item in section.items" :key="item.href">
-                  <Link
-                    :href="hrefFor(item.href)"
+                <Link
+                    :href="homeHref"
                     :headers="authHeaders()"
-                    :aria-current="isActive(item.href) ? 'page' : undefined"
-                    :aria-label="navLabel(item)"
-                    :title="navLabel(item)"
-                    class="group relative flex items-center gap-3 rounded-xl border px-3 py-2.5 text-[13.5px] font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70"
-                    :class="isActive(item.href)
-                      ? 'border-white/10 bg-white/10 text-white shadow-[inset_3px_0_0_#b31b2c]'
-                      : 'border-transparent text-white/65 hover:bg-white/10 hover:text-white'"
-                  >
+                    class="flex items-center gap-2"
+                >
                     <span
-                      class="absolute inset-y-2 left-0 w-1 rounded-r-full transition"
-                      :class="isActive(item.href) ? 'bg-brand' : 'bg-transparent'"
-                    />
-                    <span
-                      class="grid size-9 shrink-0 place-items-center rounded-xl transition"
-                      :class="isActive(item.href) ? 'bg-brand text-white shadow-sm' : 'bg-white/10 text-white/60 group-hover:bg-white/15 group-hover:text-white'"
+                        class="grid size-8 place-items-center rounded-full bg-brand text-xs font-bold text-white"
+                        >DP</span
                     >
-                      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path v-for="path in iconPaths[item.icon]" :key="path" :d="path" />
-                      </svg>
-                    </span>
-                    <span v-if="!sidebarCollapsed" class="min-w-0 flex-1 truncate">{{ navLabel(item) }}</span>
                     <span
-                      v-if="sidebarCollapsed"
-                      class="pointer-events-none absolute left-[calc(100%+0.55rem)] top-1/2 z-50 -translate-y-1/2 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-xs font-bold text-white opacity-0 shadow-lg ring-1 ring-white/10 transition group-hover:opacity-100 group-focus-visible:opacity-100"
+                        class="hidden text-[15px] font-bold tracking-tight sm:block"
+                        >{{ t('brand.name') }}</span
                     >
-                      {{ navLabel(item) }}
-                    </span>
-                    <span
-                      v-if="!sidebarCollapsed"
-                      class="grid size-6 place-items-center rounded-lg text-base leading-none transition"
-                      :class="isActive(item.href) ? 'bg-brand text-white' : 'bg-white/10 text-white/40 group-hover:bg-white/15 group-hover:text-white'"
-                    >
-                      ›
-                    </span>
-                  </Link>
-                </li>
-              </ul>
-            </section>
-          </nav>
+                </Link>
 
-        </div>
-      </aside>
+                <!-- announcement ticker -->
+                <div
+                    v-if="announcement"
+                    class="ml-2 hidden min-w-0 flex-1 items-center gap-2 md:flex"
+                >
+                    <span
+                        class="shrink-0 rounded-pill bg-brand px-3 py-1 text-[11px] font-bold text-white"
+                        >{{ t('common.announcement') }}</span
+                    >
+                    <p class="truncate text-[13px] text-slate">
+                        {{ announcement }}
+                    </p>
+                </div>
+                <div v-else class="flex-1" />
+                <div v-if="announcement" class="min-w-0 flex-1 md:hidden" />
 
-      <!-- ===== Drawer: tablet & mobile ===== -->
-      <Teleport to="body">
-        <div v-if="drawer" class="fixed inset-0 z-50 lg:hidden" @keydown.esc="drawer = false">
-          <button type="button" class="absolute inset-0 bg-ink/40" :aria-label="t('common.closeMenu')" @click="drawer = false" />
-          <aside id="mobile-bank-menu" class="absolute inset-y-0 left-0 flex w-[260px] max-w-[85vw] flex-col bg-[#2f3035] text-white shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="mobile-bank-menu-title">
-            <div class="flex h-14 items-center justify-between border-b border-white/10 px-4">
-              <div class="flex items-center gap-2">
-                <span class="grid size-8 place-items-center rounded-lg bg-brand text-xs font-bold text-white">DP</span>
-                <span id="mobile-bank-menu-title" class="font-bold">ဒေါက်တာဖုန်း</span>
-              </div>
-              <button ref="mobileCloseButton" type="button" class="grid size-9 place-items-center rounded-lg text-lg text-white/70 hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70"
-                      :aria-label="t('common.closeMenu')" @click="drawer = false">✕</button>
-            </div>
-            <nav :aria-label="t('common.mobileNavigation')" class="min-h-0 flex-1 overflow-y-auto p-3">
-              <section v-for="section in navSections" :key="section.label" class="mb-5 last:mb-0">
-                <p class="px-3 pb-2 text-[10px] font-black uppercase tracking-[0.2em] text-white/40">{{ sectionLabel(section.label) }}</p>
-                <ul class="space-y-0.5">
-                  <li v-for="item in section.items" :key="item.href">
-                    <Link :href="hrefFor(item.href)" :headers="authHeaders()" @click="drawer = false"
-                          :aria-current="isActive(item.href) ? 'page' : undefined"
-                          class="flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/70"
-                          :class="isActive(item.href) ? 'bg-white/10 text-white shadow-[inset_3px_0_0_#b31b2c]' : 'text-white/65 hover:bg-white/10 hover:text-white'">
-                      <span class="grid size-8 shrink-0 place-items-center rounded-lg" :class="isActive(item.href) ? 'bg-brand text-white' : 'bg-white/10 text-white/60'">
-                        <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                          <path v-for="path in iconPaths[item.icon]" :key="path" :d="path" />
+                <div class="ml-auto flex items-center gap-1.5 sm:gap-2">
+                    <!-- bell + 99+ badge -->
+                    <Link
+                        :href="notificationHref"
+                        :headers="authHeaders()"
+                        class="relative grid size-10 place-items-center rounded-full border border-line bg-card text-slate transition hover:border-brand/30 hover:bg-brand-soft hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                        :aria-label="notificationLabel"
+                        :title="notificationLabel"
+                    >
+                        <svg
+                            class="size-4.5"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            aria-hidden="true"
+                        >
+                            <path
+                                d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"
+                            />
+                            <path d="M10 21h4" />
                         </svg>
-                      </span>
-                      {{ navLabel(item) }}
+                        <span
+                            v-if="notificationCount"
+                            class="absolute -top-0.5 -right-0.5 rounded-pill bg-brand px-1.5 py-px text-[9px] font-bold text-white"
+                        >
+                            {{
+                                notificationCount > 99
+                                    ? '99+'
+                                    : notificationCount
+                            }}
+                        </span>
                     </Link>
-                  </li>
-                </ul>
-              </section>
-            </nav>
-          </aside>
-        </div>
-      </Teleport>
 
-      <!-- ===== Content ===== -->
-      <main id="bank-main-content" class="min-w-0 flex-1 px-4 py-5 lg:px-8 lg:py-7" tabindex="-1">
-        <slot :lang="lang" />
-      </main>
+                    <!-- language -->
+                    <button
+                        type="button"
+                        class="grid size-10 place-items-center rounded-full border border-line bg-card text-[10px] font-black text-brand shadow-sm transition hover:border-brand/30 hover:bg-brand-soft focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none sm:hidden"
+                        :aria-label="t('common.language')"
+                        :title="
+                            lang === 'en'
+                                ? t('language.myanmar')
+                                : t('language.english')
+                        "
+                        @click="setLang(lang === 'en' ? 'mm' : 'en')"
+                    >
+                        {{ lang === 'en' ? 'မြန်မာ' : 'EN' }}
+                    </button>
+                    <div
+                        class="hidden items-center rounded-pill border border-line bg-card p-0.5 text-[11px] font-bold shadow-sm sm:flex"
+                        :aria-label="t('common.language')"
+                    >
+                        <button
+                            type="button"
+                            class="rounded-pill px-2.5 py-1 transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                            :class="
+                                lang === 'en'
+                                    ? 'bg-brand text-white'
+                                    : 'text-slate hover:bg-mist hover:text-ink'
+                            "
+                            :aria-pressed="lang === 'en'"
+                            :title="t('language.english')"
+                            @click="setLang('en')"
+                        >
+                            EN
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded-pill px-2.5 py-1 transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                            :class="
+                                lang === 'mm'
+                                    ? 'bg-brand text-white'
+                                    : 'text-slate hover:bg-mist hover:text-ink'
+                            "
+                            :aria-pressed="lang === 'mm'"
+                            :title="t('language.myanmar')"
+                            @click="setLang('mm')"
+                        >
+                            မြန်မာ
+                        </button>
+                    </div>
+
+                    <!-- avatar -->
+                    <div
+                        class="flex items-center gap-1.5 rounded-pill border border-line bg-card py-1 pr-1 pl-1 shadow-sm sm:gap-2 sm:pr-2"
+                    >
+                        <span
+                            class="grid size-7 place-items-center rounded-full bg-brand text-[11px] font-bold text-white uppercase"
+                        >
+                            {{ avatarInitial }}
+                        </span>
+                        <span
+                            class="hidden max-w-28 truncate text-[13px] font-bold sm:block"
+                        >
+                            {{ displayName }}
+                        </span>
+                        <button
+                            type="button"
+                            class="grid size-7 place-items-center rounded-full text-slate transition hover:bg-brand-soft hover:text-brand focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                            :aria-label="t('common.signOut')"
+                            :title="t('common.signOut')"
+                            @click="signOut"
+                        >
+                            <svg
+                                class="size-4"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2.1"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                aria-hidden="true"
+                            >
+                                <path d="M12 3v9" />
+                                <path d="M6.7 6.7a7.5 7.5 0 1 0 10.6 0" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- announcement on mobile: its own row -->
+            <div
+                v-if="announcement"
+                class="flex items-center gap-2 border-t border-line px-4 py-1.5 md:hidden"
+            >
+                <span
+                    class="shrink-0 rounded-pill bg-brand px-2.5 py-0.5 text-[10px] font-bold text-white"
+                    >{{ t('common.announcement') }}</span
+                >
+                <p class="truncate text-xs text-slate">{{ announcement }}</p>
+            </div>
+        </header>
+
+        <div class="flex">
+            <!-- ===== Sidebar: desktop ===== -->
+            <aside
+                :aria-label="t('common.desktopNavigation')"
+                class="sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 border-r border-white/10 bg-[#2f3035] text-white shadow-[0_14px_32px_-24px_rgba(15,23,42,0.9)] transition-[width] duration-200 lg:block"
+                :class="sidebarCollapsed ? 'w-[84px]' : 'w-[260px]'"
+                :data-desktop-drawer="
+                    sidebarCollapsed ? 'collapsed' : 'expanded'
+                "
+            >
+                <div class="flex h-full flex-col">
+                    <div
+                        class="border-b border-white/10 py-5"
+                        :class="sidebarCollapsed ? 'px-2' : 'px-4'"
+                    >
+                        <div
+                            class="flex items-center justify-between gap-2"
+                            :class="sidebarCollapsed ? 'flex-col' : ''"
+                        >
+                            <span
+                                class="grid size-11 place-items-center rounded-[1.05rem] bg-brand text-sm font-black text-white shadow-[0_10px_24px_-14px_rgba(179,27,44,0.85)]"
+                                >DP</span
+                            >
+                            <div v-if="!sidebarCollapsed" class="min-w-0">
+                                <p
+                                    class="truncate text-base font-black tracking-tight"
+                                >
+                                    ဒေါက်တာဖုန်း
+                                </p>
+                                <p
+                                    class="mt-0.5 text-[10px] font-bold tracking-[0.18em] text-white/45 uppercase"
+                                >
+                                    {{ t('brand.operations') }}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                class="grid size-8 shrink-0 place-items-center rounded-lg border border-white/10 text-[11px] font-black text-white/60 transition hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                                :aria-label="
+                                    sidebarCollapsed
+                                        ? t('common.expandMenu')
+                                        : t('common.collapseMenu')
+                                "
+                                aria-controls="desktop-bank-menu"
+                                :aria-expanded="!sidebarCollapsed"
+                                :title="
+                                    sidebarCollapsed
+                                        ? t('common.expandMenu')
+                                        : t('common.collapseMenu')
+                                "
+                                @click="sidebarCollapsed = !sidebarCollapsed"
+                            >
+                                <svg
+                                    class="size-4"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="2.2"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    aria-hidden="true"
+                                >
+                                    <path
+                                        v-if="sidebarCollapsed"
+                                        d="m7 6 6 6-6 6"
+                                    />
+                                    <path
+                                        v-if="sidebarCollapsed"
+                                        d="m13 6 6 6-6 6"
+                                    />
+                                    <path
+                                        v-if="!sidebarCollapsed"
+                                        d="m11 6-6 6 6 6"
+                                    />
+                                    <path
+                                        v-if="!sidebarCollapsed"
+                                        d="m17 6-6 6 6 6"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <nav
+                        id="desktop-bank-menu"
+                        class="min-h-0 flex-1 overflow-y-auto px-3 py-4"
+                    >
+                        <section
+                            v-for="section in navSections"
+                            :key="section.label"
+                            class="last:mb-0"
+                            :class="sidebarCollapsed ? 'mb-2' : 'mb-5'"
+                        >
+                            <p
+                                v-if="!sidebarCollapsed"
+                                class="px-3 pb-2 text-[10px] font-black tracking-[0.2em] text-white/40 uppercase"
+                            >
+                                {{ sectionLabel(section.label) }}
+                            </p>
+                            <ul class="space-y-1">
+                                <li
+                                    v-for="item in section.items"
+                                    :key="`${item.label}-${item.href}`"
+                                >
+                                    <Link
+                                        :href="hrefFor(item.href)"
+                                        :headers="authHeaders()"
+                                        :aria-current="
+                                            isNavItemActive(item)
+                                                ? 'page'
+                                                : undefined
+                                        "
+                                        :aria-label="navLabel(item)"
+                                        :title="navLabel(item)"
+                                        class="group relative flex items-center gap-3 rounded-xl border px-3 py-2.5 text-[13.5px] font-bold transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                                        :class="
+                                            isNavItemActive(item)
+                                                ? 'border-white/10 bg-white/10 text-white shadow-[inset_3px_0_0_#b31b2c]'
+                                                : 'border-transparent text-white/65 hover:bg-white/10 hover:text-white'
+                                        "
+                                    >
+                                        <span
+                                            class="absolute inset-y-2 left-0 w-1 rounded-r-full transition"
+                                            :class="
+                                                isNavItemActive(item)
+                                                    ? 'bg-brand'
+                                                    : 'bg-transparent'
+                                            "
+                                        />
+                                        <span
+                                            class="grid size-9 shrink-0 place-items-center rounded-xl transition"
+                                            :class="
+                                                isNavItemActive(item)
+                                                    ? 'bg-brand text-white shadow-sm'
+                                                    : 'bg-white/10 text-white/60 group-hover:bg-white/15 group-hover:text-white'
+                                            "
+                                        >
+                                            <svg
+                                                class="size-4"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                stroke-width="1.9"
+                                                stroke-linecap="round"
+                                                stroke-linejoin="round"
+                                                aria-hidden="true"
+                                            >
+                                                <path
+                                                    v-for="path in iconPaths[
+                                                        item.icon
+                                                    ]"
+                                                    :key="path"
+                                                    :d="path"
+                                                />
+                                            </svg>
+                                        </span>
+                                        <span
+                                            v-if="!sidebarCollapsed"
+                                            class="min-w-0 flex-1 truncate"
+                                            >{{ navLabel(item) }}</span
+                                        >
+                                        <span
+                                            v-if="sidebarCollapsed"
+                                            class="pointer-events-none absolute top-1/2 left-[calc(100%+0.55rem)] z-50 -translate-y-1/2 rounded-lg bg-ink px-2.5 py-1.5 text-xs font-bold whitespace-nowrap text-white opacity-0 shadow-lg ring-1 ring-white/10 transition group-hover:opacity-100 group-focus-visible:opacity-100"
+                                        >
+                                            {{ navLabel(item) }}
+                                        </span>
+                                        <span
+                                            v-if="!sidebarCollapsed"
+                                            class="grid size-6 place-items-center rounded-lg text-base leading-none transition"
+                                            :class="
+                                                isNavItemActive(item)
+                                                    ? 'bg-brand text-white'
+                                                    : 'bg-white/10 text-white/40 group-hover:bg-white/15 group-hover:text-white'
+                                            "
+                                        >
+                                            ›
+                                        </span>
+                                    </Link>
+                                    <ul
+                                        v-if="
+                                            !sidebarCollapsed &&
+                                            item.children?.length &&
+                                            isNavItemActive(item)
+                                        "
+                                        class="mt-1 space-y-1 pl-12"
+                                    >
+                                        <li
+                                            v-for="child in item.children"
+                                            :key="child.href"
+                                        >
+                                            <Link
+                                                :href="hrefFor(child.href)"
+                                                :headers="authHeaders()"
+                                                :aria-current="
+                                                    isChildActive(child)
+                                                        ? 'page'
+                                                        : undefined
+                                                "
+                                                :title="navChildLabel(child)"
+                                                class="group/child flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-black transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                                                :class="
+                                                    isChildActive(child)
+                                                        ? 'bg-white/10 text-white'
+                                                        : 'text-white/50 hover:bg-white/10 hover:text-white'
+                                                "
+                                            >
+                                                <span
+                                                    class="size-1.5 rounded-full transition"
+                                                    :class="
+                                                        isChildActive(child)
+                                                            ? 'bg-brand'
+                                                            : 'bg-white/25 group-hover/child:bg-white/70'
+                                                    "
+                                                />
+                                                <span class="truncate">
+                                                    {{ navChildLabel(child) }}
+                                                </span>
+                                            </Link>
+                                        </li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </section>
+                    </nav>
+                </div>
+            </aside>
+
+            <!-- ===== Drawer: tablet & mobile ===== -->
+            <Teleport to="body">
+                <div
+                    v-if="drawer"
+                    class="fixed inset-0 z-50 lg:hidden"
+                    @keydown.esc="drawer = false"
+                >
+                    <button
+                        type="button"
+                        class="absolute inset-0 bg-ink/40"
+                        :aria-label="t('common.closeMenu')"
+                        @click="drawer = false"
+                    />
+                    <aside
+                        id="mobile-bank-menu"
+                        class="absolute inset-y-0 left-0 flex w-[260px] max-w-[85vw] flex-col bg-[#2f3035] text-white shadow-2xl"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="mobile-bank-menu-title"
+                    >
+                        <div
+                            class="flex h-14 items-center justify-between border-b border-white/10 px-4"
+                        >
+                            <div class="flex items-center gap-2">
+                                <span
+                                    class="grid size-8 place-items-center rounded-lg bg-brand text-xs font-bold text-white"
+                                    >DP</span
+                                >
+                                <span
+                                    id="mobile-bank-menu-title"
+                                    class="font-bold"
+                                    >ဒေါက်တာဖုန်း</span
+                                >
+                            </div>
+                            <button
+                                ref="mobileCloseButton"
+                                type="button"
+                                class="grid size-9 place-items-center rounded-lg text-lg text-white/70 hover:bg-white/10 hover:text-white focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                                :aria-label="t('common.closeMenu')"
+                                @click="drawer = false"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <nav
+                            :aria-label="t('common.mobileNavigation')"
+                            class="min-h-0 flex-1 overflow-y-auto p-3"
+                        >
+                            <section
+                                v-for="section in navSections"
+                                :key="section.label"
+                                class="mb-5 last:mb-0"
+                            >
+                                <p
+                                    class="px-3 pb-2 text-[10px] font-black tracking-[0.2em] text-white/40 uppercase"
+                                >
+                                    {{ sectionLabel(section.label) }}
+                                </p>
+                                <ul class="space-y-0.5">
+                                    <li
+                                        v-for="item in section.items"
+                                        :key="`${item.label}-${item.href}`"
+                                    >
+                                        <Link
+                                            :href="hrefFor(item.href)"
+                                            :headers="authHeaders()"
+                                            @click="drawer = false"
+                                            :aria-current="
+                                                isNavItemActive(item)
+                                                    ? 'page'
+                                                    : undefined
+                                            "
+                                            class="flex items-center gap-3 rounded-xl px-3.5 py-3 text-sm font-semibold transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                                            :class="
+                                                isNavItemActive(item)
+                                                    ? 'bg-white/10 text-white shadow-[inset_3px_0_0_#b31b2c]'
+                                                    : 'text-white/65 hover:bg-white/10 hover:text-white'
+                                            "
+                                        >
+                                            <span
+                                                class="grid size-8 shrink-0 place-items-center rounded-lg"
+                                                :class="
+                                                    isNavItemActive(item)
+                                                        ? 'bg-brand text-white'
+                                                        : 'bg-white/10 text-white/60'
+                                                "
+                                            >
+                                                <svg
+                                                    class="size-4"
+                                                    viewBox="0 0 24 24"
+                                                    fill="none"
+                                                    stroke="currentColor"
+                                                    stroke-width="1.9"
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                    aria-hidden="true"
+                                                >
+                                                    <path
+                                                        v-for="path in iconPaths[
+                                                            item.icon
+                                                        ]"
+                                                        :key="path"
+                                                        :d="path"
+                                                    />
+                                                </svg>
+                                            </span>
+                                            {{ navLabel(item) }}
+                                        </Link>
+                                        <ul
+                                            v-if="item.children?.length"
+                                            class="mt-0.5 space-y-0.5 pl-12"
+                                        >
+                                            <li
+                                                v-for="child in item.children"
+                                                :key="child.href"
+                                            >
+                                                <Link
+                                                    :href="hrefFor(child.href)"
+                                                    :headers="authHeaders()"
+                                                    @click="drawer = false"
+                                                    :aria-current="
+                                                        isChildActive(child)
+                                                            ? 'page'
+                                                            : undefined
+                                                    "
+                                                    class="flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-black transition focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                                                    :class="
+                                                        isChildActive(child)
+                                                            ? 'bg-white/10 text-white'
+                                                            : 'text-white/50 hover:bg-white/10 hover:text-white'
+                                                    "
+                                                >
+                                                    <span
+                                                        class="size-1.5 rounded-full"
+                                                        :class="
+                                                            isChildActive(child)
+                                                                ? 'bg-brand'
+                                                                : 'bg-white/25'
+                                                        "
+                                                    />
+                                                    <span class="truncate">
+                                                        {{
+                                                            navChildLabel(child)
+                                                        }}
+                                                    </span>
+                                                </Link>
+                                            </li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                            </section>
+                        </nav>
+                    </aside>
+                </div>
+            </Teleport>
+
+            <!-- ===== Content ===== -->
+            <main
+                id="bank-main-content"
+                class="min-w-0 flex-1 px-4 py-5 lg:px-8 lg:py-7"
+                tabindex="-1"
+            >
+                <slot :lang="lang" />
+            </main>
+        </div>
     </div>
-  </div>
 </template>

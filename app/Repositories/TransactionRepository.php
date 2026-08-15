@@ -108,4 +108,17 @@ class TransactionRepository
 
         return $affected > 0 ? $transaction->refresh() : null;
     }
+
+    public function approveIfUnapproved(Transaction $transaction, int $cashierId): ?Transaction
+    {
+        $affected = Transaction::query()
+            ->where('id', $transaction->id)
+            ->whereNull('cash_approved_by')
+            ->update([
+                'cash_approved_by' => $cashierId,
+                'cash_approved_at' => now(),
+            ]);
+
+        return $affected > 0 ? $transaction->refresh() : null;
+    }
 }

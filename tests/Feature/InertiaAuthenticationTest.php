@@ -40,7 +40,7 @@ class InertiaAuthenticationTest extends TestCase
             'Accept' => 'text/html, application/xhtml+xml',
             'X-Inertia-Version' => hash_file('xxh128', public_path('build/manifest.json')),
         ])->get('/dashboard')
-            ->assertRedirect(route('login'));
+            ->assertRedirect(route('login', ['return' => '/dashboard']));
     }
 
     public function test_expired_token_still_returns_json_for_api_requests(): void
@@ -59,5 +59,41 @@ class InertiaAuthenticationTest extends TestCase
             ->getJson('/api/auth/me')
             ->assertUnauthorized()
             ->assertJsonPath('message', 'Token expired');
+    }
+
+    public function test_role_denial_redirects_inertia_page_requests_instead_of_returning_json(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'teller-page-denied',
+            'role' => 'teller',
+            'is_active' => true,
+            'password' => Hash::make('password123'),
+        ]);
+        $token = app(NgweLweTokenService::class)->create($user);
+
+        $this->withHeaders([
+            'Authorization' => 'Bearer '.$token,
+            'X-Inertia' => 'true',
+            'X-Requested-With' => 'XMLHttpRequest',
+            'Accept' => 'text/html, application/xhtml+xml',
+            'X-Inertia-Version' => hash_file('xxh128', public_path('build/manifest.json')),
+        ])->get('/admin')
+            ->assertRedirect('/dashboard');
+    }
+
+    public function test_role_denial_still_returns_json_for_api_requests(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'teller-api-denied',
+            'role' => 'teller',
+            'is_active' => true,
+            'password' => Hash::make('password123'),
+        ]);
+        $token = app(NgweLweTokenService::class)->create($user);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/admin/status')
+            ->assertForbidden()
+            ->assertJsonPath('message', 'Access denied');
     }
 }

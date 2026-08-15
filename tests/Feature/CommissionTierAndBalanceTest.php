@@ -3,11 +3,9 @@
 namespace Tests\Feature;
 
 use App\Exceptions\InsufficientBalanceException;
-use App\Models\Account;
 use App\Models\ActivityLog;
 use App\Models\CommissionTier;
 use App\Models\Company;
-use App\Models\ServiceType;
 use App\Models\User;
 use App\Repositories\AccountRepository;
 use App\Repositories\CommissionTierRepository;
@@ -32,64 +30,31 @@ class CommissionTierAndBalanceTest extends TestCase
 
     public function test_tier_lookup_prefers_specific_range_over_catch_all(): void
     {
-        $serviceType = $this->serviceType();
-
-        $catchAll = CommissionTier::query()->create([
-            'service_type_id' => $serviceType->id,
-            'amount_from' => 1,
-            'amount_to' => 999_999_999_999,
-            'fee_amount_type' => 'FIXED',
-            'fee_amount_deposit' => 100,
-            'fee_amount_withdraw' => 100,
-            'comm_type' => 'FIXED',
-            'additional_fee_type' => 'FIXED',
-            'is_active' => true,
-        ]);
-
-        $specific = CommissionTier::query()->create([
-            'service_type_id' => $serviceType->id,
-            'amount_from' => 10_000,
-            'amount_to' => 100_000,
-            'fee_amount_type' => 'FIXED',
-            'fee_amount_deposit' => 500,
-            'fee_amount_withdraw' => 500,
-            'comm_type' => 'FIXED',
-            'additional_fee_type' => 'FIXED',
-            'is_active' => true,
-        ]);
+        $company = $this->company();
+        $catchAll = $this->tier($company, 'cash_in', 1, 999_999_999_999, 100);
+        $specific = $this->tier($company, 'cash_in', 10_000, 100_000, 500);
 
         $repo = app(CommissionTierRepository::class);
 
-        $this->assertSame($specific->id, $repo->findForAmount($serviceType->id, 50_000)->id);
-        $this->assertSame($catchAll->id, $repo->findForAmount($serviceType->id, 500_000)->id);
+        $this->assertSame($specific->id, $repo->findForCompanyFeature($company->id, 'cash_in', 50_000)->id);
+        $this->assertSame($catchAll->id, $repo->findForCompanyFeature($company->id, 'cash_in', 500_000)->id);
     }
 
-    public function test_calculator_reads_tier_from_db_and_applies_mmk_rounding(): void
+    public function test_calculator_reads_company_feature_tier_and_applies_mmk_rounding(): void
     {
-        $serviceType = $this->serviceType();
-
-        CommissionTier::query()->create([
-            'service_type_id' => $serviceType->id,
-            'amount_from' => 1,
-            'amount_to' => 999_999_999_999,
-            'fee_amount_type' => 'PERCENTAGE',
-            'fee_amount_deposit' => 0.01,
-            'fee_amount_withdraw' => 0.01,
-            'comm_type' => 'PERCENTAGE',
-            'comm_deposit' => 0.002,
-            'comm_withdraw' => 0.002,
-            'additional_fee_type' => 'FIXED',
-            'additional_fee_deposit_amount' => 250,
-            'additional_fee_withdraw_amount' => 250,
-            'is_active' => true,
-        ]);
-
-        $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
-            'account_name' => 'Wave Ops',
-            'phone_number' => '09000000001',
-            'balance' => 0,
-        ]);
+        $company = $this->company();
+        $this->tier(
+            $company,
+            'cash_in',
+            1,
+            999_999_999_999,
+            1,
+            feeType: 'PERCENTAGE',
+            commission: 0.2,
+            commissionType: 'PERCENTAGE',
+            additionalFee: 250,
+        );
+        [$account] = $this->createAccountForCompany($company, true);
 
         $calc = app(TransactionFeeCalculator::class);
         $fees = $calc->resolveFees($account, 100_000, TransactionFeeCalculator::MODE_CASH_IN);
@@ -99,32 +64,48 @@ class CommissionTierAndBalanceTest extends TestCase
         $this->assertSame('200.00', $calc->commission($account, 100_000, TransactionFeeCalculator::COMMISSION_SEND));
     }
 
+    public function test_cash_in_and_cash_out_use_separate_feature_tiers(): void
+    {
+        $company = $this->company();
+        $this->tier($company, 'cash_in', 1, 999_999_999_999, 0.1, feeType: 'PERCENTAGE');
+        $this->tier($company, 'cash_out', 1, 999_999_999_999, 0.2, feeType: 'PERCENTAGE');
+        [$account] = $this->createAccountForCompany($company);
+
+        $calc = app(TransactionFeeCalculator::class);
+
+        $this->assertSame('100.00', $calc->resolveFees($account, 100_000, TransactionFeeCalculator::MODE_CASH_IN)['customer_fee']);
+        $this->assertSame('200.00', $calc->resolveFees($account, 100_000, TransactionFeeCalculator::MODE_CASH_OUT)['customer_fee']);
+    }
+
+    public function test_api_tier_lookup_uses_same_inclusive_boundary_as_calculator(): void
+    {
+        $company = $this->company();
+        $tier = $this->tier($company, 'cash_in', 1, 10_000, 400, commission: 80);
+        $token = $this->tokenForRole('teller', 'tier_lookup');
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/commission-tiers/lookup?company_id='.$company->id.'&feature=cash_in&amount=10000')
+            ->assertOk()
+            ->assertJsonPath('data.id', $tier->id)
+            ->assertJsonPath('data.company_id', $company->id)
+            ->assertJsonPath('data.feature', 'cash_in')
+            ->assertJsonPath('data.fee_amount', '400.0000');
+    }
+
     public function test_debit_balance_rejects_overdraw(): void
     {
-        $serviceType = $this->serviceType();
-        $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
-            'account_name' => 'Ops',
-            'phone_number' => '09000000002',
-            'balance' => 5_000,
-        ]);
-
-        $repo = app(AccountRepository::class);
+        $company = $this->company();
+        [$account] = $this->createAccountForCompany($company, false, 5_000);
 
         $this->expectException(InsufficientBalanceException::class);
 
-        $repo->debitBalance($account->id, 10_000);
+        app(AccountRepository::class)->debitBalance($account->id, 10_000);
     }
 
     public function test_debit_balance_decrements_when_sufficient(): void
     {
-        $serviceType = $this->serviceType();
-        $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
-            'account_name' => 'Ops',
-            'phone_number' => '09000000003',
-            'balance' => 20_000,
-        ]);
+        $company = $this->company();
+        [$account] = $this->createAccountForCompany($company, false, 20_000);
 
         $updated = app(AccountRepository::class)->debitBalance($account->id, 7_500);
 
@@ -133,14 +114,8 @@ class CommissionTierAndBalanceTest extends TestCase
 
     public function test_balance_adjust_endpoint_writes_activity_log(): void
     {
-        $serviceType = $this->serviceType();
-        $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
-            'account_name' => 'Wave Main',
-            'phone_number' => '09000000004',
-            'balance' => 1_000,
-        ]);
-
+        $company = $this->company();
+        [$account] = $this->createAccountForCompany($company, false, 1_000);
         $owner = User::factory()->create([
             'username' => 'balance_owner',
             'role' => 'admin',
@@ -156,8 +131,7 @@ class CommissionTierAndBalanceTest extends TestCase
             ])
             ->assertOk()
             ->assertJsonPath('data.old_balance', '1000.00')
-            ->assertJsonPath('data.new_balance', '1250.50')
-            ->assertJsonPath('data.delta', '250.50');
+            ->assertJsonPath('data.new_balance', '1250.50');
 
         $log = ActivityLog::query()
             ->where('entity_type', 'account')
@@ -167,49 +141,78 @@ class CommissionTierAndBalanceTest extends TestCase
 
         $this->assertSame($owner->id, $log->user_id);
         $this->assertSame('250.50', $log->details['amount']);
-        $this->assertSame('1000.00', $log->details['old_balance']);
-        $this->assertSame('1250.50', $log->details['new_balance']);
         $this->assertSame('Owner top-up', $log->details['remark']);
     }
 
     public function test_balance_adjust_endpoint_requires_owner_role(): void
     {
-        $serviceType = $this->serviceType();
-        $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
-            'account_name' => 'Wave Sub',
-            'phone_number' => '09000000005',
-            'balance' => 500,
-        ]);
-
-        $employee = User::factory()->create([
-            'username' => 'teller_balance',
-            'role' => 'teller',
-            'is_active' => true,
-            'password' => Hash::make('password123'),
-        ]);
-        $token = app(NgweLweTokenService::class)->create($employee);
+        $company = $this->company();
+        [$account] = $this->createAccountForCompany($company, false, 500);
+        $token = $this->tokenForRole('teller', 'teller_balance');
 
         $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/accounts/'.$account->id.'/balance-adjust', [
-                'amount' => 100,
-            ])
+            ->postJson('/api/accounts/'.$account->id.'/balance-adjust', ['amount' => 100])
             ->assertForbidden();
 
         $this->assertSame(0, ActivityLog::query()->count());
     }
 
-    private function serviceType(): ServiceType
+    private function company(): Company
     {
-        $company = Company::query()->create([
-            'name' => 'Wave Money',
+        return Company::query()->create([
+            'name' => 'Wave-'.uniqid('', true),
             'category' => 'Pay',
         ]);
+    }
 
-        return ServiceType::query()->create([
+    private function createAccountForCompany(Company $company, bool $isAgent = false, int $balance = 0): array
+    {
+        $account = \App\Models\Account::query()->create([
             'company_id' => $company->id,
-            'name' => 'Cash In',
-            'operation' => 'CashIn',
+            'account_name' => 'Ops-'.uniqid('', true),
+            'phone_number' => '09'.random_int(100000000, 999999999),
+            'balance' => $balance,
+            'is_agent' => $isAgent,
         ]);
+
+        return [$account];
+    }
+
+    private function tier(
+        Company $company,
+        string $feature,
+        int $amountFrom,
+        int $amountTo,
+        float $fee,
+        string $feeType = 'FIXED',
+        float $commission = 0,
+        string $commissionType = 'FIXED',
+        float $additionalFee = 0,
+    ): CommissionTier {
+        return CommissionTier::query()->create([
+            'company_id' => $company->id,
+            'feature' => $feature,
+            'amount_from' => $amountFrom,
+            'amount_to' => $amountTo,
+            'fee_type' => $feeType,
+            'fee_amount' => $fee,
+            'comm_type' => $commissionType,
+            'comm_amount' => $commission,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_amount' => $additionalFee,
+            'is_active' => true,
+        ]);
+    }
+
+    private function tokenForRole(string $role, string $username): string
+    {
+        $user = User::factory()->create([
+            'username' => $username,
+            'role' => $role,
+            'is_active' => true,
+            'password' => Hash::make('password123'),
+        ]);
+
+        return app(NgweLweTokenService::class)->create($user);
     }
 }

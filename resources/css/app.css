@@ -1,6 +1,6 @@
-@import "tailwindcss";
-@import "./banking.css";
-@import "./teller.css";
+@import 'tailwindcss';
+@import './banking.css';
+@import './teller.css';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
@@ -316,8 +316,7 @@
     --sidebar: #111827;
     --sidebar-2: #172033;
     --shadow: 0 18px 50px rgb(16 24 40 / 10%);
-    --shadow-soft: 0 1px 2px rgb(16 24 40 / 5%),
-        0 10px 30px rgb(16 24 40 / 6%);
+    --shadow-soft: 0 1px 2px rgb(16 24 40 / 5%), 0 10px 30px rgb(16 24 40 / 6%);
     --radius: 12px;
     --radius-sm: 8px;
     --font-sans:
@@ -333,9 +332,7 @@ html,
 body {
     min-height: 100%;
     margin: 0;
-    background:
-        linear-gradient(180deg, #fbfcfe 0, var(--bg) 18rem),
-        var(--bg);
+    background: linear-gradient(180deg, #fbfcfe 0, var(--bg) 18rem), var(--bg);
     color: var(--text);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -410,6 +407,29 @@ label {
     color: var(--text-dim);
     font-size: 0.78rem;
     font-weight: 800;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+.focus\:not-sr-only:focus {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: revert;
+    margin: revert;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
 }
 
 table {
@@ -1483,7 +1503,12 @@ tbody tr:hover {
     inset: auto 0 0;
     z-index: 50;
     height: 0.22rem;
-    background: linear-gradient(90deg, var(--accent), var(--indigo), var(--amber));
+    background: linear-gradient(
+        90deg,
+        var(--accent),
+        var(--indigo),
+        var(--amber)
+    );
 }
 
 .login-shell {
@@ -1677,8 +1702,11 @@ tbody tr:hover {
         gap: 0.75rem;
         overflow-y: auto;
         border-right: 1px solid rgb(255 255 255 / 8%);
-        background:
-            linear-gradient(180deg, var(--sidebar) 0%, var(--sidebar-2) 100%);
+        background: linear-gradient(
+            180deg,
+            var(--sidebar) 0%,
+            var(--sidebar-2) 100%
+        );
         padding: 0 0.95rem 1rem;
         scrollbar-width: thin;
     }
@@ -2172,9 +2200,7 @@ tbody tr:hover {
     --crm-text: rgba(15, 23, 42, 0.88);
     --crm-muted: rgba(15, 23, 42, 0.58);
     --crm-border: rgba(15, 23, 42, 0.1);
-    --crm-shadow:
-        0 1px 2px rgb(15 23 42 / 5%),
-        0 8px 24px rgb(15 23 42 / 6%);
+    --crm-shadow: 0 1px 2px rgb(15 23 42 / 5%), 0 8px 24px rgb(15 23 42 / 6%);
     --crm-drawer-shadow: 0 6px 18px -8px rgb(2 6 23 / 60%);
     min-height: 100vh;
     background: var(--crm-bg);
@@ -2291,11 +2317,15 @@ tbody tr:hover {
     gap: 0.18rem;
 }
 
-.console-shell.device-desktop.role-teller .drawer-menu-section + .drawer-menu-section {
+.console-shell.device-desktop.role-teller
+    .drawer-menu-section
+    + .drawer-menu-section {
     padding-top: 1.125rem;
 }
 
-.console-shell.device-desktop.role-teller .drawer-menu-section + .drawer-menu-section::before {
+.console-shell.device-desktop.role-teller
+    .drawer-menu-section
+    + .drawer-menu-section::before {
     position: absolute;
     top: 0.12rem;
     right: 0.85rem;
@@ -2325,7 +2355,9 @@ tbody tr:hover {
     padding: 0 0.75rem 0 0.9rem;
 }
 
-.console-shell.device-desktop.role-teller .drawer-menu button:hover:not(:disabled) {
+.console-shell.device-desktop.role-teller
+    .drawer-menu
+    button:hover:not(:disabled) {
     background: rgb(255 255 255 / 8%);
     color: #ffffff;
     transform: translateX(1px);
@@ -2344,7 +2376,10 @@ tbody tr:hover {
     background: rgb(255 255 255 / 8%);
 }
 
-.console-shell.device-desktop.role-teller .drawer-menu button.active .drawer-menu-icon,
+.console-shell.device-desktop.role-teller
+    .drawer-menu
+    button.active
+    .drawer-menu-icon,
 .console-shell.device-desktop.role-teller .drawer-menu button.active strong {
     background: rgb(255 255 255 / 18%);
 }
@@ -2361,7 +2396,9 @@ tbody tr:hover {
     font-size: 0.64rem;
 }
 
-.console-shell.device-desktop.role-teller .drawer-menu button.drawer-menu-group-toggle {
+.console-shell.device-desktop.role-teller
+    .drawer-menu
+    button.drawer-menu-group-toggle {
     grid-template-columns: 2rem minmax(0, 1fr) auto auto;
 }
 
@@ -2372,7 +2409,10 @@ tbody tr:hover {
     color: #ffffff;
 }
 
-.console-shell.device-desktop.role-teller .drawer-menu .drawer-menu-children button {
+.console-shell.device-desktop.role-teller
+    .drawer-menu
+    .drawer-menu-children
+    button {
     grid-template-columns: 2rem minmax(0, 1fr);
     min-height: 38px;
 }
@@ -2394,7 +2434,9 @@ tbody tr:hover {
     box-shadow: none;
 }
 
-.console-shell.device-desktop.role-teller .topbar .ghost-button:hover:not(:disabled) {
+.console-shell.device-desktop.role-teller
+    .topbar
+    .ghost-button:hover:not(:disabled) {
     border-color: var(--crm-primary);
     background: rgb(29 78 216 / 10%);
     color: var(--crm-primary-strong);
@@ -2442,15 +2484,29 @@ tbody tr:hover {
 
 .console-shell.device-desktop.role-teller .content-column > .data-panel,
 .console-shell.device-desktop.role-teller .role-grid > .data-panel,
-.console-shell.device-desktop.role-teller .content-column > .panel:not(.data-panel),
+.console-shell.device-desktop.role-teller
+    .content-column
+    > .panel:not(.data-panel),
 .console-shell.device-desktop.role-teller .role-grid > .panel:not(.data-panel) {
     padding: 0;
 }
 
-.console-shell.device-desktop.role-teller .content-column > .data-panel > .panel-heading,
-.console-shell.device-desktop.role-teller .role-grid > .data-panel > .panel-heading,
-.console-shell.device-desktop.role-teller .content-column > .panel:not(.data-panel) > .panel-heading,
-.console-shell.device-desktop.role-teller .role-grid > .panel:not(.data-panel) > .panel-heading {
+.console-shell.device-desktop.role-teller
+    .content-column
+    > .data-panel
+    > .panel-heading,
+.console-shell.device-desktop.role-teller
+    .role-grid
+    > .data-panel
+    > .panel-heading,
+.console-shell.device-desktop.role-teller
+    .content-column
+    > .panel:not(.data-panel)
+    > .panel-heading,
+.console-shell.device-desktop.role-teller
+    .role-grid
+    > .panel:not(.data-panel)
+    > .panel-heading {
     min-height: 3.85rem;
     margin: 0;
     border-bottom: 1px solid var(--crm-border);
@@ -2481,8 +2537,14 @@ tbody tr:hover {
     padding: 1.15rem 1.25rem;
 }
 
-.console-shell.device-desktop.role-teller .content-column > .panel:not(.data-panel) > :not(.panel-heading),
-.console-shell.device-desktop.role-teller .role-grid > .panel:not(.data-panel) > :not(.panel-heading) {
+.console-shell.device-desktop.role-teller
+    .content-column
+    > .panel:not(.data-panel)
+    > :not(.panel-heading),
+.console-shell.device-desktop.role-teller
+    .role-grid
+    > .panel:not(.data-panel)
+    > :not(.panel-heading) {
     margin-inline: 0;
 }
 

@@ -12,10 +12,20 @@ class InitiateFloatReturnRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if (! $this->has('return_denominations') && $this->has('denominations')) {
+            $this->merge([
+                'return_denominations' => $this->input('denominations'),
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         return [
-            'return_denominations' => ['required', 'array', 'min:1'],
+            'pin' => ['required', 'string', 'regex:/^[0-9]{4,8}$/'],
+            'return_denominations' => ['required', 'array'],
             'return_denominations.*' => ['integer', 'min:0'],
         ];
     }
@@ -34,5 +44,12 @@ class InitiateFloatReturnRequest extends FormRequest
                 }
             }
         });
+    }
+
+    public function messages(): array
+    {
+        return [
+            'pin.regex' => 'PIN must be 4-8 digits.',
+        ];
     }
 }

@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use App\Enums\AccountFeature;
 use App\Exceptions\InsufficientBalanceException;
 use App\Exceptions\InsufficientVaultDenominationException;
+use App\Models\Account;
 use App\Models\ActivityLog;
 use App\Models\Transaction;
 use App\Models\User;
@@ -35,6 +37,7 @@ class TransactionService
         private readonly TransactionRepository $transactions,
         private readonly AccountRepository $accounts,
         private readonly TransactionFeeCalculator $calculator,
+        private readonly TransferFeeCalculator $transferFees,
         private readonly ExchangeRateRepository $exchangeRates,
         private readonly CashFloatRepository $floats,
         private readonly EmployeeFloatValidator $floatValidator,
@@ -79,7 +82,7 @@ class TransactionService
             ? (float) $fees['customer_fee']
             : 0.0;
         $cashSettlementAmount = Money::normalize((float) $amount + $cashFee);
-        $fromCompanyId = $account->serviceType?->company_id;
+        $fromCompanyId = $account->company_id;
 
         $amountReceived = isset($data['amount_received']) && $data['amount_received'] !== null
             ? Money::normalize($data['amount_received'])
@@ -150,10 +153,13 @@ class TransactionService
         $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $amountReceived, $cashSettlementAmount, $fees, $feePayment, $commission, $fromCompanyId, $changeDue, $normalizedReceivedDenominations, $normalizedHandoffDenominations, $normalizedChangeDenominations): Transaction {
             try {
                 $this->accounts->debitBalance($account->id, $amount);
-                $this->debitFeeFromSourceIfNeeded($account, $feePayment, $fees['customer_fee']);
             } catch (InsufficientBalanceException $exception) {
                 throw $exception;
             }
+
+            $cashInBalanceChange = Money::normalize(
+                -((float) $amount) + (float) $commission,
+            );
 
             $txn = $this->transactions->create([
                 'transaction_type' => 'cash_in',
@@ -164,7 +170,7 @@ class TransactionService
                 'commission_amount' => $commission,
                 'customer_fee' => $fees['customer_fee'],
                 'additional_fee_amount' => $fees['additional_fee'],
-                'balance_change' => Money::normalize('-'.((float) $amount + ($feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0))),
+                'balance_change' => $cashInBalanceChange,
                 'currency' => 'MMK',
                 'fee_account_id' => $feePayment['fee_account_id'],
                 'fee_payment_method' => $feePayment['method'],
@@ -181,6 +187,7 @@ class TransactionService
             ]);
 
             $this->creditFeeAccount($feePayment['fee_account_id'], $fees['customer_fee']);
+            $this->creditAgentCommission($account->id, $commission);
 
             if ($creator->role === 'teller') {
                 $activeFloat = $this->floats->activeForEmployee($creator->id);
@@ -247,7 +254,7 @@ class TransactionService
                 'type' => 'cash_in',
                 'account_id' => $account->id,
                 'amount' => $amount,
-                'balance_delta' => Money::normalize('-'.$amount),
+                'balance_delta' => $cashInBalanceChange,
                 'status' => 'PENDING_CASHIER_CONFIRM',
                 'vault_impact' => 'none',
                 'change_due' => $changeDue,
@@ -269,12 +276,15 @@ class TransactionService
      *   amount: float|string,
      *   customer_name: string,
      *   customer_phone: string,
+     *   destination_provider?: string|null,
+     *   destination_account_number?: string|null,
      *   customer_fee?: float|string,
      *   additional_fee_amount?: float|string,
      *   fee_account_id?: int|null,
      *   screenshot_path?: string|null,
      *   note?: string|null,
      *   denominations?: array<int|string, int|string>|null,
+     *   fee_denominations?: array<int|string, int|string>|null,
      * }  $data
      */
     public function createCashOut(array $data, User $creator): Transaction
@@ -289,8 +299,8 @@ class TransactionService
 
         $fees = $this->calculator->resolveFees($account, $amount, TransactionFeeCalculator::MODE_CASH_OUT);
         $commission = $this->calculator->commission($account, $amount, TransactionFeeCalculator::COMMISSION_RECEIVE);
-        $feePayment = $this->resolveFeePayment($data, $account, $fees['customer_fee']);
-        $fromCompanyId = $account->serviceType?->company_id;
+        $feePayment = $this->resolveCashOutFeePayment($data, $account, $fees['customer_fee']);
+        $fromCompanyId = $account->company_id;
 
         $normalizedDenominations = null;
         if ($creator->role === 'teller') {
@@ -328,12 +338,45 @@ class TransactionService
             }
         }
 
-        $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $fees, $feePayment, $commission, $fromCompanyId, $normalizedDenominations): Transaction {
-            $applied = $this->accounts->incrementBalance($account->id, $amount);
-            if ($applied === null) {
-                throw new RuntimeException("Unable to credit Cash Out balance for active account #{$account->id}.");
+        $rawFeeDenominations = is_array($data['fee_denominations'] ?? null) ? $data['fee_denominations'] : [];
+        $cashFeeDenominationsExpected = $creator->role === 'teller'
+            && $feePayment['method'] === 'cash'
+            && (float) $fees['customer_fee'] > 0
+            && (array_key_exists('fee_payment_method', $data) || $rawFeeDenominations !== []);
+
+        $normalizedFeeDenominations = null;
+        if ($cashFeeDenominationsExpected) {
+            $normalizedFeeDenominations = $this->floatValidator->normalizeReceivedDenominations(
+                $rawFeeDenominations,
+            );
+
+            if ($normalizedFeeDenominations === []) {
+                throw new InvalidArgumentException('Fee denomination breakdown is required when Cash Out fee is received in cash.');
             }
-            $this->debitFeeFromSourceIfNeeded($account, $feePayment, $fees['customer_fee']);
+
+            $feeDenominationTotal = Money::denominationTotal($normalizedFeeDenominations);
+            if ($feeDenominationTotal !== (int) Money::normalize($fees['customer_fee'])) {
+                throw new InvalidArgumentException(
+                    "Fee denomination total {$feeDenominationTotal} does not match Cash Out fee {$fees['customer_fee']}."
+                );
+            }
+        } elseif ($rawFeeDenominations !== []) {
+            throw new InvalidArgumentException('fee_denominations are only allowed for Teller Cash Out fees paid in cash.');
+        }
+
+        $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $fees, $feePayment, $commission, $fromCompanyId, $normalizedDenominations, $normalizedFeeDenominations): Transaction {
+            $balanceCreditAccountId = $feePayment['method'] === 'account'
+                ? (int) $feePayment['fee_account_id']
+                : $account->id;
+            $balanceCreditAmount = Money::normalize(
+                (float) $amount + ($feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0),
+            );
+            $cashOutBalanceChange = Money::normalize((float) $balanceCreditAmount + (float) $commission);
+
+            $applied = $this->accounts->incrementBalance($balanceCreditAccountId, $cashOutBalanceChange);
+            if ($applied === null) {
+                throw new RuntimeException("Unable to credit Cash Out balance for active account #{$balanceCreditAccountId}.");
+            }
 
             $txn = $this->transactions->create([
                 'transaction_type' => 'cash_out',
@@ -344,7 +387,7 @@ class TransactionService
                 'commission_amount' => $commission,
                 'customer_fee' => $fees['customer_fee'],
                 'additional_fee_amount' => $fees['additional_fee'],
-                'balance_change' => $amount,
+                'balance_change' => $cashOutBalanceChange,
                 'currency' => 'MMK',
                 'fee_account_id' => $feePayment['fee_account_id'],
                 'fee_payment_method' => $feePayment['method'],
@@ -353,6 +396,7 @@ class TransactionService
                 'created_by' => $creator->id,
                 'from_company_id' => $fromCompanyId,
                 'status' => 'COMPLETED',
+                'received_denominations' => $normalizedFeeDenominations,
             ]);
 
             if ($normalizedDenominations !== null) {
@@ -383,14 +427,33 @@ class TransactionService
                 }
             }
 
-            $this->creditFeeAccount($feePayment['fee_account_id'], $fees['customer_fee']);
+            if ($normalizedFeeDenominations !== null) {
+                $activeFloat = $this->floats->activeForEmployee($creator->id);
+                if ($activeFloat === null) {
+                    throw new RuntimeException('Employee float went inactive while receiving Cash Out fee.');
+                }
+
+                $this->floats->addDenominations($activeFloat->id, $normalizedFeeDenominations);
+                $this->floats->incrementBalance($creator->id, $fees['customer_fee']);
+
+                $this->vaultTransactions->recordBulk(
+                    txnType: 'cash_out_fee_received',
+                    denominations: $normalizedFeeDenominations,
+                    performedBy: $creator->id,
+                    floatId: $activeFloat->id,
+                    transactionId: $txn->id,
+                    note: "Cash Out cash fee received txn #{$txn->id}",
+                );
+            }
 
             $this->log($creator->id, 'transaction_created', $txn->id, [
                 'type' => 'cash_out',
                 'account_id' => $account->id,
                 'amount' => $amount,
-                'balance_delta' => $amount,
+                'balance_credit_account_id' => $balanceCreditAccountId,
+                'balance_delta' => $cashOutBalanceChange,
                 'denominations' => $normalizedDenominations,
+                'fee_denominations' => $normalizedFeeDenominations,
             ]);
 
             return $txn;
@@ -405,13 +468,22 @@ class TransactionService
      * @param  array{
      *   from_account_id: int,
      *   to_account_id: int,
+     *   source_account_type?: string|null,
+     *   source_provider?: string|null,
+     *   source_account_number?: string|null,
+     *   destination_provider?: string|null,
+     *   destination_customer_name?: string|null,
+     *   destination_account_number?: string|null,
      *   amount: float|string,
+     *   customer_name: string,
+     *   customer_phone?: string|null,
      *   customer_fee?: float|string,
      *   additional_fee_amount?: float|string,
      *   fee_account_id?: int|null,
      *   screenshot_path?: string|null,
      *   note?: string|null,
      *   denominations?: array<int|string, int|string>|null,
+     *   fee_denominations?: array<int|string, int|string>|null,
      * }  $data
      */
     public function createTransfer(array $data, User $creator): Transaction
@@ -432,26 +504,68 @@ class TransactionService
             throw new InvalidArgumentException("Target account #{$data['to_account_id']} not found or inactive.");
         }
 
-        $fees = $this->calculator->resolveFees($fromAccount, $amount, TransactionFeeCalculator::MODE_CASH_IN);
-        $commission = $this->calculator->commission($fromAccount, $amount, TransactionFeeCalculator::COMMISSION_SEND);
-        $feePayment = $this->resolveFeePayment($data, $fromAccount, $fees['customer_fee']);
-        $fromCompanyId = $fromAccount->serviceType?->company_id;
-        $toCompanyId = $toAccount->serviceType?->company_id;
+        $customerTransfer = ! empty($data['source_account_type']);
+        $sourceCompanyId = $this->companyId($customerTransfer ? $toAccount : $fromAccount);
+        $destinationCompanyId = $this->companyId($customerTransfer ? $fromAccount : $toAccount);
+        $fees = $this->transferFees->resolve($sourceCompanyId, $destinationCompanyId, $amount);
+        $receiveCommission = $customerTransfer
+            ? $this->calculator->commissionForFeature($toAccount, $amount, AccountFeature::ReceiveMoney)
+            : Money::normalize(0);
+        $payoutCommission = $this->calculator->commissionForFeature($fromAccount, $amount, AccountFeature::SendMoney);
+        $commission = Money::normalize((float) $receiveCommission + (float) $payoutCommission);
+        $feePayment = $customerTransfer
+            ? $this->resolveTransferFeePayment($data, $toAccount)
+            : $this->resolveFeePayment($data, $fromAccount, $fees['customer_fee']);
+        $fromCompanyId = $sourceCompanyId;
+        $toCompanyId = $destinationCompanyId;
 
-        $normalizedDenominations = null;
-        if ($creator->role === 'teller') {
-            $normalizedDenominations = $this->floatValidator->validateFloatOperation(
-                $creator->id,
-                is_array($data['denominations'] ?? null) ? $data['denominations'] : [],
-                $amount,
-                'transfer',
-            );
+        $rawDenominations = is_array($data['denominations'] ?? null) ? $data['denominations'] : [];
+        if ($rawDenominations !== []) {
+            throw new InvalidArgumentException('denominations are not required for account-to-account Transfer.');
         }
 
-        $transaction = DB::transaction(function () use ($data, $creator, $fromAccount, $toAccount, $amount, $fees, $feePayment, $commission, $fromCompanyId, $toCompanyId, $normalizedDenominations): Transaction {
-            $this->accounts->debitBalance($fromAccount->id, (float) $amount + ($feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0));
+        $rawFeeDenominations = is_array($data['fee_denominations'] ?? null) ? $data['fee_denominations'] : [];
+        $cashFeeDenominationsExpected = $creator->role === 'teller'
+            && $feePayment['method'] === 'cash'
+            && (float) $fees['customer_fee'] > 0
+            && (array_key_exists('fee_payment_method', $data) || $rawFeeDenominations !== []);
 
-            $credited = $this->accounts->incrementBalance($toAccount->id, $amount);
+        $normalizedFeeDenominations = null;
+        if ($cashFeeDenominationsExpected) {
+            $normalizedFeeDenominations = $this->floatValidator->normalizeReceivedDenominations(
+                $rawFeeDenominations,
+            );
+
+            if ($normalizedFeeDenominations === []) {
+                throw new InvalidArgumentException('Fee denomination breakdown is required when Transfer fee is received in cash.');
+            }
+
+            $feeDenominationTotal = Money::denominationTotal($normalizedFeeDenominations);
+            if ($feeDenominationTotal !== (int) Money::normalize($fees['customer_fee'])) {
+                throw new InvalidArgumentException(
+                    "Fee denomination total {$feeDenominationTotal} does not match Transfer fee {$fees['customer_fee']}."
+                );
+            }
+        } elseif ($rawFeeDenominations !== []) {
+            throw new InvalidArgumentException('fee_denominations are only allowed for Teller Transfer fees paid in cash.');
+        }
+
+        $transaction = DB::transaction(function () use ($data, $creator, $customerTransfer, $fromAccount, $toAccount, $amount, $fees, $feePayment, $commission, $receiveCommission, $payoutCommission, $fromCompanyId, $toCompanyId, $normalizedFeeDenominations): Transaction {
+            $payoutDebit = Money::normalize(
+                (float) $amount
+                + (! $customerTransfer && $feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0),
+            );
+            $this->accounts->debitBalance($fromAccount->id, $payoutDebit);
+            $this->creditAgentCommission($fromAccount->id, $payoutCommission);
+
+            $receiveCredit = Money::normalize(
+                (float) $amount
+                + (float) $receiveCommission
+                + ($customerTransfer && $feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0),
+            );
+            $credited = $this->accounts->incrementBalance($toAccount->id, $receiveCredit);
+            $fromBalanceChange = Money::normalize(-((float) $payoutDebit) + (float) $payoutCommission);
+
             if ($credited === null) {
                 throw new RuntimeException("Unable to credit transfer to active account #{$toAccount->id}.");
             }
@@ -461,10 +575,20 @@ class TransactionService
                 'account_id' => $fromAccount->id,
                 'to_account_id' => $toAccount->id,
                 'amount' => $amount,
+                'customer_name' => $data['customer_name'],
+                'customer_phone' => $data['customer_phone'] ?? null,
+                'source_account_type' => $data['source_account_type'] ?? null,
+                'source_provider' => $data['source_provider'] ?? null,
+                'source_account_number' => $data['source_account_number'] ?? null,
+                'destination_provider' => $data['destination_provider'] ?? null,
+                'destination_customer_name' => $data['destination_customer_name'] ?? null,
+                'destination_account_number' => $data['destination_account_number'] ?? null,
                 'commission_amount' => $commission,
+                'receive_commission_amount' => $receiveCommission,
+                'payout_commission_amount' => $payoutCommission,
                 'customer_fee' => $fees['customer_fee'],
                 'additional_fee_amount' => $fees['additional_fee'],
-                'balance_change' => Money::normalize('-'.$amount),
+                'balance_change' => $fromBalanceChange,
                 'currency' => 'MMK',
                 'fee_account_id' => $feePayment['fee_account_id'],
                 'fee_payment_method' => $feePayment['method'],
@@ -474,36 +598,49 @@ class TransactionService
                 'from_company_id' => $fromCompanyId,
                 'to_company_id' => $toCompanyId,
                 'status' => 'COMPLETED',
+                'received_denominations' => $normalizedFeeDenominations,
             ]);
 
-            if ($normalizedDenominations !== null) {
+            if ($normalizedFeeDenominations !== null) {
                 $activeFloat = $this->floats->activeForEmployee($creator->id);
                 if ($activeFloat === null) {
-                    throw new RuntimeException('Employee float went inactive during transfer.');
+                    throw new RuntimeException('Employee float went inactive while receiving Transfer fee.');
                 }
-                $this->floats->deductDenominations($activeFloat->id, $normalizedDenominations);
-                $this->floats->deductBalance($creator->id, $amount);
+                $this->floats->addDenominations($activeFloat->id, $normalizedFeeDenominations);
+                $this->floats->incrementBalance($creator->id, $fees['customer_fee']);
 
                 $this->vaultTransactions->recordBulk(
-                    txnType: 'cash_out',
-                    denominations: $normalizedDenominations,
+                    txnType: 'transfer_fee_received',
+                    denominations: $normalizedFeeDenominations,
                     performedBy: $creator->id,
                     floatId: $activeFloat->id,
                     transactionId: $txn->id,
-                    note: "Transfer txn #{$txn->id}",
+                    note: "Transfer cash fee received txn #{$txn->id}",
                 );
             }
 
-            $this->creditFeeAccount($feePayment['fee_account_id'], $fees['customer_fee']);
+            if (! $customerTransfer) {
+                $this->creditFeeAccount($feePayment['fee_account_id'], $fees['customer_fee']);
+            }
 
             $this->log($creator->id, 'transaction_created', $txn->id, [
                 'type' => 'transfer',
                 'from_account_id' => $fromAccount->id,
                 'to_account_id' => $toAccount->id,
+                'source_account_type' => $data['source_account_type'] ?? null,
+                'source_provider' => $data['source_provider'] ?? null,
+                'source_account_number' => $data['source_account_number'] ?? null,
+                'destination_provider' => $data['destination_provider'] ?? null,
+                'destination_customer_name' => $data['destination_customer_name'] ?? null,
+                'destination_account_number' => $data['destination_account_number'] ?? null,
+                'customer_name' => $data['customer_name'],
+                'customer_phone' => $data['customer_phone'] ?? null,
                 'amount' => $amount,
-                'from_balance_delta' => Money::normalize('-'.$amount),
-                'to_balance_delta' => $amount,
-                'denominations' => $normalizedDenominations,
+                'from_balance_delta' => $fromBalanceChange,
+                'to_balance_delta' => $receiveCredit,
+                'receive_commission_amount' => $receiveCommission,
+                'payout_commission_amount' => $payoutCommission,
+                'fee_denominations' => $normalizedFeeDenominations,
             ]);
 
             return $txn;
@@ -519,12 +656,16 @@ class TransactionService
      *   account_id: int,
      *   amount: float|string,
      *   currency: string,
+     *   customer_name: string,
+     *   customer_phone: string,
+     *   exchange_payment_method?: string,
      *   customer_fee?: float|string,
      *   additional_fee_amount?: float|string,
      *   fee_account_id?: int|null,
      *   screenshot_path?: string|null,
      *   note?: string|null,
      *   denominations?: array<int|string, int|string>|null,
+     *   received_denominations?: array<int|string, int|string>|null,
      * }  $data
      */
     public function createExchange(array $data, User $creator): Transaction
@@ -556,36 +697,79 @@ class TransactionService
             ? ((float) $rate->sell_rate) / $baseAmount
             : ((float) $rate->buy_rate) / $baseAmount;
         $exchangeRate = Money::normalize($rawRate, 4);
+        $mmkSettlementAmount = Money::normalize($currency === 'THB'
+            ? (float) $amount * (float) $exchangeRate
+            : (float) $amount);
+        $exchangePaymentMethod = (string) ($data['exchange_payment_method'] ?? 'cash');
+        if (! in_array($exchangePaymentMethod, ['cash', 'account'], true)) {
+            throw new InvalidArgumentException('Exchange payment method must be cash or account.');
+        }
 
-        $fees = $this->calculator->resolveFees($account, $amount, TransactionFeeCalculator::MODE_CASH_IN);
-        $commission = $this->calculator->commission($account, $amount, TransactionFeeCalculator::COMMISSION_SEND);
-        $fromCompanyId = $account->serviceType?->company_id;
+        $fees = [
+            'customer_fee' => Money::normalize(0),
+            'additional_fee' => Money::normalize(0),
+        ];
+        $commission = $this->calculator->commissionForFeature(
+            $account,
+            $mmkSettlementAmount,
+            $currency === 'MMK' ? AccountFeature::CashIn : AccountFeature::CashOut,
+        );
+        $feePayment = $this->resolveFeePayment($data, $account, $fees['customer_fee']);
+        $fromCompanyId = $account->company_id;
 
         $normalizedDenominations = null;
-        if ($creator->role === 'teller') {
+        if ($creator->role === 'teller' && $currency === 'THB' && $exchangePaymentMethod === 'cash') {
             $normalizedDenominations = $this->floatValidator->validateFloatOperation(
                 $creator->id,
                 is_array($data['denominations'] ?? null) ? $data['denominations'] : [],
-                $amount,
+                $mmkSettlementAmount,
                 'exchange',
             );
+        } elseif (is_array($data['denominations'] ?? null) && $data['denominations'] !== []) {
+            throw new InvalidArgumentException('denominations are only required when Exchange pays MMK cash from the teller vault.');
         }
 
-        $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $currency, $exchangeRate, $fees, $feePayment, $commission, $fromCompanyId, $normalizedDenominations): Transaction {
-            $applied = $this->accounts->incrementBalance($account->id, $amount);
+        $rawReceivedDenominations = is_array($data['received_denominations'] ?? null) ? $data['received_denominations'] : [];
+        $normalizedReceivedDenominations = null;
+        if ($creator->role === 'teller' && $currency === 'MMK' && $exchangePaymentMethod === 'cash') {
+            $normalizedReceivedDenominations = $this->floatValidator->normalizeReceivedDenominations($rawReceivedDenominations);
+            if ($normalizedReceivedDenominations === []) {
+                throw new InvalidArgumentException('Received denomination breakdown is required when MMK Exchange payment is cash.');
+            }
+
+            $receivedTotal = Money::denominationTotal($normalizedReceivedDenominations);
+            if ($receivedTotal !== (int) $mmkSettlementAmount) {
+                throw new InvalidArgumentException(
+                    "Received denomination total {$receivedTotal} does not match Exchange MMK amount {$mmkSettlementAmount}."
+                );
+            }
+        } elseif ($rawReceivedDenominations !== []) {
+            throw new InvalidArgumentException('received_denominations are only allowed for Teller MMK Exchange payments received in cash.');
+        }
+
+        $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $currency, $exchangeRate, $mmkSettlementAmount, $exchangePaymentMethod, $fees, $feePayment, $commission, $fromCompanyId, $normalizedDenominations, $normalizedReceivedDenominations): Transaction {
+            $applied = $this->accounts->incrementBalance($account->id, $mmkSettlementAmount);
             if ($applied === null) {
                 throw new RuntimeException("Unable to credit exchange balance for active account #{$account->id}.");
             }
             $this->debitFeeFromSourceIfNeeded($account, $feePayment, $fees['customer_fee']);
+            $this->creditAgentCommission($account->id, $commission);
+            $exchangeBalanceChange = Money::normalize(
+                (float) $mmkSettlementAmount
+                - ($feePayment['method'] === 'account' ? (float) $fees['customer_fee'] : 0)
+                + (float) $commission,
+            );
 
             $txn = $this->transactions->create([
                 'transaction_type' => 'exchange',
                 'account_id' => $account->id,
+                'customer_name' => $data['customer_name'],
+                'customer_phone' => $data['customer_phone'],
                 'amount' => $amount,
                 'commission_amount' => $commission,
                 'customer_fee' => $fees['customer_fee'],
                 'additional_fee_amount' => $fees['additional_fee'],
-                'balance_change' => $amount,
+                'balance_change' => $exchangeBalanceChange,
                 'currency' => $currency,
                 'exchange_rate' => $exchangeRate,
                 'fee_account_id' => $feePayment['fee_account_id'],
@@ -595,7 +779,26 @@ class TransactionService
                 'created_by' => $creator->id,
                 'from_company_id' => $fromCompanyId,
                 'status' => 'COMPLETED',
+                'received_denominations' => $normalizedReceivedDenominations,
             ]);
+
+            if ($normalizedReceivedDenominations !== null) {
+                $activeFloat = $this->floats->activeForEmployee($creator->id);
+                if ($activeFloat === null) {
+                    throw new RuntimeException('Employee float went inactive while receiving Exchange cash.');
+                }
+                $this->floats->addDenominations($activeFloat->id, $normalizedReceivedDenominations);
+                $this->floats->incrementBalance($creator->id, $mmkSettlementAmount);
+
+                $this->vaultTransactions->recordBulk(
+                    txnType: 'cash_in_received',
+                    denominations: $normalizedReceivedDenominations,
+                    performedBy: $creator->id,
+                    floatId: $activeFloat->id,
+                    transactionId: $txn->id,
+                    note: "Exchange MMK cash received txn #{$txn->id}",
+                );
+            }
 
             if ($normalizedDenominations !== null) {
                 $activeFloat = $this->floats->activeForEmployee($creator->id);
@@ -603,7 +806,7 @@ class TransactionService
                     throw new RuntimeException('Employee float went inactive during exchange.');
                 }
                 $this->floats->deductDenominations($activeFloat->id, $normalizedDenominations);
-                $this->floats->deductBalance($creator->id, $amount);
+                $this->floats->deductBalance($creator->id, $mmkSettlementAmount);
 
                 $this->vaultTransactions->recordBulk(
                     txnType: 'cash_out',
@@ -621,10 +824,14 @@ class TransactionService
                 'type' => 'exchange',
                 'account_id' => $account->id,
                 'amount' => $amount,
+                'mmk_settlement_amount' => $mmkSettlementAmount,
                 'currency' => $currency,
-                'balance_delta' => $amount,
+                'exchange_payment_method' => $exchangePaymentMethod,
+                'balance_delta' => $exchangeBalanceChange,
+                'commission_amount' => $commission,
                 'exchange_rate' => $exchangeRate,
                 'denominations' => $normalizedDenominations,
+                'received_denominations' => $normalizedReceivedDenominations,
             ]);
 
             return $txn;
@@ -696,8 +903,8 @@ class TransactionService
 
         $updated = DB::transaction(function () use ($transaction, $cashier, $note): Transaction {
             $reversal = Money::normalize($transaction->amount ?? 0);
-            if ($transaction->fee_payment_method === 'account' && (float) ($transaction->customer_fee ?? 0) > 0) {
-                $reversal = Money::normalize((float) $reversal + (float) $transaction->customer_fee);
+            if ((float) ($transaction->commission_amount ?? 0) > 0) {
+                $reversal = Money::normalize((float) $reversal - (float) $transaction->commission_amount);
             }
 
             $creator = User::query()->find($transaction->created_by);
@@ -744,6 +951,7 @@ class TransactionService
                 'account_id' => $updated->account_id,
                 'amount' => Money::normalize($updated->amount),
                 'balance_delta' => $reversal,
+                'commission_reversed' => Money::normalize($transaction->commission_amount ?? 0),
                 'status' => 'CANCELLED',
                 'received_denominations_reversed' => $receivedDenominations,
                 'handoff_denominations_restored' => $handoffDenominations,
@@ -765,10 +973,21 @@ class TransactionService
         }
     }
 
+    private function companyId(Account $account): int
+    {
+        $companyId = $account->company_id;
+
+        if ($companyId === null) {
+            throw new InvalidArgumentException("Account #{$account->id} is not assigned to a company.");
+        }
+
+        return (int) $companyId;
+    }
+
     /**
      * @return array{method:string,fee_account_id:int|null}
      */
-    private function resolveFeePayment(array $data, \App\Models\Account $sourceAccount, string $fee): array
+    private function resolveFeePayment(array $data, Account $sourceAccount, string $fee): array
     {
         $feeAccountInput = $data['fee_account_id'] ?? null;
         $method = (string) ($data['fee_payment_method'] ?? ($feeAccountInput !== null ? 'account' : 'cash'));
@@ -802,12 +1021,72 @@ class TransactionService
     }
 
     /**
+     * Cash Out account-paid fees are credited into the same KPay/account-to-credit
+     * selected for the transaction, so tellers do not choose a separate fee account.
+     *
+     * @return array{method:string,fee_account_id:int|null}
+     */
+    private function resolveCashOutFeePayment(array $data, Account $creditAccount, string $fee): array
+    {
+        $feeAccountInput = $data['fee_account_id'] ?? null;
+        $method = (string) ($data['fee_payment_method'] ?? 'cash');
+
+        if (! in_array($method, ['cash', 'account'], true)) {
+            throw new InvalidArgumentException('Fee payment method must be cash or account.');
+        }
+
+        if ($method === 'cash') {
+            if ($feeAccountInput !== null) {
+                throw new InvalidArgumentException('Fee account must be empty when the fee is paid in cash.');
+            }
+
+            return ['method' => 'cash', 'fee_account_id' => null];
+        }
+
+        if ($feeAccountInput !== null && (int) $feeAccountInput !== $creditAccount->id) {
+            throw new InvalidArgumentException('Cash Out account-paid fees are credited to the selected account only.');
+        }
+
+        return ['method' => 'account', 'fee_account_id' => $creditAccount->id];
+    }
+
+    /**
+     * For a customer transfer, an account-paid fee arrives with the transfer
+     * amount in the selected system receive account.
+     *
+     * @return array{method:string,fee_account_id:int|null}
+     */
+    private function resolveTransferFeePayment(array $data, Account $receiveAccount): array
+    {
+        $feeAccountInput = $data['fee_account_id'] ?? null;
+        $method = (string) ($data['fee_payment_method'] ?? 'cash');
+
+        if (! in_array($method, ['cash', 'account'], true)) {
+            throw new InvalidArgumentException('Fee payment method must be cash or account.');
+        }
+
+        if ($method === 'cash') {
+            if ($feeAccountInput !== null) {
+                throw new InvalidArgumentException('Fee account must be empty when the fee is paid in cash.');
+            }
+
+            return ['method' => 'cash', 'fee_account_id' => null];
+        }
+
+        if ($feeAccountInput !== null && (int) $feeAccountInput !== $receiveAccount->id) {
+            throw new InvalidArgumentException('Transfer account-paid fees are credited to the system receive account.');
+        }
+
+        return ['method' => 'account', 'fee_account_id' => $receiveAccount->id];
+    }
+
+    /**
      * Account-paid fees are taken from the transaction source and credited to
      * the configured fee account in the same database transaction.
      *
-     * @param array{method:string,fee_account_id:int|null} $feePayment
+     * @param  array{method:string,fee_account_id:int|null}  $feePayment
      */
-    private function debitFeeFromSourceIfNeeded(\App\Models\Account $sourceAccount, array $feePayment, string $fee): void
+    private function debitFeeFromSourceIfNeeded(Account $sourceAccount, array $feePayment, string $fee): void
     {
         if ($feePayment['method'] !== 'account' || (float) $fee <= 0) {
             return;
@@ -823,6 +1102,15 @@ class TransactionService
         }
 
         $this->accounts->incrementBalance($feeAccountId, $fee);
+    }
+
+    private function creditAgentCommission(int $accountId, string $commission): void
+    {
+        if ((float) $commission <= 0) {
+            return;
+        }
+
+        $this->accounts->incrementBalance($accountId, $commission);
     }
 
     /**

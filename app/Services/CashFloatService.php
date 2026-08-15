@@ -11,6 +11,7 @@ use App\Repositories\VaultTransactionRepository;
 use App\Support\Money;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * Ports the cash float lifecycle from Python
@@ -47,6 +48,19 @@ class CashFloatService
         $this->guardNonEmptyDenominations($denominations);
 
         $float = DB::transaction(function () use ($cashier, $employeeId, $denominations, $note): CashFloatAssignment {
+            User::query()->whereKey($employeeId)->lockForUpdate()->firstOrFail();
+
+            $hasOpenFloat = CashFloatAssignment::query()
+                ->where('employee_id', $employeeId)
+                ->whereIn('status', ['PENDING_RECEIPT', 'ACTIVE', 'PENDING_RECONCILIATION'])
+                ->exists();
+
+            if ($hasOpenFloat) {
+                throw new RuntimeException(
+                    'This Teller already has an open float. Close the current float before issuing another one.',
+                );
+            }
+
             $float = $this->floats->issue($employeeId, $cashier->id, $denominations, $note);
 
             $this->vault->recordBulk(
@@ -125,6 +139,63 @@ class CashFloatService
     }
 
     /**
+     * Employee rejects an issued float before receiving it.
+     */
+    public function rejectReceipt(
+        User $employee,
+        CashFloatAssignment $float,
+        ?string $pin,
+        ?string $note = null,
+    ): CashFloatAssignment {
+        if ($float->employee_id !== $employee->id) {
+            throw new InvalidArgumentException("Float #{$float->id} does not belong to this employee.");
+        }
+
+        $this->pinVerifier->verify($employee, $pin);
+
+        $denominations = $this->denominationsFromFloat($float->loadMissing('denominations'));
+        $this->guardNonEmptyDenominations($denominations);
+
+        $auditNote = trim((string) $note);
+        if ($auditNote === '') {
+            $auditNote = "Float #{$float->id} rejected by Teller before receipt";
+        }
+
+        $rejected = DB::transaction(function () use ($employee, $float, $denominations, $auditNote): CashFloatAssignment {
+            $rejected = $this->floats->rejectPendingReceipt($float, $denominations, $auditNote);
+
+            $this->vault->recordBulk(
+                entryType: 'float_returned',
+                denominations: $denominations,
+                createdBy: $employee->id,
+                floatId: $rejected->id,
+                note: $auditNote,
+            );
+
+            $this->vaultTransactions->recordBulk(
+                txnType: 'float_reject',
+                denominations: $denominations,
+                performedBy: $employee->id,
+                floatId: $rejected->id,
+                verifiedBy: $employee->id,
+                note: $auditNote,
+            );
+
+            $this->log($employee->id, 'float_receipt_rejected', $rejected->id, [
+                'total_amount' => Money::normalize($rejected->total_amount),
+                'return_denominations' => $denominations,
+                'note' => $auditNote,
+            ]);
+
+            return $rejected;
+        });
+
+        $this->broadcasts->floatStatusChanged($rejected);
+
+        return $rejected;
+    }
+
+    /**
      * @param  array<int|string, int|string>  $verifiedDenominations
      */
     private function assertVerifiedDenominationsMatch(CashFloatAssignment $float, array $verifiedDenominations): void
@@ -149,15 +220,17 @@ class CashFloatService
     /**
      * Employee reports the denominations they are returning to the cashier.
      *
-     * @param  array<int, int>  $returnDenominations
+     * @param  array<int|string, int|string>  $returnDenominations
      */
-    public function initiateReturn(User $employee, CashFloatAssignment $float, array $returnDenominations): CashFloatAssignment
+    public function initiateReturn(User $employee, CashFloatAssignment $float, array $returnDenominations, ?string $pin = null): CashFloatAssignment
     {
         if ($float->employee_id !== $employee->id) {
             throw new InvalidArgumentException("Float #{$float->id} does not belong to this employee.");
         }
 
-        Money::denominationTotal($returnDenominations);
+        $this->pinVerifier->verify($employee, $pin);
+        $returnDenominations = $this->normalizeReturnDenominations($returnDenominations);
+        $this->assertReturnDenominationsMatchFloat($float, $returnDenominations, 'ACTIVE');
 
         $updated = DB::transaction(function () use ($employee, $float, $returnDenominations): CashFloatAssignment {
             $updated = $this->floats->initiateReturn($float, $returnDenominations);
@@ -186,16 +259,38 @@ class CashFloatService
     /**
      * Cashier confirms receipt of the returned float and closes it.
      */
-    public function confirmReturn(User $cashier, CashFloatAssignment $float, float|string $closingTotal, ?string $pin = null): CashFloatAssignment
-    {
+    public function confirmReturn(
+        User $cashier,
+        CashFloatAssignment $float,
+        float|string $closingTotal,
+        ?string $pin = null,
+        ?array $cashierReturnDenominations = null,
+    ): CashFloatAssignment {
         $this->pinVerifier->verify($cashier, $pin);
 
-        $closed = DB::transaction(function () use ($cashier, $float, $closingTotal): CashFloatAssignment {
+        $closed = DB::transaction(function () use ($cashier, $float, $closingTotal, $cashierReturnDenominations): CashFloatAssignment {
             $returnDenominations = $this->normalizeReturnDenominations(
                 $float->return_denominations_json ?? []
             );
+            $this->assertReturnDenominationsMatchFloat($float, $returnDenominations, 'PENDING_RECONCILIATION');
 
-            $closed = $this->floats->confirmReturn($float, $closingTotal);
+            if ($cashierReturnDenominations !== null) {
+                $cashierReturnDenominations = $this->normalizeReturnDenominations($cashierReturnDenominations);
+                $this->assertCashierReturnDenominationsMatchTellerReturn(
+                    $returnDenominations,
+                    $cashierReturnDenominations,
+                );
+            }
+
+            $returnTotal = Money::denominationTotal($returnDenominations);
+            $closingTotal = Money::normalize($closingTotal);
+            if (abs($returnTotal - (float) $closingTotal) > 1) {
+                throw new InvalidArgumentException(
+                    "closing_total {$closingTotal} does not match return denomination total {$returnTotal}."
+                );
+            }
+
+            $closed = $this->floats->confirmReturn($float, $returnTotal);
 
             if ($returnDenominations !== []) {
                 $this->vault->recordBulk(
@@ -249,12 +344,76 @@ class CashFloatService
      */
     private function normalizeReturnDenominations(array $raw): array
     {
+        $supported = Money::supportedDenominations();
         $normalized = [];
         foreach ($raw as $denom => $qty) {
-            $normalized[(int) $denom] = (int) $qty;
+            $denom = (int) $denom;
+            $qty = (int) $qty;
+            if (! in_array($denom, $supported, true)) {
+                throw new InvalidArgumentException("Invalid denomination: {$denom}");
+            }
+            if ($qty < 0) {
+                throw new InvalidArgumentException('Denomination quantity cannot be negative.');
+            }
+            if ($qty <= 0) {
+                continue;
+            }
+
+            $normalized[$denom] = ($normalized[$denom] ?? 0) + $qty;
         }
 
         return $normalized;
+    }
+
+    /**
+     * @param  array<int, int>  $returnDenominations
+     */
+    private function assertReturnDenominationsMatchFloat(CashFloatAssignment $float, array $returnDenominations, string $expectedStatus): void
+    {
+        $currentFloat = $float->fresh() ?? $float;
+        if ($currentFloat->status !== $expectedStatus) {
+            throw new RuntimeException("Float #{$currentFloat->id} is not {$expectedStatus}.");
+        }
+
+        $returnTotal = Money::denominationTotal($returnDenominations);
+        $floatBalance = (float) Money::normalize($currentFloat->current_balance ?? 0);
+        if (abs($returnTotal - $floatBalance) > 1) {
+            throw new InvalidArgumentException(
+                "Return total {$returnTotal} does not match float balance ".Money::normalize($floatBalance).'.'
+            );
+        }
+
+        $currentDenominations = $this->floats->getDenominationBalance($currentFloat->id);
+        foreach (Money::supportedDenominations() as $denomination) {
+            $expectedQuantity = (int) ($currentDenominations[$denomination] ?? 0);
+            $returnQuantity = (int) ($returnDenominations[$denomination] ?? 0);
+
+            if ($returnQuantity !== $expectedQuantity) {
+                throw new InvalidArgumentException(
+                    "Return denomination {$denomination} MMK must match float stock. System on hand: {$expectedQuantity}, Teller counted: {$returnQuantity}."
+                );
+            }
+        }
+    }
+
+    /**
+     * @param  array<int, int>  $tellerReturnDenominations
+     * @param  array<int, int>  $cashierReturnDenominations
+     */
+    private function assertCashierReturnDenominationsMatchTellerReturn(
+        array $tellerReturnDenominations,
+        array $cashierReturnDenominations,
+    ): void {
+        foreach (Money::supportedDenominations() as $denomination) {
+            $tellerQuantity = (int) ($tellerReturnDenominations[$denomination] ?? 0);
+            $cashierQuantity = (int) ($cashierReturnDenominations[$denomination] ?? 0);
+
+            if ($cashierQuantity !== $tellerQuantity) {
+                throw new InvalidArgumentException(
+                    "Cashier counted return denomination {$denomination} MMK must match Teller handback. Teller reported: {$tellerQuantity}, Cashier counted: {$cashierQuantity}."
+                );
+            }
+        }
     }
 
     /**

@@ -13,9 +13,31 @@ class RequireRole
         $user = $request->user();
 
         if ($user === null || ! in_array($user->role, $roles, true)) {
+            if (
+                $request->header('X-Inertia')
+                || (
+                    ! $request->is('api/*')
+                    && $request->bearerToken() === null
+                    && ! $request->expectsJson()
+                )
+            ) {
+                return redirect($this->homeForRole($user?->role))
+                    ->withErrors(['request' => 'Access denied']);
+            }
+
             return response()->json(['message' => 'Access denied'], 403);
         }
 
         return $next($request);
+    }
+
+    private function homeForRole(?string $role): string
+    {
+        return match ($role) {
+            'admin' => '/admin',
+            'cashier' => '/cashier',
+            'teller' => '/dashboard',
+            default => '/login',
+        };
     }
 }

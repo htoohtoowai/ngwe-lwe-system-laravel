@@ -20,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
         ['middleware' => ['api', 'ngwe.auth']],
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->encryptCookies(except: [
+            'ngwe_lwe_api_token',
+        ]);
+
         $middleware->web(append: [
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,

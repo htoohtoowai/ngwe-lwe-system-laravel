@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AccountFeature;
 use App\Exceptions\InsufficientBalanceException;
 use App\Exceptions\InsufficientFloatDenominationException;
 use App\Exceptions\InsufficientFloatException;
@@ -53,7 +54,7 @@ class TellerController extends Controller
             'float' => $this->floatProp($request),
             'notes' => $this->notes(),
             'floatStock' => $this->onHand($request),
-            'accounts' => $this->accounts(),
+            'accounts' => $this->accounts(AccountFeature::CashIn),
             'completed' => $this->pullCompleted($request),
         ]);
     }
@@ -64,8 +65,9 @@ class TellerController extends Controller
             'float' => $this->floatProp($request),
             'notes' => $this->notes(),
             'floatStock' => $this->onHand($request),
-            'accounts' => $this->accounts(),
+            'accounts' => $this->accounts(AccountFeature::CashOut),
             'fee' => $this->fee($request, TransactionFeeCalculator::MODE_CASH_OUT),
+            'commission' => $this->commission($request, TransactionFeeCalculator::COMMISSION_RECEIVE),
             'completed' => $this->pullCompleted($request),
         ]);
     }
@@ -85,6 +87,11 @@ class TellerController extends Controller
     public function exchange(Request $request): Response
     {
         $rate = $this->exchangeRates->getLatest('THB', 'MMK');
+        $baseAmount = (float) ($rate?->base_amount ?? 1);
+
+        if ($baseAmount <= 0) {
+            $baseAmount = 1.0;
+        }
 
         return Inertia::render('teller/Exchange', [
             'float' => $this->floatProp($request),
@@ -93,8 +100,8 @@ class TellerController extends Controller
             'accounts' => $this->accounts(),
             'fee' => $this->fee($request, TransactionFeeCalculator::MODE_CASH_IN),
             'rate' => [
-                'buy_rate' => $rate?->buy_rate ?? '0.0000',
-                'sell_rate' => $rate?->sell_rate ?? '0.0000',
+                'buy_rate' => Money::normalize($rate !== null ? (float) $rate->buy_rate / $baseAmount : 0, 4),
+                'sell_rate' => Money::normalize($rate !== null ? (float) $rate->sell_rate / $baseAmount : 0, 4),
             ],
             'completed' => $this->pullCompleted($request),
         ]);
@@ -102,8 +109,20 @@ class TellerController extends Controller
 
     public function floatPage(Request $request): Response
     {
+        return $this->floatResponse($request, 'current');
+    }
+
+    public function floatHistory(Request $request): Response
+    {
+        return $this->floatResponse($request, 'history');
+    }
+
+    private function floatResponse(Request $request, string $view): Response
+    {
         return Inertia::render('teller/Float', [
+            'view' => $view,
             'float' => $this->floatProp($request),
+            'floats' => $this->floatRows($request),
             'notes' => $this->notes(),
             'issued' => $this->issued($request),
             'onHand' => $this->onHand($request),
@@ -166,13 +185,17 @@ class TellerController extends Controller
     /**
      * @return array<int, array{id:int,name:string,company:string,balance:string}>
      */
-    private function accounts(): array
+    private function accounts(?AccountFeature $feature = null): array
     {
-        return $this->accounts->active()
+        $accounts = $feature !== null
+            ? $this->accounts->activeForFeature($feature)
+            : $this->accounts->active();
+
+        return $accounts
             ->map(fn (Account $account): array => [
                 'id' => $account->id,
                 'name' => $account->account_name,
-                'company' => $account->serviceType?->company?->name ?? 'Account',
+                'company' => $account->company?->name ?? 'Account',
                 'balance' => $account->balance,
             ])
             ->values()
@@ -213,6 +236,43 @@ class TellerController extends Controller
             'issued_amount' => $float->total_amount,
             'total_amount' => $float->total_amount,
         ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function floatRows(Request $request): array
+    {
+        $user = $request->user();
+
+        if ($user === null) {
+            return [];
+        }
+
+        return $this->floats->list($user->id)
+            ->take(50)
+            ->map(fn (CashFloatAssignment $float): array => [
+                'id' => $float->id,
+                'status' => $float->status,
+                'current_balance' => $float->current_balance ?? '0.00',
+                'issued_amount' => $float->total_amount,
+                'total_amount' => $float->total_amount,
+                'closing_total' => $float->closing_total,
+                'issued_by_name' => $float->issuer?->full_name,
+                'created_at' => $float->created_at?->toISOString(),
+                'received_at' => $float->received_at?->toISOString(),
+                'closed_at' => $float->closed_at?->toISOString(),
+                'note' => $float->note,
+                'denominations' => $float->denominations
+                    ->map(fn ($row): array => [
+                        'denomination' => (int) $row->denomination,
+                        'quantity' => (int) $row->quantity,
+                    ])
+                    ->values()
+                    ->all(),
+            ])
+            ->values()
+            ->all();
     }
 
     /**
@@ -331,6 +391,24 @@ class TellerController extends Controller
         return $this->fees->resolveFees($account, $amount, $mode)['customer_fee'];
     }
 
+    private function commission(Request $request, string $direction): string
+    {
+        $amount = $request->float('amount');
+        $accountId = $request->integer('account_id');
+
+        if ($amount <= 0 || $accountId <= 0) {
+            return '0.00';
+        }
+
+        $account = $this->accounts->find($accountId);
+
+        if ($account === null || ! $account->is_active) {
+            return '0.00';
+        }
+
+        return $this->fees->commission($account, $amount, $direction);
+    }
+
     /**
      * @return array<string, mixed>|null
      */
@@ -342,7 +420,7 @@ class TellerController extends Controller
     }
 
     /**
-     * @return array{id:int,type:string,amount:string,fee_amount:string,status:string,created_at:string,account_label:string|null,change_given:string}
+     * @return array{id:int,type:string,amount:string,fee_amount:string,status:string,created_at:string,account_label:string|null,change_given:string,customer_name:string|null,customer_phone:string|null}
      */
     private function completed(Transaction $transaction): array
     {
@@ -357,6 +435,8 @@ class TellerController extends Controller
             'created_at' => $transaction->created_at?->toDateTimeString() ?? now()->toDateTimeString(),
             'account_label' => $this->accountLabel($transaction),
             'change_given' => $transaction->change_given ?? '0.00',
+            'customer_name' => $transaction->customer_name,
+            'customer_phone' => $transaction->customer_phone,
         ];
     }
 
@@ -380,7 +460,7 @@ class TellerController extends Controller
             return null;
         }
 
-        $company = $account->serviceType?->company?->name;
+        $company = $account->company?->name;
 
         return trim(($company ? "{$company} - " : '').$account->account_name);
     }

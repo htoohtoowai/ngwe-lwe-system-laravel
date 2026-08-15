@@ -1,58 +1,62 @@
 @theme {
-  /* Counter chrome - the physical bank counter */
-  --color-ink-950: #06111f;
-  --color-ink-900: #0b1f38;
-  --color-ink-800: #12304f;
-  --color-ink-700: #1d4468;
-  --color-ink-300: #94a9c0;
-  --color-ink-100: #e4ebf3;
+    /* Counter chrome - the physical bank counter */
+    --color-ink-950: #06111f;
+    --color-ink-900: #0b1f38;
+    --color-ink-800: #12304f;
+    --color-ink-700: #1d4468;
+    --color-ink-300: #94a9c0;
+    --color-ink-100: #e4ebf3;
 
-  /* Paper - the ledger sheet */
-  --color-paper: #f6f7f9;
-  --color-paper-edge: #dfe4ea;
+    /* Paper - the ledger sheet */
+    --color-paper: #f6f7f9;
+    --color-paper-edge: #dfe4ea;
 
-  /* Value states: money in / money out / held */
-  --color-credit: #0f7a5a;
-  --color-debit: #b4342b;
-  --color-held: #a86616;
-  --color-seal: #c8a03c;
+    /* Value states: money in / money out / held */
+    --color-credit: #0f7a5a;
+    --color-debit: #b4342b;
+    --color-held: #a86616;
+    --color-seal: #c8a03c;
 
-  --font-display: "Inter Tight", "Padauk", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Inter", "Padauk", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+    --font-display:
+        'Inter Tight', 'Padauk', ui-sans-serif, system-ui, sans-serif;
+    --font-sans: 'Inter', 'Padauk', ui-sans-serif, system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  --radius-counter: 0.25rem;
+    --radius-counter: 0.25rem;
 }
 
 .money {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0;
 }
 
 .field-label {
-  @apply text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-700/70;
+    @apply text-[11px] font-semibold tracking-[0.14em] text-ink-700/70 uppercase;
 }
 
 .field-input {
-  @apply w-full rounded-counter border border-paper-edge bg-white px-3 py-2.5
-         text-ink-900 shadow-inner outline-none transition
-         focus:border-ink-700 focus:ring-2 focus:ring-ink-700/15;
+    @apply w-full rounded-counter border border-paper-edge bg-white px-3 py-2.5 text-ink-900 shadow-inner transition outline-none focus:border-ink-700 focus:ring-2 focus:ring-ink-700/15;
 }
 
 .field-input:focus-visible {
-  @apply outline-none ring-2 ring-ink-700/25 ring-offset-2 ring-offset-white;
+    @apply ring-2 ring-ink-700/25 ring-offset-2 ring-offset-white outline-none;
 }
 
-.field-input[aria-invalid="true"] {
-  @apply border-debit bg-debit/5 ring-1 ring-debit/20;
+.field-input[aria-invalid='true'] {
+    @apply border-debit bg-debit/5 ring-1 ring-debit/20;
 }
 
 .field-input:disabled,
-.field-input[aria-disabled="true"] {
-  @apply cursor-not-allowed bg-paper text-ink-700/60;
+.field-input[aria-disabled='true'] {
+    @apply cursor-not-allowed bg-paper text-ink-700/60;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+    *,
+    *::before,
+    *::after {
+        animation: none !important;
+        transition: none !important;
+    }
 }

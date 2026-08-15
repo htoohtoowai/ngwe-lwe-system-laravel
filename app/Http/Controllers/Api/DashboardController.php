@@ -26,7 +26,7 @@ class DashboardController extends Controller
         $this->guardAdmin($request);
 
         return AccountResource::collection(
-            Account::query()->with('serviceType.company')->where('is_active', true)->orderBy('account_name')->get(),
+            Account::query()->with('company')->where('is_active', true)->orderBy('account_name')->get(),
         );
     }
 

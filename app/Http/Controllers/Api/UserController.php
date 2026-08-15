@@ -22,6 +22,13 @@ class UserController extends Controller
         return UserResource::collection($this->users->all($request->boolean('include_inactive')));
     }
 
+    public function employees(Request $request): AnonymousResourceCollection
+    {
+        abort_unless(in_array($request->user()?->role, ['admin', 'cashier'], true), 403, 'Access denied');
+
+        return UserResource::collection($this->users->activeByRole('teller'));
+    }
+
     /** Compatibility endpoint for the reference application's user settings. */
     public function changePasswordCompat(Request $request): JsonResponse
     {

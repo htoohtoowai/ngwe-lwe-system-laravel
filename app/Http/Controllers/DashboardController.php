@@ -83,13 +83,13 @@ class DashboardController extends Controller
     private function accounts(): array
     {
         return Account::query()
-            ->with('serviceType.company')
+            ->with('company')
             ->where('is_active', true)
             ->orderBy('account_name')
             ->get()
             ->map(fn (Account $account): array => [
                 'id' => $account->id,
-                'company' => $account->serviceType?->company?->name ?? 'Account',
+                'company' => $account->company?->name ?? 'Account',
                 'name' => $account->account_name,
                 'number' => $account->phone_number,
                 'balance' => Money::normalize($account->balance ?? 0),
@@ -110,7 +110,7 @@ class DashboardController extends Controller
             ->whereIn('status', ['ACTIVE', 'PENDING_RECEIPT', 'PENDING_RECONCILIATION'])
             ->orderByRaw("CASE WHEN status = 'ACTIVE' THEN 0 WHEN status = 'PENDING_RECEIPT' THEN 1 ELSE 2 END")
             ->orderByDesc('created_at')
-            ->limit($user->role === 'teller' ? 3 : 12)
+            ->limit($user->role === 'teller' ? 1 : 12)
             ->get()
             ->map(fn (CashFloatAssignment $float): array => [
                 'id' => $float->id,
@@ -231,6 +231,8 @@ class DashboardController extends Controller
                 'amount' => Money::normalize($transaction->amount ?? 0),
                 'customer_name' => $transaction->customer_name,
                 'teller' => $transaction->creator?->full_name ?? $transaction->creator?->username ?? 'Admin',
+                'creator_role' => $transaction->creator?->role,
+                'settlement_amount' => $this->cashInSettlementAmount($transaction),
                 'customer_fee' => Money::normalize($transaction->customer_fee ?? 0),
                 'fee_payment_method' => $transaction->fee_payment_method,
                 'received_denominations' => $transaction->received_denominations ?? [],
@@ -243,10 +245,21 @@ class DashboardController extends Controller
             ->all();
     }
 
+    private function cashInSettlementAmount(Transaction $transaction): string
+    {
+        $receivedDenominations = is_array($transaction->received_denominations) ? $transaction->received_denominations : [];
+        $handoffDenominations = is_array($transaction->handoff_denominations) ? $transaction->handoff_denominations : [];
+        $settlementDenominations = $transaction->creator?->role === 'teller'
+            ? $handoffDenominations
+            : $receivedDenominations;
+
+        return Money::normalize(Money::denominationTotal($settlementDenominations));
+    }
+
     private function scopedTransactions(User $user): Builder
     {
         return Transaction::query()
-            ->with('account.serviceType.company')
+            ->with('account.company')
             ->when($user->role === 'teller', fn (Builder $query) => $query->where('created_by', $user->id));
     }
 
@@ -275,14 +288,14 @@ class DashboardController extends Controller
         }
 
         $account = Account::query()
-            ->with('serviceType.company')
+            ->with('company')
             ->find($accountId);
 
         if ($account === null) {
             return null;
         }
 
-        $company = $account->serviceType?->company?->name;
+        $company = $account->company?->name;
         $label = trim(($company ? "{$company} - " : '').$account->account_name);
         $this->accountLabels[$accountId] = $label;
 

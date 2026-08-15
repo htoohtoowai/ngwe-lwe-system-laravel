@@ -8,7 +8,6 @@ use App\Models\CashFloatDenomination;
 use App\Models\Company;
 use App\Models\DailyReconciliationLog;
 use App\Models\DailySummary;
-use App\Models\ServiceType;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
@@ -152,21 +151,15 @@ class DailyReportTest extends TestCase
             'category' => 'Pay',
             'is_active' => true,
         ]);
-        $serviceType = ServiceType::query()->create([
-            'company_id' => $company->id,
-            'name' => 'Cash In',
-            'operation' => 'CashIn',
-            'is_active' => true,
-        ]);
         $account = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => 'Primary',
             'phone_number' => '0911111111',
             'balance' => '100000.00',
             'is_active' => true,
         ]);
         $toAccount = Account::query()->create([
-            'service_type_id' => $serviceType->id,
+            'company_id' => $company->id,
             'account_name' => 'Secondary',
             'phone_number' => '0922222222',
             'balance' => '25000.00',

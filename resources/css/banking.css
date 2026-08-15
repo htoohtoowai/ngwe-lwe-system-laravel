@@ -7,112 +7,123 @@
 */
 
 @theme {
-  /* Brand red — the only saturated color on the page */
-  --color-brand: #b31b2c;
-  --color-brand-deep: #8f1321;
-  --color-brand-soft: #fff0f2;
+    /* Brand red — the only saturated color on the page */
+    --color-brand: #b31b2c;
+    --color-brand-deep: #8f1321;
+    --color-brand-soft: #fff0f2;
 
-  /* Surfaces */
-  --color-canvas: #f5f6f8;   /* page background */
-  --color-card: #ffffff;
-  --color-mist: #f2f3f4;     /* filled inputs / chips */
-  --color-line: #e4e6e8;     /* hairline borders */
+    /* Surfaces */
+    --color-canvas: #f5f6f8; /* page background */
+    --color-card: #ffffff;
+    --color-mist: #f2f3f4; /* filled inputs / chips */
+    --color-line: #e4e6e8; /* hairline borders */
 
-  /* Text */
-  --color-ink: #17181a;
-  --color-slate: #6f7277;
+    /* Text */
+    --color-ink: #17181a;
+    --color-slate: #6f7277;
 
-  /* Semantics */
-  --color-balance: #16a34a;  /* positive money, per reference */
-  --color-alert: #d92d20;
+    /* Semantics */
+    --color-balance: #16a34a; /* positive money, per reference */
+    --color-alert: #d92d20;
 
-  --font-sans: "Inter", "Padauk", ui-sans-serif, system-ui, sans-serif;
-  --font-burmese: "Padauk", "Noto Sans Myanmar", "Myanmar Text", sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+    --font-sans: 'Inter', 'Padauk', ui-sans-serif, system-ui, sans-serif;
+    --font-burmese: 'Padauk', 'Noto Sans Myanmar', 'Myanmar Text', sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
-  --radius-field: 0.875rem;  /* inputs: softly rounded, not full pill */
-  --radius-pill: 9999px;     /* buttons & chips: full pill */
+    --radius-field: 0.875rem; /* inputs: softly rounded, not full pill */
+    --radius-pill: 9999px; /* buttons & chips: full pill */
 }
 
 /* Filled input, borderless at rest, red ring on focus — the reference pattern */
 .bank-input {
-  @apply w-full rounded-field border-2 border-transparent bg-mist px-4 py-3.5
-         text-ink placeholder:text-slate/60 outline-none transition
-         focus:border-brand focus:bg-white;
+    @apply w-full rounded-field border-2 border-transparent bg-mist px-4 py-3.5 text-ink transition outline-none placeholder:text-slate/60 focus:border-brand focus:bg-white;
 }
 
 /* Bank-grade form primitives: calm hierarchy, explicit error/focus states,
    and a consistent action rhythm across every workflow. */
 .bank-form-shell {
-  @apply rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-7;
+    @apply rounded-2xl border border-line bg-card p-5 shadow-sm sm:p-7;
 }
 
 .bank-form-section {
-  @apply rounded-2xl border border-line bg-card p-4 shadow-sm sm:p-5;
+    @apply rounded-2xl border border-line bg-card p-4 shadow-sm sm:p-5;
 }
 
 .bank-input:focus-visible,
 .bank-button:focus-visible,
 .bank-choice:focus-visible {
-  @apply outline-none ring-2 ring-brand/35 ring-offset-2 ring-offset-card;
+    @apply ring-2 ring-brand/35 ring-offset-2 ring-offset-card outline-none;
 }
 
-.bank-input[aria-invalid="true"] {
-  @apply border-brand bg-brand-soft;
+.bank-input[aria-invalid='true'] {
+    @apply border-brand bg-brand-soft;
 }
 
 .bank-input:disabled,
-.bank-input[aria-disabled="true"] {
-  @apply cursor-not-allowed bg-mist/70 text-slate/70;
+.bank-input[aria-disabled='true'] {
+    @apply cursor-not-allowed bg-mist/70 text-slate/70;
 }
 
 .bank-help {
-  @apply mt-1.5 text-xs leading-5 text-slate;
+    @apply mt-1.5 text-xs leading-5 text-slate;
 }
 
 .bank-error {
-  @apply mt-1.5 flex items-start gap-2 text-xs font-semibold leading-5 text-brand;
+    @apply mt-1.5 flex items-start gap-2 text-xs leading-5 font-semibold text-brand;
 }
 
 .bank-required::after {
-  content: ' *';
-  @apply text-brand;
+    content: ' *';
+    @apply text-brand;
 }
 
 .bank-button {
-  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-pill px-5 py-3 text-sm font-bold transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-mist disabled:text-slate disabled:shadow-none;
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-pill px-5 py-3 text-sm font-bold transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-mist disabled:text-slate disabled:shadow-none;
 }
 
 .bank-button-primary {
-  @apply bg-ink text-white shadow-sm hover:bg-ink/85;
+    @apply bg-ink text-white shadow-sm hover:bg-ink/85;
 }
 
 .bank-button-secondary {
-  @apply border border-line bg-card text-slate hover:border-ink hover:text-ink;
+    @apply border border-line bg-card text-slate hover:border-ink hover:text-ink;
 }
 
 .bank-button-danger {
-  @apply border border-brand/25 bg-brand-soft text-brand hover:border-brand;
+    @apply border border-brand/25 bg-brand-soft text-brand hover:border-brand;
 }
 
 select.bank-input {
-  @apply appearance-none bg-mist;
+    @apply appearance-none bg-mist;
+}
+
+.bank-page-size {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-pill border border-line bg-card py-1 pr-1 pl-4 text-xs font-bold text-slate shadow-sm;
+}
+
+.bank-page-size-select {
+    @apply h-9 min-w-16 cursor-pointer appearance-none rounded-pill border border-line bg-mist px-3 text-center text-sm font-black text-ink outline-none transition hover:border-brand/40 focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/20;
 }
 
 /* Leading icons must not overlap the typed value. */
 .bank-input.bank-input-leading {
-  padding-left: 3rem;
+    padding-left: 3rem;
 }
 
 .bank-label {
-  @apply mb-1.5 block text-[13px] font-semibold text-ink;
+    @apply mb-1.5 block text-[13px] font-semibold text-ink;
 }
 
 .money {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+    *,
+    *::before,
+    *::after {
+        animation: none !important;
+        transition: none !important;
+    }
 }

@@ -144,6 +144,38 @@ class CashFloatRepository
     }
 
     /**
+     * @param  array<int, int>  $returnDenominations
+     */
+    public function rejectPendingReceipt(CashFloatAssignment $float, array $returnDenominations, ?string $note = null): CashFloatAssignment
+    {
+        $updates = [
+            'status' => 'CLOSED',
+            'closed_at' => now(),
+            'closing_total' => Money::normalize(Money::denominationTotal($returnDenominations)),
+            'current_balance' => Money::normalize(0),
+            'return_denominations_json' => $returnDenominations,
+        ];
+
+        if ($note !== null && trim($note) !== '') {
+            $existingNote = trim((string) ($float->note ?? ''));
+            $updates['note'] = $existingNote === ''
+                ? trim($note)
+                : $existingNote.PHP_EOL.trim($note);
+        }
+
+        $affected = CashFloatAssignment::query()
+            ->where('id', $float->id)
+            ->where('status', 'PENDING_RECEIPT')
+            ->update($updates);
+
+        if ($affected === 0) {
+            throw new \RuntimeException("Float #{$float->id} is not PENDING_RECEIPT.");
+        }
+
+        return $float->refresh()->load(['denominations', 'employee', 'issuer']);
+    }
+
+    /**
      * @return array<int, int> denomination => quantity
      */
     public function getDenominationBalance(int $floatId): array

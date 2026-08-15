@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CashFloatAssignment;
 use App\Models\Transaction;
+use App\Models\TransactionNotificationRead;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
 use App\Repositories\CashFloatRepository;
@@ -15,24 +16,54 @@ use Inertia\Response;
 
 class CashierController extends Controller
 {
+    private const DEFAULT_SECTION = 'dashboard';
+
+    private const SECTIONS = [
+        self::DEFAULT_SECTION,
+        'teller-entry-notifications',
+        'main-vault-denomination-stock',
+        'morning-issue',
+        'end-of-day',
+        'teller-entry-history',
+        'teller-entry-history-cash-in',
+        'teller-entry-history-cash-out',
+        'teller-entry-history-transfer',
+        'teller-entry-history-exchange',
+        'main-vault-audit-log',
+    ];
+
+    private const PAGE_COMPONENTS = [
+        'dashboard' => 'cashier/Dashboard',
+        'teller-entry-notifications' => 'cashier/Notifications',
+        'main-vault-denomination-stock' => 'cashier/VaultStock',
+        'morning-issue' => 'cashier/MorningIssue',
+        'end-of-day' => 'cashier/EndOfDay',
+        'teller-entry-history' => 'cashier/history/All',
+        'teller-entry-history-cash-in' => 'cashier/history/CashIn',
+        'teller-entry-history-cash-out' => 'cashier/history/CashOut',
+        'teller-entry-history-transfer' => 'cashier/history/Transfer',
+        'teller-entry-history-exchange' => 'cashier/history/Exchange',
+        'main-vault-audit-log' => 'cashier/VaultAuditLog',
+    ];
+
     public function __construct(
         private readonly CashDenominationRepository $vault,
         private readonly CashFloatRepository $floats,
         private readonly VaultTransactionRepository $vaultTransactions,
     ) {}
 
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request, ?string $section = null): Response
     {
+        $section ??= self::DEFAULT_SECTION;
+        abort_unless(in_array($section, self::SECTIONS, true), 404);
+
         $vault = $this->vault->getVaultBalance();
         $floatRows = $this->floats->list();
 
-        return Inertia::render('cashier/Operations', [
+        return Inertia::render(self::PAGE_COMPONENTS[$section], [
             'role' => $request->user()->role,
             'announcement' => 'Manage the main vault, Teller floats and end-of-day returns.',
-            'notificationCount' => Transaction::query()
-                ->where('transaction_type', 'cash_in')
-                ->where('status', 'PENDING_CASHIER_CONFIRM')
-                ->count(),
+            'notificationCount' => $this->unreadNotificationCount((int) $request->user()->id),
             'pendingCashIns' => $this->pendingCashIns(),
             'notes' => $this->notes(),
             'mainVault' => $this->stringify($vault),
@@ -91,6 +122,7 @@ class CashierController extends Controller
         return Inertia::render('cashier/Profile', [
             'role' => 'cashier',
             'announcement' => 'Keep your Cashier PIN private and update it regularly.',
+            'notificationCount' => $this->unreadNotificationCount((int) $request->user()->id),
             'user' => [
                 'id' => $request->user()->id,
                 'username' => $request->user()->username,
@@ -120,6 +152,10 @@ class CashierController extends Controller
                 'amount' => Money::normalize($transaction->amount ?? 0),
                 'customer_name' => $transaction->customer_name,
                 'teller' => $transaction->creator?->full_name ?? $transaction->creator?->username ?? 'Teller',
+                'creator_role' => $transaction->creator?->role,
+                'settlement_amount' => $this->cashInSettlementAmount($transaction),
+                'customer_fee' => Money::normalize($transaction->customer_fee ?? 0),
+                'fee_payment_method' => $transaction->fee_payment_method,
                 'received_denominations' => $transaction->received_denominations ?? [],
                 'handoff_denominations' => $transaction->handoff_denominations ?? [],
                 'change_denominations' => $transaction->change_denominations ?? [],
@@ -128,6 +164,30 @@ class CashierController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    private function unreadNotificationCount(int $userId): int
+    {
+        $readTransactionIds = TransactionNotificationRead::query()
+            ->where('user_id', $userId)
+            ->select('transaction_id');
+
+        return Transaction::query()
+            ->where('transaction_type', 'cash_in')
+            ->where('status', 'PENDING_CASHIER_CONFIRM')
+            ->whereNotIn('id', $readTransactionIds)
+            ->count();
+    }
+
+    private function cashInSettlementAmount(Transaction $transaction): string
+    {
+        $receivedDenominations = is_array($transaction->received_denominations) ? $transaction->received_denominations : [];
+        $handoffDenominations = is_array($transaction->handoff_denominations) ? $transaction->handoff_denominations : [];
+        $settlementDenominations = $transaction->creator?->role === 'teller'
+            ? $handoffDenominations
+            : $receivedDenominations;
+
+        return Money::normalize(Money::denominationTotal($settlementDenominations));
     }
 
     /**
