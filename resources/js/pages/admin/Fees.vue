@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import ConfirmActionModal from '@/components/bank/ConfirmActionModal.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
 import type {
     FeeKind,
@@ -21,6 +22,11 @@ const sampleAmount = ref(100_000);
 const busy = ref(false);
 const errors = ref<Record<string, string>>({});
 const failedLogos = ref(new Set<number>());
+const pendingDelete = ref<
+    | { kind: 'provider'; tier: ProviderTier }
+    | { kind: 'transfer'; tier: TransferTier }
+    | null
+>(null);
 
 const providerForm = ref({
     company_id: props.companies.find((company) => company.is_active)?.id ?? 0,
@@ -290,35 +296,60 @@ function submitTransfer(): void {
 }
 
 function deleteProvider(tier: ProviderTier): void {
-    if (
-        !window.confirm(
-            `Delete ${tier.company_name} ${featureLabel(tier.feature)} tier?`,
-        )
-    ) {
-        return;
-    }
-
-    router.delete(`/admin/fees/provider/${tier.id}`, {
-        headers: authHeaders(),
-        preserveScroll: true,
-    });
+    pendingDelete.value = { kind: 'provider', tier };
 }
 
 function deleteTransfer(tier: TransferTier): void {
-    if (
-        !window.confirm(
-            `Delete ${tier.company_from_name} to ${tier.company_to_name} tier?`,
-        )
-    ) {
+    pendingDelete.value = { kind: 'transfer', tier };
+}
+
+function closeDeleteModal(): void {
+    if (!busy.value) {
+        pendingDelete.value = null;
+    }
+}
+
+function confirmDelete(): void {
+    const pending = pendingDelete.value;
+
+    if (!pending) {
         return;
     }
 
-    router.delete(`/admin/fees/transfer/${tier.id}`, {
+    const url =
+        pending.kind === 'provider'
+            ? `/admin/fees/provider/${pending.tier.id}`
+            : `/admin/fees/transfer/${pending.tier.id}`;
+
+    busy.value = true;
+    router.delete(url, {
         headers: authHeaders(),
         preserveScroll: true,
+        onSuccess: () => {
+            pendingDelete.value = null;
+        },
+        onFinish: () => {
+            busy.value = false;
+        },
     });
 }
 
+const deleteModalTitle = computed(() =>
+    pendingDelete.value?.kind === 'transfer'
+        ? 'Delete transfer fee?'
+        : 'Delete provider fee?',
+);
+const deleteModalDescription = computed(() => {
+    const pending = pendingDelete.value;
+
+    if (!pending) {
+        return '';
+    }
+
+    return pending.kind === 'provider'
+        ? `${pending.tier.company_name} ${featureLabel(pending.tier.feature)} fee tier will be permanently deleted.`
+        : `${pending.tier.company_from_name} to ${pending.tier.company_to_name} transfer fee tier will be permanently deleted.`;
+});
 function markLogoFailed(companyId: number): void {
     failedLogos.value = new Set([...failedLogos.value, companyId]);
 }
@@ -1213,5 +1244,14 @@ function markLogoFailed(companyId: number): void {
                 </div>
             </footer>
         </section>
+        <ConfirmActionModal
+            :open="pendingDelete !== null"
+            :title="deleteModalTitle"
+            :description="deleteModalDescription"
+            confirm-label="Delete fee tier"
+            :busy="busy"
+            @cancel="closeDeleteModal"
+            @confirm="confirmDelete"
+        />
     </BankLayout>
 </template>

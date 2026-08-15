@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import ConfirmActionModal from '@/components/bank/ConfirmActionModal.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
 import AdminListFrame from '@/components/admin/operations/AdminListFrame.vue';
 
@@ -229,6 +230,7 @@ const companyLogoInput = ref<HTMLInputElement | null>(null);
 const companyLogoUrls = ref<Record<number, string>>({});
 const companyPendingDelete = ref<Company | null>(null);
 const accountPendingDelete = ref<Account | null>(null);
+const exchangeRatePendingDelete = ref<ExchangeRate | null>(null);
 
 const dailySummary = ref<Summary | null>(initialData?.dailySummary ?? null);
 const companies = ref<Company[]>(initialData?.companies ?? []);
@@ -1243,21 +1245,41 @@ async function saveExchangeRate(): Promise<void> {
     });
 }
 
-async function deleteExchangeRate(rate: ExchangeRate): Promise<void> {
-    if (
-        typeof window !== 'undefined' &&
-        !window.confirm(
-            `Delete exchange rate ${rate.base_currency}/${rate.quote_currency}?`,
-        )
-    ) {
+function deleteExchangeRate(rate: ExchangeRate): void {
+    exchangeRatePendingDelete.value = rate;
+}
+
+function closeExchangeRateDeleteModal(): void {
+    if (busy.value === '') {
+        exchangeRatePendingDelete.value = null;
+    }
+}
+
+async function confirmExchangeRateDelete(): Promise<void> {
+    const rate = exchangeRatePendingDelete.value;
+
+    if (!rate) {
         return;
     }
 
     await runAction('Exchange rate deleted.', async () => {
-        await request(`/admin/actions/exchange-rates/${rate.id}`, { method: 'DELETE' });
+        await request('/admin/actions/exchange-rates/' + rate.id, {
+            method: 'DELETE',
+        });
+        exchangeRatePendingDelete.value = null;
     });
 }
 
+const exchangeRateDeleteDescription = computed(() => {
+    const rate = exchangeRatePendingDelete.value;
+
+    return rate
+        ? rate.base_currency +
+              '/' +
+              rate.quote_currency +
+              ' exchange rate will be permanently deleted.'
+        : '';
+});
 async function changePassword(): Promise<void> {
     await runAction('Password changed.', async () => {
         await request('/admin/actions/password', {
@@ -3671,6 +3693,15 @@ async function sendBroadcastTest(): Promise<void> {
             </section>
         </div>
 
+        <ConfirmActionModal
+            :open="exchangeRatePendingDelete !== null"
+            title="Delete exchange rate?"
+            :description="exchangeRateDeleteDescription"
+            confirm-label="Delete exchange rate"
+            :busy="busy === 'Exchange rate deleted.'"
+            @cancel="closeExchangeRateDeleteModal"
+            @confirm="confirmExchangeRateDelete"
+        />
         <Teleport to="body">
             <div
                 v-if="companyPendingDelete"
