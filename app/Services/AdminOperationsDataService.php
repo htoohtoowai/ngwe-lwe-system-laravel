@@ -40,7 +40,7 @@ class AdminOperationsDataService
             'activityLogs' => ActivityLogResource::collection(ActivityLog::query()->with('user')->latest()->limit(200)->get())->resolve($request),
             'cashFloats' => CashFloatResource::collection($this->floats->list())->resolve($request),
             'vaultInventory' => app(VaultController::class)->inventory()->getData(true)['data'] ?? null,
-            'exchangeRates' => ExchangeRateResource::collection(ExchangeRate::query()->with('company')->latest()->limit(50)->get())->resolve($request),
+            'exchangeRates' => ExchangeRateResource::collection(ExchangeRate::query()->with('company')->latest('id')->limit(50)->get())->resolve($request),
             'commissionTiers' => CommissionTierResource::collection(CommissionTier::query()->with('company')->orderBy('amount_from')->get())->resolve($request),
         ];
     }

@@ -56,6 +56,7 @@ type ExchangeRate = {
     buy_rate: MoneyValue;
     sell_rate: MoneyValue;
     created_at?: string | null;
+    updated_at?: string | null;
 };
 
 type Transaction = {
@@ -2059,6 +2060,30 @@ async function sendBroadcastTest(): Promise<void> {
                                         }}
                                     </dd>
                                 </div>
+                                <div>
+                                    <dt class="font-bold text-slate">
+                                        Created
+                                    </dt>
+                                    <dd class="font-black text-ink">
+                                        {{
+                                            dateTime(
+                                                currentExchangeRate.created_at,
+                                            )
+                                        }}
+                                    </dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate">
+                                        Updated
+                                    </dt>
+                                    <dd class="font-black text-ink">
+                                        {{
+                                            dateTime(
+                                                currentExchangeRate.updated_at,
+                                            )
+                                        }}
+                                    </dd>
+                                </div>
                             </dl>
                         </template>
                         <p v-else class="text-sm font-semibold text-slate">
@@ -2090,6 +2115,9 @@ async function sendBroadcastTest(): Promise<void> {
                                 >{{ money(rate.buy_rate) }} /
                                 {{ money(rate.sell_rate) }}</span
                             >
+                            <span class="text-xs font-semibold text-slate">
+                                {{ dateTime(rate.updated_at ?? rate.created_at) }}
+                            </span>
                             <div class="flex gap-1.5">
                                 <Link
                                     :href="

@@ -12,7 +12,6 @@ class ExchangeRateRepository
         return ExchangeRate::query()
             ->where('base_currency', $baseCurrency)
             ->where('quote_currency', $quoteCurrency)
-            ->orderByDesc('updated_at')
             ->orderByDesc('id')
             ->first();
     }
@@ -23,7 +22,6 @@ class ExchangeRateRepository
     public function recent(int $limit = 50): Collection
     {
         return ExchangeRate::query()
-            ->orderByDesc('updated_at')
             ->orderByDesc('id')
             ->limit(max(1, min($limit, 200)))
             ->get();

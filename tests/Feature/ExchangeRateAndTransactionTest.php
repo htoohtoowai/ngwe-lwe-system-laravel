@@ -120,6 +120,37 @@ class ExchangeRateAndTransactionTest extends TestCase
             ->assertJsonPath('data.sell_rate', '148.0000');
     }
 
+    public function test_latest_endpoint_uses_highest_id_rate_for_the_pair(): void
+    {
+        [, $token] = $this->userWithToken('teller');
+
+        ExchangeRate::query()->create([
+            'base_currency' => 'THB',
+            'quote_currency' => 'MMK',
+            'base_amount' => 1,
+            'buy_rate' => 145,
+            'sell_rate' => 148,
+            'created_at' => now(),
+            'updated_at' => now()->addDay(),
+        ]);
+
+        ExchangeRate::query()->create([
+            'base_currency' => 'THB',
+            'quote_currency' => 'MMK',
+            'base_amount' => 1,
+            'buy_rate' => 150,
+            'sell_rate' => 153,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer '.$token)
+            ->getJson('/api/exchange-rates/latest')
+            ->assertOk()
+            ->assertJsonPath('data.buy_rate', '150.0000')
+            ->assertJsonPath('data.sell_rate', '153.0000');
+    }
+
     public function test_exchange_transaction_credits_account_and_uses_sell_rate_for_mmk(): void
     {
         [, $token] = $this->userWithToken('admin');

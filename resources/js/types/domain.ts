@@ -256,6 +256,8 @@ export type ExchangeRate = {
     base_amount: string;
     buy_rate: string;
     sell_rate: string;
+    created_at?: string | null;
+    updated_at?: string | null;
 };
 
 export type DenominationMap = Record<string, number>;
