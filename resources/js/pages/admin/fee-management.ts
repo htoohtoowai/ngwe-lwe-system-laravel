@@ -1,16 +1,22 @@
-export type FeeKind = 'provider' | 'transfer';
-export type FeeType = 'FIXED' | 'PERCENTAGE';
+export type FeeKind = 'provider' | 'agent' | 'transfer';
+export type CalculationType = 'FIXED' | 'PERCENTAGE';
 export type PageMode = 'list' | 'create' | 'edit' | 'detail';
 
 export type FeeCompany = {
     id: number;
     name: string;
     logo_url: string | null;
+    category: 'Pay' | 'Bank' | 'Both';
     is_active: boolean;
 };
 
 export type FeeFeature = {
     value: string;
+    label: string;
+};
+
+export type CalculationTypeOption = {
+    value: CalculationType;
     label: string;
 };
 
@@ -21,12 +27,22 @@ export type ProviderTier = {
     feature: string;
     amount_from: string;
     amount_to: string;
-    fee_type: FeeType;
-    fee_amount: string;
-    additional_fee_type: FeeType;
-    additional_fee_amount: string;
-    comm_type: FeeType;
-    comm_amount: string;
+    fee_type: CalculationType;
+    fee_value: string;
+    additional_fee_type: CalculationType;
+    additional_fee_value: string;
+    is_active: boolean;
+};
+
+export type AgentCommissionTier = {
+    id: number;
+    company_id: number;
+    company_name: string;
+    amount_from: string;
+    amount_to: string;
+    commission_type: CalculationType;
+    out_commission_value: string;
+    in_commission_value: string;
     is_active: boolean;
 };
 
@@ -38,10 +54,10 @@ export type TransferTier = {
     company_to_name: string;
     amount_from: string;
     amount_to: string;
-    fee_type: FeeType;
-    fee_amount: string;
-    additional_fee_type: FeeType;
-    additional_fee_amount: string;
+    fee_type: CalculationType;
+    fee_value: string;
+    additional_fee_type: CalculationType;
+    additional_fee_value: string;
     is_active: boolean;
 };
 
@@ -55,6 +71,8 @@ export type FeeManagementProps = {
     resourceId?: number | null;
     companies: FeeCompany[];
     features: FeeFeature[];
+    calculationTypes: CalculationTypeOption[];
     providerTiers: ProviderTier[];
+    agentCommissionTiers: AgentCommissionTier[];
     transferTiers: TransferTier[];
 };

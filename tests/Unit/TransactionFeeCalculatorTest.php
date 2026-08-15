@@ -3,17 +3,23 @@
 namespace Tests\Unit;
 
 use App\Enums\AccountFeature;
+use App\Enums\AccountType;
+use App\Enums\AgentCommissionDirection;
 use App\Models\Account;
-use App\Models\CommissionTier;
-use App\Repositories\CommissionTierRepository;
+use App\Models\AgentCommissionTier;
+use App\Models\ProviderFeeTier;
+use App\Repositories\AgentCommissionTierRepository;
+use App\Repositories\ProviderFeeTierRepository;
+use App\Services\AgentCommissionCalculator;
+use App\Services\TierValueCalculator;
 use App\Services\TransactionFeeCalculator;
 use PHPUnit\Framework\TestCase;
 
 class TransactionFeeCalculatorTest extends TestCase
 {
-    public function test_returns_zero_when_no_company_or_tier_matches(): void
+    public function test_returns_zero_when_no_provider_fee_tier_matches(): void
     {
-        $calc = new TransactionFeeCalculator($this->tierRepo());
+        $calc = new TransactionFeeCalculator($this->feeRepo(), new TierValueCalculator());
 
         $this->assertSame('0.00', $calc->resolveFees($this->account(null), 5000, TransactionFeeCalculator::MODE_CASH_IN)['customer_fee']);
         $this->assertSame('0.00', $calc->resolveFees($this->account(1), 5000, TransactionFeeCalculator::MODE_CASH_IN)['customer_fee']);
@@ -21,131 +27,182 @@ class TransactionFeeCalculatorTest extends TestCase
 
     public function test_fixed_fee_uses_feature_tier_and_mmk_rounding(): void
     {
-        $tier = $this->tier(AccountFeature::CashIn, [
+        $tier = $this->feeTier(AccountFeature::CashIn, [
             'fee_type' => 'FIXED',
-            'fee_amount' => 1020,
+            'fee_value' => 1020,
         ]);
 
-        $result = (new TransactionFeeCalculator($this->tierRepo($tier)))
+        $result = (new TransactionFeeCalculator($this->feeRepo($tier), new TierValueCalculator()))
             ->resolveFees($this->account(1), 100_000, TransactionFeeCalculator::MODE_CASH_IN);
 
         $this->assertSame('1000.00', $result['customer_fee']);
         $this->assertSame('0.00', $result['additional_fee']);
     }
 
-    public function test_percentage_fee_supports_human_percent_values_and_additional_fee(): void
+    public function test_percentage_fee_supports_four_decimal_human_percent_values(): void
     {
-        $tier = $this->tier(AccountFeature::CashIn, [
+        $tier = $this->feeTier(AccountFeature::CashIn, [
             'fee_type' => 'PERCENTAGE',
-            'fee_amount' => 1,
-            'additional_fee_type' => 'FIXED',
-            'additional_fee_amount' => 250,
+            'fee_value' => 0.0001,
         ]);
 
-        $result = (new TransactionFeeCalculator($this->tierRepo($tier)))
-            ->resolveFees($this->account(1), 100_000, TransactionFeeCalculator::MODE_CASH_IN);
+        $result = (new TransactionFeeCalculator($this->feeRepo($tier), new TierValueCalculator()))
+            ->resolveFees($this->account(1), 1_000_000, TransactionFeeCalculator::MODE_CASH_IN);
 
-        $this->assertSame('1300.00', $result['customer_fee']);
-        $this->assertSame('250.00', $result['additional_fee']);
+        // Raw fee is 1 MMK, then the customer-fee minimum/rounding rule applies.
+        $this->assertSame('100.00', $result['customer_fee']);
     }
 
-    public function test_cash_out_looks_up_cash_out_feature(): void
+    public function test_additional_provider_fee_can_use_percentage_independently(): void
     {
-        $cashIn = $this->tier(AccountFeature::CashIn, ['fee_amount' => 100]);
-        $cashOut = $this->tier(AccountFeature::CashOut, ['fee_amount' => 500]);
-        $calc = new TransactionFeeCalculator($this->tierRepo($cashIn, $cashOut));
+        $tier = $this->feeTier(AccountFeature::CashOut, [
+            'fee_type' => 'FIXED',
+            'fee_value' => 0,
+            'additional_fee_type' => 'PERCENTAGE',
+            'additional_fee_value' => 0.0001,
+        ]);
 
-        $this->assertSame(
-            '500.00',
-            $calc->resolveFees($this->account(1), 50_000, TransactionFeeCalculator::MODE_CASH_OUT)['customer_fee'],
-        );
+        $result = (new TransactionFeeCalculator($this->feeRepo($tier), new TierValueCalculator()))
+            ->resolveFees($this->account(1), 1_000_000, TransactionFeeCalculator::MODE_CASH_OUT);
+
+        $this->assertSame('100.00', $result['customer_fee']);
+        $this->assertSame('1.00', $result['additional_fee']);
     }
 
-    public function test_agent_commission_uses_feature_tier_commission(): void
+    public function test_cash_in_and_cash_out_use_independent_provider_fee_rows(): void
     {
-        $cashIn = $this->tier(AccountFeature::CashIn, ['comm_type' => 'FIXED', 'comm_amount' => 750]);
-        $cashOut = $this->tier(AccountFeature::CashOut, ['comm_type' => 'PERCENTAGE', 'comm_amount' => 1]);
-        $calc = new TransactionFeeCalculator($this->tierRepo($cashIn, $cashOut));
-        $account = $this->account(1);
+        $cashIn = $this->feeTier(AccountFeature::CashIn, ['fee_value' => 100]);
+        $cashOut = $this->feeTier(AccountFeature::CashOut, ['fee_value' => 500]);
+        $calc = new TransactionFeeCalculator($this->feeRepo($cashIn, $cashOut), new TierValueCalculator());
 
-        $this->assertSame('750.00', $calc->commission($account, 100_000, TransactionFeeCalculator::COMMISSION_SEND));
-        $this->assertSame('1000.00', $calc->commission($account, 100_000, TransactionFeeCalculator::COMMISSION_RECEIVE));
-        $this->assertSame('0.00', $calc->commission($this->account(1, false), 100_000, TransactionFeeCalculator::COMMISSION_SEND));
+        $this->assertSame('100.00', $calc->resolveFees($this->account(1), 50_000, TransactionFeeCalculator::MODE_CASH_IN)['customer_fee']);
+        $this->assertSame('500.00', $calc->resolveFees($this->account(1), 50_000, TransactionFeeCalculator::MODE_CASH_OUT)['customer_fee']);
     }
 
-    public function test_point_two_percent_cash_out_calculates_from_company_feature_tier(): void
+    public function test_agent_commission_uses_out_or_in_value_from_same_amount_tier(): void
     {
-        $tier = $this->tier(AccountFeature::CashOut, [
+        $tier = $this->commissionTier([
+            'commission_type' => 'FIXED',
+            'out_commission_value' => 123,
+            'in_commission_value' => 117,
+        ]);
+        $calc = new AgentCommissionCalculator($this->commissionRepo($tier), new TierValueCalculator());
+        $account = $this->account(1, true, AccountType::Pay);
+
+        $out = $calc->resolveForMovement($account, 20_000, -20_000);
+        $in = $calc->resolveForMovement($account, 20_000, 20_000);
+
+        $this->assertSame('123.00', $out['amount']);
+        $this->assertSame(AgentCommissionDirection::Out, $out['direction']);
+        $this->assertSame('117.00', $in['amount']);
+        $this->assertSame(AgentCommissionDirection::In, $in['direction']);
+    }
+
+    public function test_non_agent_and_bank_accounts_never_receive_agent_commission(): void
+    {
+        $tier = $this->commissionTier([
+            'out_commission_value' => 123,
+            'in_commission_value' => 117,
+        ]);
+        $calc = new AgentCommissionCalculator($this->commissionRepo($tier), new TierValueCalculator());
+
+        $this->assertSame('0.00', $calc->resolveForMovement($this->account(1, false, AccountType::Pay), 20_000, -20_000)['amount']);
+        $this->assertSame('0.00', $calc->resolveForMovement($this->account(1, true, AccountType::Bank), 20_000, -20_000)['amount']);
+    }
+
+    public function test_percentage_agent_commission_supports_four_decimal_percent_value(): void
+    {
+        $tier = $this->commissionTier([
             'company_id' => 7,
-            'fee_type' => 'PERCENTAGE',
-            'fee_amount' => 0.2,
+            'commission_type' => 'PERCENTAGE',
+            'out_commission_value' => 0.0001,
+            'in_commission_value' => 0.0001,
         ]);
-        $calc = new TransactionFeeCalculator($this->tierRepo($tier));
+        $calc = new AgentCommissionCalculator($this->commissionRepo($tier), new TierValueCalculator());
 
-        $result = $calc->resolveFees($this->account(7), 210_000, TransactionFeeCalculator::MODE_CASH_OUT);
-
-        $this->assertSame('400.00', $result['customer_fee']);
+        $this->assertSame('1.00', $calc->resolveForMovement($this->account(7), 1_000_000, 1_000_000)['amount']);
     }
 
-    public function test_send_money_commission_uses_requested_feature(): void
+    private function account(?int $companyId, bool $isAgent = true, AccountType $accountType = AccountType::Pay): Account
     {
-        $tier = $this->tier(AccountFeature::SendMoney, [
-            'company_id' => 7,
-            'comm_type' => 'PERCENTAGE',
-            'comm_amount' => 0.1,
-        ]);
-        $calc = new TransactionFeeCalculator($this->tierRepo($tier));
-
-        $this->assertSame(
-            '210.00',
-            $calc->commissionForFeature($this->account(7), 210_000, AccountFeature::SendMoney),
-        );
-    }
-
-    private function account(?int $companyId, bool $isAgent = true): Account
-    {
-        $account = new Account;
+        $account = new Account();
         $account->id = 42;
         $account->company_id = $companyId;
+        $account->account_type = $accountType;
         $account->is_agent = $isAgent;
 
         return $account;
     }
 
-    /** @param array<string, int|float|string|null> $overrides */
-    private function tier(AccountFeature $feature, array $overrides = []): CommissionTier
+    /** @param array<string, int|float|string|bool> $overrides */
+    private function feeTier(AccountFeature $feature, array $overrides = []): ProviderFeeTier
     {
-        $tier = new CommissionTier;
-        foreach (array_merge([
+        $tier = new ProviderFeeTier();
+        $tier->forceFill(array_merge([
             'company_id' => 1,
             'feature' => $feature->value,
             'amount_from' => 1,
-            'amount_to' => 999_999_999_999,
+            'amount_to' => 999_999_999,
             'fee_type' => 'FIXED',
-            'fee_amount' => 0,
-            'comm_type' => 'FIXED',
-            'comm_amount' => 0,
+            'fee_value' => 0,
             'additional_fee_type' => 'FIXED',
-            'additional_fee_amount' => 0,
+            'additional_fee_value' => 0,
             'is_active' => true,
-        ], $overrides) as $key => $value) {
-            $tier->setAttribute($key, $value);
-        }
+        ], $overrides));
 
         return $tier;
     }
 
-    private function tierRepo(?CommissionTier ...$tiers): CommissionTierRepository
+    /** @param array<string, int|float|string|bool> $overrides */
+    private function commissionTier(array $overrides = []): AgentCommissionTier
     {
-        return new class(array_filter($tiers)) extends CommissionTierRepository
+        $tier = new AgentCommissionTier();
+        $tier->forceFill(array_merge([
+            'company_id' => 1,
+            'amount_from' => 1,
+            'amount_to' => 999_999_999,
+            'commission_type' => 'FIXED',
+            'out_commission_value' => 0,
+            'in_commission_value' => 0,
+            'is_active' => true,
+        ], $overrides));
+
+        return $tier;
+    }
+
+    private function feeRepo(ProviderFeeTier ...$tiers): ProviderFeeTierRepository
+    {
+        return new class($tiers) extends ProviderFeeTierRepository
         {
-            /** @param list<CommissionTier> $tiers */
+            /** @param list<ProviderFeeTier> $tiers */
             public function __construct(private readonly array $tiers) {}
 
-            public function findForCompanyFeature(int $companyId, string $feature, float|string $amount): ?CommissionTier
+            public function findForCompanyFeature(int $companyId, string $feature, float|string $amount): ?ProviderFeeTier
             {
                 foreach ($this->tiers as $tier) {
                     if ((int) $tier->company_id === $companyId && $tier->feature === $feature) {
+                        return $tier;
+                    }
+                }
+
+                return null;
+            }
+        };
+    }
+
+    private function commissionRepo(AgentCommissionTier ...$tiers): AgentCommissionTierRepository
+    {
+        return new class($tiers) extends AgentCommissionTierRepository
+        {
+            /** @param list<AgentCommissionTier> $tiers */
+            public function __construct(private readonly array $tiers) {}
+
+            public function findForCompany(int $companyId, float|string $amount): ?AgentCommissionTier
+            {
+                foreach ($this->tiers as $tier) {
+                    if ((int) $tier->company_id === $companyId
+                        && (float) $tier->amount_from <= (float) $amount
+                        && (float) $tier->amount_to >= (float) $amount) {
                         return $tier;
                     }
                 }

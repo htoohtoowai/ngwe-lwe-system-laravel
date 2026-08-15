@@ -7,15 +7,17 @@ use App\Support\Money;
 
 class TransferFeeCalculator
 {
-    public function __construct(private readonly TransferFeeTierRepository $tiers) {}
+    public function __construct(
+        private readonly TransferFeeTierRepository $tiers,
+        private readonly TierValueCalculator $values,
+    ) {}
 
     /**
      * @return array{customer_fee:string,additional_fee:string}
      */
     public function resolve(int $fromCompanyId, int $toCompanyId, float|string $amount): array
     {
-        $amountFloat = (float) $amount;
-        $tier = $this->tiers->findForRoute($fromCompanyId, $toCompanyId, $amountFloat);
+        $tier = $this->tiers->findForRoute($fromCompanyId, $toCompanyId, (float) $amount);
 
         if ($tier === null) {
             return [
@@ -24,10 +26,10 @@ class TransferFeeCalculator
             ];
         }
 
-        $baseFee = $this->applyType($amountFloat, (float) $tier->fee_amount, $tier->fee_type);
-        $additionalFee = $this->applyType(
-            $amountFloat,
-            (float) $tier->additional_fee_amount,
+        $baseFee = $this->values->calculate($amount, $tier->fee_value, $tier->fee_type);
+        $additionalFee = $this->values->calculate(
+            $amount,
+            $tier->additional_fee_value,
             $tier->additional_fee_type,
         );
 
@@ -35,12 +37,5 @@ class TransferFeeCalculator
             'customer_fee' => Money::normalize(Money::roundMmkFee($baseFee + $additionalFee)),
             'additional_fee' => Money::normalize($additionalFee),
         ];
-    }
-
-    private function applyType(float $amount, float $value, ?string $type): float
-    {
-        return strtoupper($type ?? 'FIXED') === 'PERCENTAGE'
-            ? round($amount * ($value / 100), 2)
-            : $value;
     }
 }

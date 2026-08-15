@@ -4,7 +4,6 @@ import { computed, onBeforeUnmount, onMounted } from 'vue';
 import MoneyText from '@/components/teller/MoneyText.vue';
 import StateChip from '@/components/teller/StateChip.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { readStoredToken } from '@/lib/auth-token';
 import {
     createNgweLweEcho,
     disconnectNgweLweEcho,
@@ -88,9 +87,7 @@ const paidOutToday = computed(() =>
 );
 
 function authHeaders(): Record<string, string> {
-    const token = readStoredToken();
-
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return {};
 }
 
 const refreshTellerCounter = () =>
@@ -100,7 +97,7 @@ const refreshTellerCounter = () =>
     });
 
 onMounted(() => {
-    const echo = createNgweLweEcho(readStoredToken());
+    const echo = createNgweLweEcho();
     const handlers: RealtimeHandlers = {
         balance_update: refreshTellerCounter,
         new_transaction: refreshTellerCounter,

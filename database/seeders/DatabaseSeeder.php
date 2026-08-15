@@ -5,7 +5,8 @@ namespace Database\Seeders;
 use App\Enums\AccountFeature;
 use App\Models\Account;
 use App\Models\AccountFeatureAssignment;
-use App\Models\CommissionTier;
+use App\Models\AgentCommissionTier;
+use App\Models\ProviderFeeTier;
 use App\Models\Company;
 use App\Models\ExchangeRate;
 use App\Models\TransferFeeTier;
@@ -31,7 +32,7 @@ class DatabaseSeeder extends Seeder
         [
             'company' => 'KBZPay',
             'name' => 'KBZPay Teller Main',
-            'phone' => '09970000001',
+            'identifier' => '09256149967',
             'balance' => '5000000.00',
             'is_agent' => false,
             'is_fee_account' => false,
@@ -40,7 +41,7 @@ class DatabaseSeeder extends Seeder
         [
             'company' => 'KBZPay',
             'name' => 'KBZPay Cash Out Main',
-            'phone' => '09970000002',
+            'identifier' => '09256149968',
             'balance' => '3000000.00',
             'is_agent' => false,
             'is_fee_account' => false,
@@ -49,16 +50,25 @@ class DatabaseSeeder extends Seeder
         [
             'company' => 'KBZPay',
             'name' => 'KBZPay Agent Outlet',
-            'phone' => '09970000003',
+            'identifier' => '09256149970',
             'balance' => '2000000.00',
             'is_agent' => true,
             'is_fee_account' => false,
-            'features' => [AccountFeature::CashIn, AccountFeature::CashOut, AccountFeature::SendMoney, AccountFeature::ReceiveMoney],
+            'features' => [AccountFeature::CashIn, AccountFeature::CashOut, AccountFeature::SendMoney, AccountFeature::ReceiveMoney, AccountFeature::Transfer, AccountFeature::Exchange],
+        ],
+        [
+            'company' => 'KBZPay',
+            'name' => 'KBZPay Agent Outlet 2',
+            'identifier' => '09256149971',
+            'balance' => '2000000.00',
+            'is_agent' => true,
+            'is_fee_account' => false,
+            'features' => [AccountFeature::CashIn, AccountFeature::CashOut, AccountFeature::SendMoney, AccountFeature::ReceiveMoney, AccountFeature::Transfer, AccountFeature::Exchange],
         ],
         [
             'company' => 'KBZPay',
             'name' => 'KBZPay Fee Collection',
-            'phone' => '09970000004',
+            'identifier' => '09256149969',
             'balance' => '0.00',
             'is_agent' => false,
             'is_fee_account' => true,
@@ -67,7 +77,7 @@ class DatabaseSeeder extends Seeder
         [
             'company' => 'Wave Money',
             'name' => 'WavePay Teller Main',
-            'phone' => '09980000001',
+            'identifier' => '09980000001',
             'balance' => '4000000.00',
             'is_agent' => false,
             'is_fee_account' => false,
@@ -76,7 +86,7 @@ class DatabaseSeeder extends Seeder
         [
             'company' => 'Wave Money',
             'name' => 'WavePay Cash Out Main',
-            'phone' => '09980000002',
+            'identifier' => '09980000002',
             'balance' => '2500000.00',
             'is_agent' => false,
             'is_fee_account' => false,
@@ -85,7 +95,7 @@ class DatabaseSeeder extends Seeder
         [
             'company' => 'Wave Money',
             'name' => 'WavePay Agent Outlet',
-            'phone' => '09980000003',
+            'identifier' => '09980000003',
             'balance' => '1500000.00',
             'is_agent' => true,
             'is_fee_account' => false,
@@ -94,7 +104,7 @@ class DatabaseSeeder extends Seeder
         [
             'company' => 'Wave Money',
             'name' => 'WavePay Fee Collection',
-            'phone' => '09980000004',
+            'identifier' => '09980000004',
             'balance' => '0.00',
             'is_agent' => false,
             'is_fee_account' => true,
@@ -103,7 +113,7 @@ class DatabaseSeeder extends Seeder
         [
             'company' => 'AYA Bank',
             'name' => 'AYA Bank Transfer Main',
-            'phone' => '09990000001',
+            'identifier' => '1009900000001',
             'balance' => '10000000.00',
             'is_agent' => false,
             'is_fee_account' => false,
@@ -111,28 +121,35 @@ class DatabaseSeeder extends Seeder
         ],
         [
             'company' => 'AYA Bank',
-            'name' => 'AYA Bank Agent Counter',
-            'phone' => '09990000002',
+            'name' => 'AYA Bank Secondary',
+            'identifier' => '1009900000002',
             'balance' => '5000000.00',
-            'is_agent' => true,
+            'is_agent' => false,
             'is_fee_account' => false,
             'features' => [AccountFeature::Transfer, AccountFeature::Exchange],
         ],
     ];
 
-    private const DEMO_FEATURE_TIERS = [
+    private const DEMO_PROVIDER_FEE_TIERS = [
         'KBZPay' => [
-            AccountFeature::CashIn->value => ['PERCENTAGE', '0.1000', '0.0000', 'PERCENTAGE', '0.0200'],
-            AccountFeature::CashOut->value => ['PERCENTAGE', '0.2000', '0.0000', 'PERCENTAGE', '0.0400'],
-            AccountFeature::SendMoney->value => ['FIXED', '500.0000', '0.0000', 'FIXED', '100.0000'],
-            AccountFeature::ReceiveMoney->value => ['FIXED', '500.0000', '0.0000', 'FIXED', '100.0000'],
+            AccountFeature::CashIn->value => ['PERCENTAGE', '0.1000', 'FIXED', '0.0000'],
+            AccountFeature::CashOut->value => ['PERCENTAGE', '0.2000', 'FIXED', '0.0000'],
+            AccountFeature::SendMoney->value => ['FIXED', '500.0000', 'FIXED', '0.0000'],
+            AccountFeature::ReceiveMoney->value => ['FIXED', '500.0000', 'FIXED', '0.0000'],
         ],
         'Wave Money' => [
-            AccountFeature::CashIn->value => ['PERCENTAGE', '0.1000', '0.0000', 'PERCENTAGE', '0.0200'],
-            AccountFeature::CashOut->value => ['PERCENTAGE', '0.2000', '0.0000', 'PERCENTAGE', '0.0400'],
-            AccountFeature::SendMoney->value => ['FIXED', '500.0000', '0.0000', 'FIXED', '100.0000'],
-            AccountFeature::ReceiveMoney->value => ['FIXED', '500.0000', '0.0000', 'FIXED', '100.0000'],
+            AccountFeature::CashIn->value => ['PERCENTAGE', '0.1000', 'FIXED', '0.0000'],
+            AccountFeature::CashOut->value => ['PERCENTAGE', '0.2000', 'FIXED', '0.0000'],
+            AccountFeature::SendMoney->value => ['FIXED', '500.0000', 'FIXED', '0.0000'],
+            AccountFeature::ReceiveMoney->value => ['FIXED', '500.0000', 'FIXED', '0.0000'],
         ],
+    ];
+
+    private const DEMO_AGENT_COMMISSION_TIERS = [
+        'KBZPay' => ['FIXED', '100.0000', '100.0000'],
+        'Wave Money' => ['FIXED', '123.0000', '117.0000'],
+        'AYA Pay' => ['FIXED', '100.0000', '100.0000'],
+        'CB Pay' => ['FIXED', '100.0000', '100.0000'],
     ];
 
     private const DEMO_OPERATION_PROVIDERS = [
@@ -194,28 +211,34 @@ class DatabaseSeeder extends Seeder
         }
 
         $this->seedProviderOperationAccounts();
-        $this->seedDemoFeatureTiers();
+        $this->seedDemoPricingTiers();
         $this->seedDemoTransferFees();
         $this->seedDemoExchangeRates();
     }
 
     /**
-     * @param  array{company:string,name:string,phone:string,balance:string,is_agent:bool,is_fee_account:bool,features:list<AccountFeature>}  $seed
+     * @param  array{company:string,name:string,identifier:string,balance:string,is_agent:bool,is_fee_account:bool,features:list<AccountFeature>}  $seed
      */
     private function seedAccount(array $seed): Account
     {
         $company = Company::query()->where('name', $seed['company'])->firstOrFail();
+        $accountType = strtoupper((string) $company->category);
+        if (! in_array($accountType, ['PAY', 'BANK'], true)) {
+            throw new \RuntimeException("Demo account {$seed['name']} needs an explicit PAY or BANK provider category.");
+        }
+
         $account = Account::query()->firstOrNew([
-            'account_name' => $seed['name'],
-            'phone_number' => $seed['phone'],
+            'company_id' => $company->id,
+            'account_identifier' => $seed['identifier'],
         ]);
 
         $account->fill([
-            'company_id' => $company->id,
+            'account_name' => $seed['name'],
+            'account_type' => $accountType,
             'balance' => $seed['balance'],
             'is_active' => true,
             'is_fee_account' => $seed['is_fee_account'],
-            'is_agent' => $seed['is_agent'],
+            'is_agent' => $accountType === 'PAY' && $seed['is_agent'],
         ]);
         $account->save();
 
@@ -252,7 +275,7 @@ class DatabaseSeeder extends Seeder
                 $this->seedAccount([
                     'company' => $companyName,
                     'name' => "{$companyName} Cash In Account",
-                    'phone' => "09{$prefix}1000001",
+                    'identifier' => "09{$prefix}1000001",
                     'balance' => '5000000.00',
                     'is_agent' => false,
                     'is_fee_account' => false,
@@ -261,7 +284,7 @@ class DatabaseSeeder extends Seeder
                 $this->seedAccount([
                     'company' => $companyName,
                     'name' => "{$companyName} Cash Out Account",
-                    'phone' => "09{$prefix}1000002",
+                    'identifier' => "09{$prefix}1000002",
                     'balance' => '5000000.00',
                     'is_agent' => false,
                     'is_fee_account' => false,
@@ -270,7 +293,7 @@ class DatabaseSeeder extends Seeder
                 $this->seedAccount([
                     'company' => $companyName,
                     'name' => "{$companyName} Send Money Agent",
-                    'phone' => "09{$prefix}1000003",
+                    'identifier' => "09{$prefix}1000003",
                     'balance' => '5000000.00',
                     'is_agent' => true,
                     'is_fee_account' => false,
@@ -279,7 +302,7 @@ class DatabaseSeeder extends Seeder
                 $this->seedAccount([
                     'company' => $companyName,
                     'name' => "{$companyName} Receive Money Agent",
-                    'phone' => "09{$prefix}1000004",
+                    'identifier' => "09{$prefix}1000004",
                     'balance' => '5000000.00',
                     'is_agent' => true,
                     'is_fee_account' => false,
@@ -289,7 +312,7 @@ class DatabaseSeeder extends Seeder
                 $this->seedAccount([
                     'company' => $companyName,
                     'name' => "{$companyName} Transfer Main",
-                    'phone' => "09{$prefix}2000001",
+                    'identifier' => "10{$prefix}200000001",
                     'balance' => '10000000.00',
                     'is_agent' => false,
                     'is_fee_account' => false,
@@ -297,10 +320,10 @@ class DatabaseSeeder extends Seeder
                 ]);
                 $this->seedAccount([
                     'company' => $companyName,
-                    'name' => "{$companyName} Transfer Agent",
-                    'phone' => "09{$prefix}2000002",
+                    'name' => "{$companyName} Transfer Secondary",
+                    'identifier' => "10{$prefix}200000002",
                     'balance' => '7000000.00',
-                    'is_agent' => true,
+                    'is_agent' => false,
                     'is_fee_account' => false,
                     'features' => [AccountFeature::Transfer, AccountFeature::SendMoney, AccountFeature::ReceiveMoney],
                 ]);
@@ -309,7 +332,7 @@ class DatabaseSeeder extends Seeder
             $this->seedAccount([
                 'company' => $companyName,
                 'name' => "{$companyName} Exchange Account",
-                'phone' => "09{$prefix}3000001",
+                'identifier' => $category === 'Pay' ? "09{$prefix}3000001" : "10{$prefix}300000001",
                 'balance' => '3000000.00',
                 'is_agent' => false,
                 'is_fee_account' => false,
@@ -317,17 +340,17 @@ class DatabaseSeeder extends Seeder
             ]);
             $this->seedAccount([
                 'company' => $companyName,
-                'name' => "{$companyName} Exchange Agent",
-                'phone' => "09{$prefix}3000002",
+                'name' => "{$companyName} Exchange Secondary",
+                'identifier' => $category === 'Pay' ? "09{$prefix}3000002" : "10{$prefix}300000002",
                 'balance' => '3000000.00',
-                'is_agent' => true,
+                'is_agent' => $category === 'Pay',
                 'is_fee_account' => false,
                 'features' => [AccountFeature::Exchange],
             ]);
             $this->seedAccount([
                 'company' => $companyName,
                 'name' => "{$companyName} Fee Collection",
-                'phone' => "09{$prefix}9000001",
+                'identifier' => $category === 'Pay' ? "09{$prefix}9000001" : "10{$prefix}900000001",
                 'balance' => '0.00',
                 'is_agent' => false,
                 'is_fee_account' => true,
@@ -338,55 +361,81 @@ class DatabaseSeeder extends Seeder
         }
     }
 
-    private function seedDemoFeatureTiers(): void
+    private function seedDemoPricingTiers(): void
     {
         foreach (array_keys(self::DEMO_OPERATION_PROVIDERS) as $companyName) {
             $company = Company::query()->where('name', $companyName)->firstOrFail();
-            $tiers = self::DEMO_FEATURE_TIERS[$companyName] ?? $this->defaultFeatureTiersFor($company->category);
+            $providerTiers = self::DEMO_PROVIDER_FEE_TIERS[$companyName] ?? $this->defaultProviderFeeTiersFor($company->category);
+            $commissionTier = self::DEMO_AGENT_COMMISSION_TIERS[$companyName] ?? $this->defaultAgentCommissionTierFor($company->category);
 
-            CommissionTier::query()
+            ProviderFeeTier::query()
                 ->where('company_id', $company->id)
-                ->whereIn('feature', array_keys($tiers))
+                ->delete();
+            AgentCommissionTier::query()
+                ->where('company_id', $company->id)
                 ->delete();
 
-            foreach ($tiers as $feature => [$feeType, $feeAmount, $additionalFee, $commType, $commAmount]) {
-                CommissionTier::query()->create([
+            foreach ($providerTiers as $feature => [$feeType, $feeValue, $additionalFeeType, $additionalFeeValue]) {
+                ProviderFeeTier::query()->create([
                     'company_id' => $company->id,
                     'feature' => $feature,
                     'amount_from' => '1.00',
                     'amount_to' => '999999999.00',
                     'fee_type' => $feeType,
-                    'fee_amount' => $feeAmount,
-                    'additional_fee_type' => 'FIXED',
-                    'additional_fee_amount' => $additionalFee,
-                    'comm_type' => $commType,
-                    'comm_amount' => $commAmount,
+                    'fee_value' => $feeValue,
+                    'additional_fee_type' => $additionalFeeType,
+                    'additional_fee_value' => $additionalFeeValue,
+                    'is_active' => true,
+                ]);
+            }
+
+            if ($commissionTier !== null) {
+                [$commissionType, $outCommissionValue, $inCommissionValue] = $commissionTier;
+                AgentCommissionTier::query()->create([
+                    'company_id' => $company->id,
+                    'amount_from' => '1.00',
+                    'amount_to' => '999999999.00',
+                    'commission_type' => $commissionType,
+                    'out_commission_value' => $outCommissionValue,
+                    'in_commission_value' => $inCommissionValue,
                     'is_active' => true,
                 ]);
             }
         }
     }
 
-    private function defaultFeatureTiersFor(?string $category): array
+    private function defaultProviderFeeTiersFor(?string $category): array
     {
-        $cashIn = ['PERCENTAGE', '0.1000', '0.0000', 'PERCENTAGE', '0.0200'];
-        $cashOut = ['PERCENTAGE', '0.2000', '0.0000', 'PERCENTAGE', '0.0400'];
-
         if ($category === 'Bank') {
             return [
-                AccountFeature::CashIn->value => $cashIn,
-                AccountFeature::CashOut->value => $cashOut,
-                AccountFeature::SendMoney->value => ['PERCENTAGE', '0.2000', '0.0000', 'PERCENTAGE', '0.0300'],
-                AccountFeature::ReceiveMoney->value => ['PERCENTAGE', '0.2000', '0.0000', 'PERCENTAGE', '0.0300'],
+                AccountFeature::CashIn->value => ['PERCENTAGE', '0.1000', 'FIXED', '0.0000'],
+                AccountFeature::CashOut->value => ['PERCENTAGE', '0.2000', 'FIXED', '0.0000'],
+                AccountFeature::SendMoney->value => ['PERCENTAGE', '0.2000', 'FIXED', '0.0000'],
+                AccountFeature::ReceiveMoney->value => ['PERCENTAGE', '0.2000', 'FIXED', '0.0000'],
             ];
         }
 
         return [
-            AccountFeature::CashIn->value => $cashIn,
-            AccountFeature::CashOut->value => $cashOut,
-            AccountFeature::SendMoney->value => ['FIXED', '500.0000', '0.0000', 'FIXED', '100.0000'],
-            AccountFeature::ReceiveMoney->value => ['FIXED', '500.0000', '0.0000', 'FIXED', '100.0000'],
+            AccountFeature::CashIn->value => ['PERCENTAGE', '0.1000', 'FIXED', '0.0000'],
+            AccountFeature::CashOut->value => ['PERCENTAGE', '0.2000', 'FIXED', '0.0000'],
+            AccountFeature::SendMoney->value => ['FIXED', '500.0000', 'FIXED', '0.0000'],
+            AccountFeature::ReceiveMoney->value => ['FIXED', '500.0000', 'FIXED', '0.0000'],
         ];
+    }
+
+    /**
+     * Bank accounts never earn agent commission. Pay providers can define one
+     * amount-range row containing OUT / Send and IN / Receive values.
+     *
+     * @return array{string,string,string}|null
+     */
+    private function defaultAgentCommissionTierFor(?string $category): ?array
+    {
+        if ($category !== 'Pay') {
+            return null;
+        }
+
+        return ['FIXED', '100.0000', '100.0000'];
     }
 
     private function seedDemoTransferFees(): void
@@ -411,9 +460,9 @@ class DatabaseSeeder extends Seeder
                     ],
                     [
                         'fee_type' => 'PERCENTAGE',
-                        'fee_amount' => '0.2000',
+                        'fee_value' => '0.2000',
                         'additional_fee_type' => 'FIXED',
-                        'additional_fee_amount' => '0.0000',
+                        'additional_fee_value' => '0.0000',
                         'is_active' => true,
                     ],
                 );

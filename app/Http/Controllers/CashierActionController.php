@@ -18,6 +18,7 @@ use App\Services\PinVerifier;
 use App\Services\TransactionService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -155,7 +156,11 @@ class CashierActionController extends Controller
 
         $this->users->update($request->user(), ['password' => $data['password']]);
 
-        return redirect()->route('login')->withoutCookie('ngwe_lwe_api_token');
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login');
     }
 
     public function updatePin(SetPinRequest $request): RedirectResponse

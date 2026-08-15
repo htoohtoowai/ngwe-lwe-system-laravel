@@ -3,7 +3,6 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import PinSeal from '@/components/teller/PinSeal.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { readStoredToken } from '@/lib/auth-token';
 import {
     createNgweLweEcho,
     disconnectNgweLweEcho,
@@ -185,9 +184,7 @@ const pendingReviewBalanced = computed(
 );
 
 function authHeaders(): Record<string, string> {
-    const token = readStoredToken();
-
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return {};
 }
 
 function setRange(r: string) {
@@ -334,7 +331,7 @@ const refreshRealtimeData = () =>
     });
 
 onMounted(() => {
-    const echo = createNgweLweEcho(readStoredToken());
+    const echo = createNgweLweEcho();
 
     const handlers: RealtimeHandlers = {
         balance_update: refreshRealtimeData,

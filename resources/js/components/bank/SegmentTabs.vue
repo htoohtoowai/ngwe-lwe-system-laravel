@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Link, usePage } from '@inertiajs/vue3';
-import { readStoredToken } from '@/lib/auth-token';
 
 /**
  * Segmented control — the reference's "Own Account / Other / Pay / Other Bank"
@@ -14,9 +13,7 @@ defineProps<{
 const page = usePage();
 const isActive = (href: string) => page.url.startsWith(href);
 function authHeaders(): Record<string, string> {
-    const token = readStoredToken();
-
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return {};
 }
 </script>
 

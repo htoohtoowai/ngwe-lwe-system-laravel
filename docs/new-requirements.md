@@ -1,6 +1,6 @@
-# Final Requirements: Companies, Accounts and Transactions
+# Final Requirements: Companies, Accounts, Fees and Transactions
 
-ဤ project သည် database အသစ်မှစတင်မည်ဖြစ်ပြီး legacy Service Type schema သို့မဟုတ် data backfill မသုံးပါ။
+This project starts from a new database. Legacy Service Type schema, legacy fee aliases and data backfills are not supported.
 
 ## Technology
 
@@ -10,11 +10,26 @@
 - Tailwind CSS
 - MySQL
 
-Teller နှင့် Admin web flows များကို Inertia pages နှင့် Laravel web actions ဖြင့်အဓိကတည်ဆောက်မည်။
+## Shared calculation type
 
-## Feature Enum
+All configurable customer fees, additional fees, transfer fees and agent commissions use the same application enum:
 
-Feature list ကို database table မထားဘဲ PHP enum `AccountFeature` ဖြင့်ထိန်းမည်။
+```text
+FIXED
+PERCENTAGE
+```
+
+Configured values support four decimal places (`0.0001`). Percentage values are human percentages:
+
+```text
+raw = amount * (configured_value / 100)
+```
+
+Customer fee uses the application's MMK rounding/minimum rule after calculation.
+
+## Account features
+
+Features are a PHP enum, not a database master table:
 
 ```text
 cash_in
@@ -25,18 +40,9 @@ transfer
 exchange
 ```
 
-WST နှင့် P2P အမည်များမသုံးတော့ပါ။
+Features control whether an account can be used for an operation. They do **not** control agent commission.
 
-```text
-WST -> Send Money
-P2P -> Receive Money
-```
-
-## Final Tables
-
-### companies
-
-Provider master data ဖြစ်သည်။
+## companies
 
 ```text
 id
@@ -47,17 +53,16 @@ is_active
 timestamps
 ```
 
-ဥပမာ KBZPay, Wave Money, AYA Bank, CB Bank။
+## accounts
 
-### accounts
-
-Provider ၏ real Pay/Bank account ဖြစ်သည်။
+Each account is exactly one account type: `PAY` or `BANK`. There is no `BOTH` account type.
 
 ```text
 id
 company_id
 account_name
-phone_number
+account_type: PAY | BANK
+account_identifier
 balance
 is_active
 is_fee_account
@@ -65,13 +70,30 @@ is_agent
 timestamps
 ```
 
-- Account ကို `company_id` ဖြင့် provider နှင့်တိုက်ရိုက်ချိတ်သည်။
-- `is_agent = true` ဖြစ်မှ agent commission တွက်သည်။
-- Account-level `commission_rate` မရှိပါ။ Commission source သည် tier တစ်ခုတည်းဖြစ်သည်။
+`account_identifier` is generic:
 
-### account_features
+- PAY account: phone number
+- BANK account: bank account number
 
-Account ကို ဘယ် transaction features တွင်အသုံးပြုနိုင်သည်ကိုသတ်မှတ်သည်။
+The same identifier may exist under different providers, so uniqueness is:
+
+```text
+unique(company_id, account_identifier)
+```
+
+Example: `09256149967` may exist under KBZPay, Wave Money, AYA Pay and CB Pay.
+
+Agent rules:
+
+```text
+PAY + is_agent=true  -> eligible for agent commission
+PAY + is_agent=false -> no agent commission
+BANK                 -> never an agent account / no agent commission
+```
+
+For a `Pay` company, account type must be `PAY`; for a `Bank` company it must be `BANK`; a `Both` company may contain either account type.
+
+## account_features
 
 ```text
 id
@@ -81,11 +103,11 @@ timestamps
 unique(account_id, feature)
 ```
 
-Teller screen တစ်ခုတွင် သက်ဆိုင်ရာ feature ပါသည့် active accounts များသာပြမည်။
+The UI filters accounts by feature and the backend must enforce the same rule.
 
-### commission_tiers
+## provider_fee_tiers
 
-Cash In, Cash Out, Send Money, Receive Money နှင့် agent commission များအတွက် provider tier ဖြစ်သည်။
+Customer fee rules are feature-based:
 
 ```text
 id
@@ -93,26 +115,81 @@ company_id
 feature
 amount_from
 amount_to
-fee_type
-fee_amount
-comm_type
-comm_amount
-additional_fee_type
-additional_fee_amount
+fee_type: FIXED | PERCENTAGE
+fee_value DECIMAL(18,4)
+additional_fee_type: FIXED | PERCENTAGE
+additional_fee_value DECIMAL(18,4)
 is_active
+timestamps
+```
+
+Lookup:
+
+```text
+company_id + feature + amount range
+```
+
+## agent_commission_tiers
+
+Agent commission is **not feature-based**. A provider uses one amount range row containing both OUT and IN values, matching real provider tables that show Send/Receive commission side by side.
+
+```text
+id
+company_id
+amount_from
+amount_to
+commission_type: FIXED | PERCENTAGE
+out_commission_value DECIMAL(18,4)
+in_commission_value DECIMAL(18,4)
+is_active
+timestamps
+```
+
+There is no `feature` column and no `direction` column in this tier table.
+
+Lookup:
+
+```text
+company_id + amount range
+```
+
+Commission direction is derived from the agent account's **principal balance movement before commission is added**:
+
+```text
+principal money leaves agent account -> OUT -> out_commission_value
+principal money enters agent account -> IN  -> in_commission_value
+```
+
+A tier is only used when the transaction account is `PAY` and `is_agent=true`. Bank providers must not have usable agent commission tiers.
+
+## agent_commission_entries
+
+Actual earned commission is recorded separately for audit:
+
+```text
+id
+transaction_id
+account_id
+company_id
+agent_commission_tier_id nullable
+direction: IN | OUT
+base_amount
+calculation_type: FIXED | PERCENTAGE
+configured_value DECIMAL(18,4)
+commission_amount
+status: EARNED | REVERSED
+reversed_at nullable
+reversed_by nullable
 created_at
 ```
 
-Lookup key:
+There is no feature column. Cash In cancellation retains the audit row and marks the earning `REVERSED` when the financial effect is reversed.
 
-```text
-company_id + feature + amount
-amount_from <= amount <= amount_to
-```
+`agent_commission_entries` is the source of truth for earned commission. `transactions` does not store duplicate `commission_amount`, `receive_commission_amount`, or `payout_commission_amount` columns. Response/UI summary values may be derived from the audit entries.
 
-### transfer_fee_tiers
+## transfer_fee_tiers
 
-Transfer customer fee အတွက် provider route tier ဖြစ်သည်။
+Transfer customer fee is route-based and separate from agent commission:
 
 ```text
 id
@@ -121,18 +198,14 @@ company_to_id
 amount_from
 amount_to
 fee_type
-fee_amount
+fee_value DECIMAL(18,4)
 additional_fee_type
-additional_fee_amount
+additional_fee_value DECIMAL(18,4)
 is_active
 timestamps
 ```
 
-Transfer agent commission ကို account provider ၏ `commission_tiers` မှယူမည်။
-
-### exchange_rates
-
-Currency conversion rate ဖြစ်သည်။
+## exchange_rates
 
 ```text
 id
@@ -146,80 +219,92 @@ is_active
 timestamps
 ```
 
-Exchange agent commission ကို account provider နှင့် settlement direction အလိုက် `cash_in` သို့မဟုတ် `cash_out` commission tier မှယူမည်။
+A company-specific active rate is preferred; a global (`company_id = null`) rate may be used as fallback.
 
-## Calculation Rules
+## Agent commission movement by transaction
 
-### FIXED
-
-Configured amount ကို MMK တန်ဖိုးအဖြစ် တိုက်ရိုက်သုံးသည်။
+Agent commission is calculated from actual account movement, regardless of feature name:
 
 ```text
-FIXED 200 = 200 MMK
+Cash In   : selected provider account principal decreases -> OUT
+Cash Out  : selected provider account principal increases -> IN
+Transfer  : source account -> OUT; destination account -> IN
+Exchange  : derive IN/OUT from the selected account's actual principal delta
 ```
 
-### PERCENTAGE
-
-Admin ရိုက်သည့် value သည် human percentage ဖြစ်သည်။
+Commission is added after the principal direction is established. Example:
 
 ```text
-1 = 1%
-0.2 = 0.2%
-0.0001 = 0.0001%
-raw value = amount * (configured value / 100)
+Principal OUT  -100,000
+Commission         +200
+Net change       -99,800
+Direction remains OUT.
 ```
 
-Customer fee ကို MMK rounding ပြုလုပ်ပြီး minimum `100 MMK` rule သုံးသည်။
-
-Agent commission ကို:
-- `is_agent = true` ဖြစ်မှတွက်မည်။
-- matching provider/feature/amount tier မှ `comm_type + comm_amount` ကိုသုံးမည်။
-- tier မရှိလျှင် သို့မဟုတ် non-agent account ဖြစ်လျှင် `0 MMK` ဖြစ်မည်။
-
-## Transaction Responsibilities
+## Transaction responsibilities
 
 ### Cash In
 
-- account feature: `cash_in`
-- customer fee: matching `commission_tiers`
-- agent commission: same provider/feature tier
-- fee payment: cash သို့မဟုတ် fee account
+- account must be active and support `cash_in`
+- customer fee: `provider_fee_tiers` for `cash_in`
+- agent commission: OUT/IN movement rule above (normally OUT in current cash-in flow)
+- teller submits denominations/handoff
+- status starts `PENDING_CASHIER_CONFIRM`
+- Cashier confirms or cancels
+- confirmation moves teller handoff to main vault
+- cancellation reverses financial effects and agent earning audit
 
 ### Cash Out
 
-- account feature: `cash_out`
-- customer fee: matching `commission_tiers`
-- agent commission: same provider/feature tier
-- teller/main vault denomination validation ကိုဆက်သုံးမည်
+- account must be active and support `cash_out`
+- customer fee: `provider_fee_tiers` for `cash_out`
+- agent commission: movement rule (normally IN in current cash-out flow)
+- teller denomination validation remains required
+- completes immediately after validation
 
 ### Send Money / Receive Money
 
-- account visibility ကို matching feature assignment ဖြင့်ထိန်းမည်
-- fee နှင့် agent commission ကို provider feature tier မှယူမည်
+- feature assignments control account visibility/eligibility
+- provider customer fee remains feature-based
+- agent commission is **not** based on these feature names; it uses account movement.
 
 ### Transfer
 
-- account feature: `transfer`
+- selected source and destination accounts must be active, different, and support `transfer`
 - customer fee: `transfer_fee_tiers`
-- receive/payout agent commission: account provider ၏ `receive_money` နှင့် `send_money` tiers
+- source PAY agent account: OUT commission
+- destination PAY agent account: IN commission
+- both sides are evaluated independently
+- bank/non-agent accounts receive zero commission
 
 ### Exchange
 
-- account feature: `exchange`
-- conversion: `exchange_rates`
-- agent commission: provider `cash_in` သို့မဟုတ် `cash_out` tier
+- account must be active and support `exchange`
+- conversion uses `exchange_rates`
+- agent commission uses actual selected account principal movement, not `cash_in`/`cash_out` feature tiers
 
-## Removed Concepts
+## Removed concepts
 
-Final project တွင် အောက်ပါတို့ကို create မလုပ်ပါ။
+The final project must not create or depend on:
 
 ```text
 service_types
 service_types.operation
 accounts.service_type_id
 commission_tiers.service_type_id
-account commission_rate
-deposit/withdraw duplicate tier columns
+accounts.commission_rate
+deposit_* / withdraw_* duplicated fee columns
+agent_commission_tiers.feature
 legacy fee API aliases
 legacy migration/backfill code
 ```
+
+## Demo / migration policy
+
+The system has not been delivered to the customer yet. Demo data may be rebuilt.
+
+```bash
+docker compose exec -T app php artisan migrate:fresh --seed --force
+```
+
+Migrations may be merged/restructured for a clean final schema. Demo seeders must follow the final tables and must never create Bank agent accounts.

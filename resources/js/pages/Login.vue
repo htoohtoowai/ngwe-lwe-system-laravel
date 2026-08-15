@@ -45,7 +45,7 @@ const copy = computed(() =>
               login: 'Continue to workspace',
               loggingIn: 'Checking your access…',
               secure: 'Secure staff access',
-              secureSub: 'Your session is protected by token authentication.',
+              secureSub: 'Your session is protected by Laravel session authentication.',
               secureConnection: 'Secure connection',
               accountType: 'Staff account',
               localDemo: 'Local',

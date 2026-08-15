@@ -12,26 +12,19 @@ class RequireRole
     {
         $user = $request->user();
 
-        if ($user === null || ! in_array($user->role, $roles, true)) {
-            if (
-                $request->header('X-Inertia')
-                || (
-                    ! $request->is('api/*')
-                    && $request->bearerToken() === null
-                    && ! $request->expectsJson()
-                )
-            ) {
-                return redirect($this->homeForRole($user?->role))
-                    ->withErrors(['request' => 'Access denied']);
-            }
+        if ($user === null) {
+            return redirect()->route('login');
+        }
 
-            return response()->json(['message' => 'Access denied'], 403);
+        if (! in_array($user->role, $roles, true)) {
+            return redirect($this->homeForRole($user->role))
+                ->withErrors(['request' => 'Access denied']);
         }
 
         return $next($request);
     }
 
-    private function homeForRole(?string $role): string
+    private function homeForRole(string $role): string
     {
         return match ($role) {
             'admin' => '/admin',

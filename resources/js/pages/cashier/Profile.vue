@@ -2,7 +2,6 @@
 import { router } from '@inertiajs/vue3';
 import { ref } from 'vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { readStoredToken, removeStoredToken } from '@/lib/auth-token';
 
 defineProps<{
     role: 'cashier';
@@ -27,9 +26,7 @@ const error = ref('');
 const notice = ref('');
 
 function authHeaders(): Record<string, string> {
-    const token = readStoredToken();
-
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return {};
 }
 
 function firstInertiaError(errors: Record<string, string>): string {
@@ -56,7 +53,7 @@ function savePassword() {
         },
         {
             headers: authHeaders(),
-            onSuccess: () => removeStoredToken(),
+            onSuccess: () => undefined,
             onError: (errors) => (error.value = firstInertiaError(errors)),
             onFinish: () => (busy.value = null),
         },

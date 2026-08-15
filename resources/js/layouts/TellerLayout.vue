@@ -3,7 +3,6 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted } from 'vue';
 import MoneyText from '@/components/teller/MoneyText.vue';
 import StateChip from '@/components/teller/StateChip.vue';
-import { readStoredToken } from '@/lib/auth-token';
 import {
     createNgweLweEcho,
     disconnectNgweLweEcho,
@@ -54,17 +53,14 @@ const nav = [
 const navLabel = (item: { key: string }) => t(item.key);
 
 function authHeaders(): Record<string, string> {
-    const token = readStoredToken();
-
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return {};
 }
 
 const refreshTellerData = () =>
     router.reload({ only: ['float', 'recent'], headers: authHeaders() });
 
 onMounted(() => {
-    const token = readStoredToken();
-    const echo = createNgweLweEcho(token);
+    const echo = createNgweLweEcho();
 
     const handlers: RealtimeHandlers = {
         balance_update: refreshTellerData,

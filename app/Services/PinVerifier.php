@@ -11,7 +11,7 @@ use InvalidArgumentException;
  *
  * Failure surface:
  *   - InvalidArgumentException with "No PIN set" when the user has
- *     never called POST /api/auth/pin.
+ *     never configured a PIN from the web profile/admin flow.
  *   - InvalidArgumentException with "Incorrect PIN" on mismatch.
  * Both map to HTTP 422 at the controller so callers get clear
  * validation-style feedback without leaking whether a PIN exists.

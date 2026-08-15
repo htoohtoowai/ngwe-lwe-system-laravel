@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AgentCommissionDirection;
 use App\Enums\AccountFeature;
 use App\Exceptions\InsufficientBalanceException;
 use App\Exceptions\InsufficientFloatDenominationException;
@@ -18,6 +19,7 @@ use App\Repositories\AccountRepository;
 use App\Repositories\CashDenominationRepository;
 use App\Repositories\CashFloatRepository;
 use App\Repositories\ExchangeRateRepository;
+use App\Services\AgentCommissionCalculator;
 use App\Services\TransactionFeeCalculator;
 use App\Services\TransactionService;
 use App\Services\TransferFeeCalculator;
@@ -37,55 +39,56 @@ class TransactionEntryController extends Controller
         private readonly CashDenominationRepository $cashDenominations,
         private readonly ExchangeRateRepository $exchangeRates,
         private readonly TransactionFeeCalculator $fees,
+        private readonly AgentCommissionCalculator $agentCommissions,
         private readonly TransferFeeCalculator $transferFees,
         private readonly TransactionService $transactions,
     ) {}
 
     public function cashIn(Request $request): Response
     {
-        return Inertia::render('transactions/CashIn', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'cash_in'));
+        return Inertia::render('transactions/CashIn', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'cash_in'));
     }
 
     public function cashInHistory(Request $request): Response
     {
-        return Inertia::render('transactions/CashIn', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'cash_in', 'history'));
+        return Inertia::render('transactions/CashIn', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'cash_in', 'history'));
     }
 
     public function cashOut(Request $request): Response
     {
-        return Inertia::render('transactions/CashOut', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, TransactionFeeCalculator::COMMISSION_RECEIVE, 'cash_out'));
+        return Inertia::render('transactions/CashOut', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, 'cash_out'));
     }
 
     public function cashOutHistory(Request $request): Response
     {
-        return Inertia::render('transactions/CashOut', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, TransactionFeeCalculator::COMMISSION_RECEIVE, 'cash_out', 'history'));
+        return Inertia::render('transactions/CashOut', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, 'cash_out', 'history'));
     }
 
     public function transfer(Request $request): Response
     {
-        return Inertia::render('transactions/Transfer', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'transfer'));
+        return Inertia::render('transactions/Transfer', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'transfer'));
     }
 
     public function transferHistory(Request $request): Response
     {
-        return Inertia::render('transactions/Transfer', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'transfer', 'history'));
+        return Inertia::render('transactions/Transfer', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'transfer', 'history'));
     }
 
     public function exchange(Request $request): Response
     {
         return Inertia::render('transactions/Exchange', [
-            ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'exchange'),
+            ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'exchange'),
             'fee' => Money::normalize(0),
-            'rate' => $this->rate(),
+            'rate' => $this->rate($request),
         ]);
     }
 
     public function exchangeHistory(Request $request): Response
     {
         return Inertia::render('transactions/Exchange', [
-            ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN, TransactionFeeCalculator::COMMISSION_SEND, 'exchange', 'history'),
+            ...$this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'exchange', 'history'),
             'fee' => Money::normalize(0),
-            'rate' => $this->rate(),
+            'rate' => $this->rate($request),
         ]);
     }
 
@@ -121,7 +124,7 @@ class TransactionEntryController extends Controller
     /**
      * @return array<string, mixed>
      */
-    private function props(Request $request, string $feeMode, string $commissionDirection, string $transactionType, string $view = 'entry'): array
+    private function props(Request $request, string $feeMode, string $transactionType, string $view = 'entry'): array
     {
         $user = $request->user();
         $float = $user?->role === 'teller' ? $this->selectedFloat($request) : null;
@@ -156,23 +159,26 @@ class TransactionEntryController extends Controller
                 ? []
                 : $this->accountProps($this->accounts->activeForFeature($feature)),
             'sendMoneyAccounts' => $transactionType === 'transfer'
-                ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::SendMoney))
+                ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::Transfer))
                 : [],
             'receiveMoneyAccounts' => $transactionType === 'transfer'
-                ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::ReceiveMoney))
+                ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::Transfer))
                 : [],
             'feeAccounts' => $this->accountProps($this->accounts->feeAccounts()),
             'fee' => $transactionType === 'transfer'
                 ? $this->transferFee($request)
                 : $this->fee($request, $feeMode),
-            'commission' => $transactionType === 'exchange'
-                ? $this->exchangeCommission($request)
-                : $this->commission($request, $commissionDirection),
+            'commission' => match ($transactionType) {
+                'cash_in' => $this->commission($request, -1),
+                'cash_out' => $this->commission($request, 1),
+                'exchange' => $this->exchangeCommission($request),
+                default => '0.00',
+            },
             'receiveCommission' => $transactionType === 'transfer'
-                ? $this->commissionForAccount($request, 'receive_account_id', AccountFeature::ReceiveMoney)
+                ? $this->commissionForAccount($request, 'receive_account_id', 1)
                 : '0.00',
             'payoutCommission' => $transactionType === 'transfer'
-                ? $this->commissionForAccount($request, 'payout_account_id', AccountFeature::SendMoney)
+                ? $this->commissionForAccount($request, 'payout_account_id', -1)
                 : '0.00',
             'requiresDenominations' => $user?->role === 'teller',
             'completed' => $this->pullCompleted($request),
@@ -238,7 +244,7 @@ class TransactionEntryController extends Controller
                     ->values()
                     ->all(),
                 'name' => $account->account_name,
-                'number' => $account->phone_number,
+                'number' => $account->account_identifier,
                 'balance' => Money::normalize($account->balance ?? 0),
             ])
             ->values()
@@ -321,12 +327,12 @@ class TransactionEntryController extends Controller
             ->resolve((int) $fromCompanyId, (int) $toCompanyId, $amount)['customer_fee'];
     }
 
-    private function commission(Request $request, string $direction): string
+    private function commission(Request $request, int $movementSign): string
     {
         $amount = $request->float('amount');
         $accountId = $request->integer('account_id');
 
-        if ($amount <= 0 || $accountId <= 0) {
+        if ($amount <= 0 || $accountId <= 0 || ! in_array($movementSign, [-1, 1], true)) {
             return '0.00';
         }
 
@@ -336,22 +342,22 @@ class TransactionEntryController extends Controller
             return '0.00';
         }
 
-        return $this->fees->commission($account, $amount, $direction);
+        return $this->agentCommissions->resolveForMovement($account, $amount, $amount * $movementSign)['amount'];
     }
 
-    private function commissionForAccount(Request $request, string $accountKey, AccountFeature $feature): string
+    private function commissionForAccount(Request $request, string $accountKey, int $movementSign): string
     {
         $amount = $request->float('amount');
         $accountId = $request->integer($accountKey);
 
-        if ($amount <= 0 || $accountId <= 0) {
+        if ($amount <= 0 || $accountId <= 0 || ! in_array($movementSign, [-1, 1], true)) {
             return '0.00';
         }
 
         $account = $this->accounts->find($accountId);
 
         return $account !== null && $account->is_active
-            ? $this->fees->commissionForFeature($account, $amount, $feature)
+            ? $this->agentCommissions->resolveForMovement($account, $amount, $amount * $movementSign)['amount']
             : '0.00';
     }
 
@@ -365,24 +371,28 @@ class TransactionEntryController extends Controller
             return '0.00';
         }
 
-        $rate = $this->rate();
+        $rate = $this->rate($request);
         $mmkAmount = $currency === 'THB'
             ? $amount * (float) $rate['buy_rate']
             : $amount;
 
-        return $this->fees->commissionForFeature(
+        return $this->agentCommissions->resolveForMovement(
             $account,
             $mmkAmount,
-            $currency === 'MMK' ? AccountFeature::CashIn : AccountFeature::CashOut,
-        );
+            $mmkAmount,
+        )['amount'];
     }
 
     /**
      * @return array{buy_rate:string,sell_rate:string}
      */
-    private function rate(): array
+    private function rate(Request $request): array
     {
-        $rate = $this->exchangeRates->getLatest('THB', 'MMK');
+        $accountId = $request->integer('account_id');
+        $account = $accountId > 0 ? $this->accounts->find($accountId) : null;
+        $rate = $account !== null
+            ? $this->exchangeRates->getLatestForCompany($account->company_id, 'THB', 'MMK')
+            : $this->exchangeRates->getLatest('THB', 'MMK');
         $baseAmount = (float) ($rate?->base_amount ?? 1);
 
         if ($baseAmount <= 0) {
@@ -410,7 +420,7 @@ class TransactionEntryController extends Controller
      */
     private function completed(Transaction $transaction): array
     {
-        $transaction = $transaction->refresh();
+        $transaction = $transaction->refresh()->load('agentCommissionEntries');
 
         return [
             'id' => $transaction->id,
@@ -423,9 +433,9 @@ class TransactionEntryController extends Controller
             'to_label' => $this->transferDestinationLabel($transaction) ?? $this->accountLabel($transaction->to_account_id) ?? $this->accountLabel($transaction->account_id) ?? 'Counter float',
             'system_receive_label' => $this->accountLabel($transaction->to_account_id),
             'system_payout_label' => $this->accountLabel($transaction->account_id),
-            'receive_commission_amount' => Money::normalize($transaction->receive_commission_amount ?? 0),
-            'payout_commission_amount' => Money::normalize($transaction->payout_commission_amount ?? 0),
-            'commission_amount' => Money::normalize($transaction->commission_amount ?? 0),
+            'receive_commission_amount' => $transaction->earnedAgentCommissionForDirection(AgentCommissionDirection::In),
+            'payout_commission_amount' => $transaction->earnedAgentCommissionForDirection(AgentCommissionDirection::Out),
+            'commission_amount' => $transaction->earnedAgentCommissionTotal(),
             'destination_customer_name' => $transaction->destination_customer_name,
             'customer_name' => $transaction->customer_name,
             'customer_phone' => $transaction->customer_phone,

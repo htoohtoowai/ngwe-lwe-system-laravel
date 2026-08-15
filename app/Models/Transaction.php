@@ -2,9 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\AgentCommissionDirection;
+use App\Support\Money;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'transaction_type',
@@ -21,9 +24,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'destination_customer_name',
     'destination_account_number',
     'amount',
-    'commission_amount',
-    'receive_commission_amount',
-    'payout_commission_amount',
     'customer_fee',
     'additional_fee_amount',
     'balance_change',
@@ -53,9 +53,6 @@ class Transaction extends Model
     {
         return [
             'amount' => 'decimal:2',
-            'commission_amount' => 'decimal:2',
-            'receive_commission_amount' => 'decimal:2',
-            'payout_commission_amount' => 'decimal:2',
             'customer_fee' => 'decimal:2',
             'additional_fee_amount' => 'decimal:2',
             'balance_change' => 'decimal:2',
@@ -78,5 +75,43 @@ class Transaction extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function agentCommissionEntries(): HasMany
+    {
+        return $this->hasMany(AgentCommissionEntry::class);
+    }
+
+    public function earnedAgentCommissionTotal(): string
+    {
+        return Money::normalize($this->earnedAgentCommissionSum());
+    }
+
+    public function earnedAgentCommissionForDirection(AgentCommissionDirection $direction): string
+    {
+        return Money::normalize($this->earnedAgentCommissionSum($direction));
+    }
+
+    private function earnedAgentCommissionSum(?AgentCommissionDirection $direction = null): float
+    {
+        if ($this->relationLoaded('agentCommissionEntries')) {
+            return (float) $this->agentCommissionEntries
+                ->filter(function (AgentCommissionEntry $entry) use ($direction): bool {
+                    if ($entry->status !== 'EARNED') {
+                        return false;
+                    }
+
+                    return $direction === null || $entry->direction === $direction;
+                })
+                ->sum(fn (AgentCommissionEntry $entry): float => (float) $entry->commission_amount);
+        }
+
+        $query = $this->agentCommissionEntries()->where('status', 'EARNED');
+
+        if ($direction !== null) {
+            $query->where('direction', $direction->value);
+        }
+
+        return (float) $query->sum('commission_amount');
     }
 }

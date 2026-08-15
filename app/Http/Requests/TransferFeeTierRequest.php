@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\CalculationType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -28,10 +29,10 @@ class TransferFeeTierRequest extends FormRequest
             'company_to_id' => ['required', 'integer', 'different:company_from_id', 'exists:companies,id'],
             'amount_from' => ['required', 'numeric', 'min:0'],
             'amount_to' => ['required', 'numeric', 'gt:amount_from'],
-            'fee_type' => ['required', Rule::in(['FIXED', 'PERCENTAGE'])],
-            'fee_amount' => ['required', 'numeric', 'min:0', 'decimal:0,4'],
-            'additional_fee_type' => ['required', Rule::in(['FIXED', 'PERCENTAGE'])],
-            'additional_fee_amount' => ['required', 'numeric', 'min:0', 'decimal:0,4'],
+            'fee_type' => ['required', Rule::enum(CalculationType::class)],
+            'fee_value' => ['required', 'numeric', 'min:0', 'decimal:0,4'],
+            'additional_fee_type' => ['required', Rule::enum(CalculationType::class)],
+            'additional_fee_value' => ['required', 'numeric', 'min:0', 'decimal:0,4'],
             'is_active' => ['required', 'boolean'],
         ];
     }

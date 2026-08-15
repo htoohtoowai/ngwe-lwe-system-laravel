@@ -8,7 +8,6 @@ import FeePaymentSelector from '@/components/bank/FeePaymentSelector.vue';
 import type { FeePaymentMethod } from '@/components/bank/FeePaymentSelector.vue';
 import TransactionHistoryTable from '@/components/teller/TransactionHistoryTable.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { readStoredToken } from '@/lib/auth-token';
 import { useLocale } from '@/lib/i18n';
 import type { TransactionHistoryRow } from '@/types/domain';
 
@@ -298,9 +297,7 @@ watch([amount, accountId], ([nextAmount, nextAccount]) => {
 
 const mmk = (value: string | number) => Number(value).toLocaleString();
 function authHeaders(): Record<string, string> {
-    const token = readStoredToken();
-
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return {};
 }
 
 function clearHistoryFilters(): void {

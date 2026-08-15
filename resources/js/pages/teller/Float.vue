@@ -6,7 +6,6 @@ import MoneyText from '@/components/teller/MoneyText.vue';
 import PinSeal from '@/components/teller/PinSeal.vue';
 import StateChip from '@/components/teller/StateChip.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
-import { readStoredToken } from '@/lib/auth-token';
 import {
     createNgweLweEcho,
     disconnectNgweLweEcho,
@@ -298,9 +297,7 @@ function firstError(error: unknown): string {
 }
 
 function authHeaders(): Record<string, string> {
-    const token = readStoredToken();
-
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return {};
 }
 
 const refreshFloatPage = () =>
@@ -357,7 +354,7 @@ async function confirm(pin: string) {
 }
 
 onMounted(() => {
-    const echo = createNgweLweEcho(readStoredToken());
+    const echo = createNgweLweEcho();
     const handlers: RealtimeHandlers = {
         balance_update: refreshFloatPage,
         new_transaction: refreshFloatPage,

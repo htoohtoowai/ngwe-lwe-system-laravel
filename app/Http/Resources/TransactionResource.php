@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Enums\AgentCommissionDirection;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -25,9 +26,12 @@ class TransactionResource extends JsonResource
             'destination_customer_name' => $this->destination_customer_name,
             'destination_account_number' => $this->destination_account_number,
             'amount' => $this->amount,
-            'commission_amount' => $this->commission_amount,
-            'receive_commission_amount' => $this->receive_commission_amount,
-            'payout_commission_amount' => $this->payout_commission_amount,
+            // Convenience response fields are derived from agent_commission_entries;
+            // they are not duplicated columns on transactions.
+            'commission_amount' => $this->earnedAgentCommissionTotal(),
+            'receive_commission_amount' => $this->earnedAgentCommissionForDirection(AgentCommissionDirection::In),
+            'payout_commission_amount' => $this->earnedAgentCommissionForDirection(AgentCommissionDirection::Out),
+            'agent_commissions' => AgentCommissionEntryResource::collection($this->whenLoaded('agentCommissionEntries')),
             'customer_fee' => $this->customer_fee,
             'additional_fee_amount' => $this->additional_fee_amount,
             'balance_change' => $this->balance_change,

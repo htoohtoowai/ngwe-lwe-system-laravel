@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Account;
+use App\Models\AgentCommissionEntry;
 use App\Models\DailyReconciliationLog;
 use App\Models\DailySummary;
 use App\Models\Transaction;
@@ -94,7 +95,12 @@ class DailyReportService
             ->whereDate('created_at', $date)
             ->where('status', 'COMPLETED');
 
-        $totalCommission = $this->sumMoney(clone $completed, 'commission_amount');
+        $totalCommission = Money::normalize(AgentCommissionEntry::query()
+            ->where('status', 'EARNED')
+            ->whereHas('transaction', fn ($query) => $query
+                ->whereDate('created_at', $date)
+                ->where('status', 'COMPLETED'))
+            ->sum('commission_amount'));
         $totalCustomerFees = $this->sumMoney(clone $completed, 'customer_fee');
 
         return [

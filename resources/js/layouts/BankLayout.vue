@@ -347,6 +347,11 @@ const NAV: NavItem[] = [
                 href: '/admin/fees/provider',
             },
             {
+                label: 'Agent Commissions',
+                labelMm: 'Agent ကော်မရှင်များ',
+                href: '/admin/fees/agent',
+            },
+            {
                 label: 'Transfer Fees',
                 labelMm: 'ငွေလွှဲဝန်ဆောင်ခများ',
                 href: '/admin/fees/transfer',

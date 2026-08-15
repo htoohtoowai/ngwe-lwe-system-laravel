@@ -5,7 +5,8 @@ namespace Tests;
 use App\Enums\AccountFeature;
 use App\Models\Account;
 use App\Models\AccountFeatureAssignment;
-use App\Models\CommissionTier;
+use App\Models\AgentCommissionTier;
+use App\Models\ProviderFeeTier;
 use App\Models\Company;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use PDO;
@@ -13,6 +14,12 @@ use Throwable;
 
 abstract class TestCase extends BaseTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->withoutVite();
+    }
+
     /**
      * @param  list<AccountFeature|string>|null  $features
      * @return array{0: Account, 1: Company}
@@ -32,7 +39,8 @@ abstract class TestCase extends BaseTestCase
         $account = Account::query()->create([
             'company_id' => $company->id,
             'account_name' => $accountName,
-            'phone_number' => '09'.random_int(100000000, 999999999),
+            'account_type' => 'PAY',
+            'account_identifier' => '09'.random_int(100000000, 999999999),
             'balance' => $balance,
             'is_agent' => $isAgent,
             'is_active' => true,
@@ -48,42 +56,70 @@ abstract class TestCase extends BaseTestCase
         return [$account, $company];
     }
 
+
     /**
-     * Create final-schema tiers for every transaction feature used by tests.
+     * @param  list<AccountFeature|string>|null  $features
+     */
+    protected function assignAccountFeatures(Account $account, ?array $features = null): Account
+    {
+        foreach ($features ?? AccountFeature::cases() as $feature) {
+            AccountFeatureAssignment::query()->updateOrCreate([
+                'account_id' => $account->id,
+                'feature' => $feature instanceof AccountFeature ? $feature->value : $feature,
+            ], []);
+        }
+
+        return $account->load('featureAssignments');
+    }
+
+    /**
+     * Create final-schema customer-fee and agent-commission tiers used by tests.
      */
     protected function createCompanyTierFixtures(
         int $companyId,
-        int|float|string $feeDeposit = 0,
-        int|float|string $feeWithdraw = 0,
-        int|float|string $commDeposit = 0,
-        int|float|string $commWithdraw = 0,
-    ): CommissionTier {
+        int|float|string $cashInFee = 0,
+        int|float|string $cashOutFee = 0,
+        int|float|string $outCommission = 0,
+        int|float|string $inCommission = 0,
+        int|float|string $sendMoneyFee = 0,
+        int|float|string $receiveMoneyFee = 0,
+    ): ProviderFeeTier {
+        $configs = [
+            AccountFeature::CashIn->value => [$cashInFee],
+            AccountFeature::CashOut->value => [$cashOutFee],
+            AccountFeature::SendMoney->value => [$sendMoneyFee],
+            AccountFeature::ReceiveMoney->value => [$receiveMoneyFee],
+        ];
+
         $cashInTier = null;
 
-        foreach (AccountFeature::cases() as $feature) {
-            $usesWithdrawValues = in_array($feature, [
-                AccountFeature::CashOut,
-                AccountFeature::ReceiveMoney,
-            ], true);
-
-            $tier = CommissionTier::query()->create([
+        foreach ($configs as $feature => [$feeAmount]) {
+            $feeTier = ProviderFeeTier::query()->create([
                 'company_id' => $companyId,
-                'feature' => $feature->value,
+                'feature' => $feature,
                 'amount_from' => 1,
                 'amount_to' => 999_999_999_999,
                 'fee_type' => 'FIXED',
-                'fee_amount' => $usesWithdrawValues ? $feeWithdraw : $feeDeposit,
-                'comm_type' => 'FIXED',
-                'comm_amount' => $usesWithdrawValues ? $commWithdraw : $commDeposit,
+                'fee_value' => $feeAmount,
                 'additional_fee_type' => 'FIXED',
-                'additional_fee_amount' => 0,
+                'additional_fee_value' => 0,
                 'is_active' => true,
             ]);
 
-            if ($feature === AccountFeature::CashIn) {
-                $cashInTier = $tier;
+            if ($feature === AccountFeature::CashIn->value) {
+                $cashInTier = $feeTier;
             }
         }
+
+        AgentCommissionTier::query()->create([
+            'company_id' => $companyId,
+            'amount_from' => 1,
+            'amount_to' => 999_999_999_999,
+            'commission_type' => 'FIXED',
+            'out_commission_value' => $outCommission,
+            'in_commission_value' => $inCommission,
+            'is_active' => true,
+        ]);
 
         return $cashInTier;
     }
@@ -94,7 +130,7 @@ abstract class TestCase extends BaseTestCase
 
         if ($connection === 'sqlite') {
             if (! extension_loaded('pdo_sqlite')) {
-                $this->markTestSkipped("pdo_sqlite is not enabled for {$scope}.");
+                $this->fail("pdo_sqlite is required for {$scope}. Enable the SQLite PDO extension or run the optional MySQL suite with phpunit.mysql.xml.");
             }
 
             return;
@@ -102,14 +138,14 @@ abstract class TestCase extends BaseTestCase
 
         if (in_array($connection, ['mysql', 'mariadb'], true)) {
             if (! extension_loaded('pdo_mysql')) {
-                $this->markTestSkipped("pdo_mysql is not enabled for {$scope}.");
+                $this->fail("pdo_mysql is required for {$scope} when using the MySQL test configuration.");
             }
 
             $host = $this->databaseEnvironmentValue('DB_HOST', '127.0.0.1');
-            $port = $this->databaseEnvironmentValue('DB_PORT', '3306');
-            $database = $this->databaseEnvironmentValue('DB_DATABASE', 'laravel');
-            $username = $this->databaseEnvironmentValue('DB_USERNAME', 'root');
-            $password = $this->databaseEnvironmentValue('DB_PASSWORD', '');
+            $port = $this->databaseEnvironmentValue('DB_PORT', '3308');
+            $database = $this->databaseEnvironmentValue('DB_DATABASE', 'ngwe_lwe_laravel_test');
+            $username = $this->databaseEnvironmentValue('DB_USERNAME', 'ngwe_lwe_test');
+            $password = $this->databaseEnvironmentValue('DB_PASSWORD', 'ngwe_lwe_test_secret');
 
             try {
                 $pdo = new PDO(
@@ -120,13 +156,17 @@ abstract class TestCase extends BaseTestCase
                 );
                 $pdo->query('SELECT 1');
             } catch (Throwable $exception) {
-                $this->markTestSkipped("MySQL database is not available for {$scope}: {$exception->getMessage()}");
+                $this->fail(
+                    "MySQL test database is not available for {$scope}. ".
+                    "Start it with: docker compose --profile test up -d --wait mysql-test. ".
+                    "Connection error: {$exception->getMessage()}"
+                );
             }
 
             return;
         }
 
-        $this->markTestSkipped("Unsupported test database connection [{$connection}] for {$scope}.");
+        $this->fail("Unsupported test database connection [{$connection}] for {$scope}.");
     }
 
     private function databaseEnvironmentValue(string $key, string $default): string

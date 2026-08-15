@@ -76,7 +76,7 @@ class AccountRepository
     }
 
     /**
-     * @param  array{company_id:int,account_name:string,phone_number:string,balance:string,is_active?:bool,is_fee_account?:bool,is_agent?:bool}  $data
+     * @param  array{company_id:int,account_name:string,account_type:string,account_identifier:string,balance:string,is_active?:bool,is_fee_account?:bool,is_agent?:bool}  $data
      */
     public function create(array $data): Account
     {
@@ -84,7 +84,7 @@ class AccountRepository
     }
 
     /**
-     * @param  array{company_id?:int,account_name?:string,phone_number?:string,balance?:string,is_active?:bool,is_fee_account?:bool,is_agent?:bool}  $data
+     * @param  array{company_id?:int,account_name?:string,account_type?:string,account_identifier?:string,balance?:string,is_active?:bool,is_fee_account?:bool,is_agent?:bool}  $data
      */
     public function update(Account $account, array $data): Account
     {

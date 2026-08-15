@@ -3,21 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Repositories\UserRepository;
-use App\Services\NgweLweTokenService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\Cookie;
 
 class LoginController extends Controller
 {
-    public function __construct(
-        private readonly UserRepository $users,
-        private readonly NgweLweTokenService $tokens,
-    ) {}
+    public function __construct(private readonly UserRepository $users) {}
 
     public function __invoke(Request $request): Response
     {
@@ -49,16 +45,22 @@ class LoginController extends Controller
             ]);
         }
 
-        $token = $this->tokens->create($user);
+        Auth::login($user);
+        $request->session()->regenerate();
+
         $destination = $this->safeReturnTo($request->input('return_to'))
             ?? $this->consolePath($user->role);
 
-        return redirect($destination)->withCookie($this->authCookie($token));
+        return redirect($destination);
     }
 
-    public function logout(): RedirectResponse
+    public function logout(Request $request): RedirectResponse
     {
-        return redirect()->route('login')->withoutCookie('ngwe_lwe_api_token');
+        Auth::logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login');
     }
 
     public function home(Request $request): RedirectResponse
@@ -82,20 +84,5 @@ class LoginController extends Controller
             'cashier' => '/cashier',
             default => '/dashboard',
         };
-    }
-
-    private function authCookie(string $token): Cookie
-    {
-        return cookie(
-            name: 'ngwe_lwe_api_token',
-            value: $token,
-            minutes: (int) ceil((int) config('ngwe_lwe.auth.token_ttl_seconds', 86400) / 60),
-            path: '/',
-            domain: null,
-            secure: str_starts_with((string) config('app.url'), 'https://'),
-            httpOnly: true,
-            raw: false,
-            sameSite: 'lax',
-        );
     }
 }

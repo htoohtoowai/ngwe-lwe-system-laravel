@@ -22,8 +22,9 @@ class ExchangeRequest extends FormRequest
             'customer_name' => ['required', 'string', 'max:255'],
             'customer_phone' => ['required', 'string', 'max:255'],
             'exchange_payment_method' => ['sometimes', Rule::in(['cash', 'account'])],
-            'customer_fee' => ['sometimes', 'numeric', 'min:0'],
-            'additional_fee_amount' => ['sometimes', 'numeric', 'min:0'],
+            // Final pricing is always server-calculated from configured tiers.
+            'customer_fee' => ['prohibited'],
+            'additional_fee_amount' => ['prohibited'],
             'fee_payment_method' => ['sometimes', Rule::in(['cash', 'account'])],
             'fee_account_id' => ['nullable', 'integer', 'exists:accounts,id', 'required_if:fee_payment_method,account'],
             'screenshot_path' => ['sometimes', 'nullable', 'string', 'max:512'],

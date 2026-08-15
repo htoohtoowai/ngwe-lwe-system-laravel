@@ -10,10 +10,35 @@ class ExchangeRateRepository
     public function getLatest(string $baseCurrency = 'THB', string $quoteCurrency = 'MMK'): ?ExchangeRate
     {
         return ExchangeRate::query()
+            ->whereNull('company_id')
             ->where('base_currency', $baseCurrency)
             ->where('quote_currency', $quoteCurrency)
+            ->where('is_active', true)
             ->orderByDesc('id')
             ->first();
+    }
+
+
+    public function getLatestForCompany(
+        ?int $companyId,
+        string $baseCurrency = 'THB',
+        string $quoteCurrency = 'MMK',
+    ): ?ExchangeRate {
+        if ($companyId !== null) {
+            $providerRate = ExchangeRate::query()
+                ->where('company_id', $companyId)
+                ->where('base_currency', $baseCurrency)
+                ->where('quote_currency', $quoteCurrency)
+                ->where('is_active', true)
+                ->orderByDesc('id')
+                ->first();
+
+            if ($providerRate !== null) {
+                return $providerRate;
+            }
+        }
+
+        return $this->getLatest($baseCurrency, $quoteCurrency);
     }
 
     /**

@@ -20,4 +20,19 @@ class Company extends Model
     {
         return $this->hasMany(Account::class);
     }
+
+    public function providerFeeTiers(): HasMany
+    {
+        return $this->hasMany(ProviderFeeTier::class);
+    }
+
+    public function agentCommissionTiers(): HasMany
+    {
+        return $this->hasMany(AgentCommissionTier::class);
+    }
+
+    public function agentCommissionEntries(): HasMany
+    {
+        return $this->hasMany(AgentCommissionEntry::class);
+    }
 }

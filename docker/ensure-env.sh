@@ -24,7 +24,6 @@ require_env DB_CONNECTION
 require_env DB_HOST
 require_env DB_DATABASE
 require_env DB_USERNAME
-require_env NGWE_LWE_AUTH_SECRET
 require_env REVERB_APP_ID
 require_env REVERB_APP_KEY
 require_env REVERB_APP_SECRET
@@ -46,9 +45,6 @@ if [ "${APP_ENV:-production}" = "production" ] && [ "${APP_DEBUG:-false}" = "tru
     add_error "APP_DEBUG must be false when APP_ENV=production."
 fi
 
-if [ ${#NGWE_LWE_AUTH_SECRET} -lt 32 ]; then
-    add_error "NGWE_LWE_AUTH_SECRET must be at least 32 characters."
-fi
 
 if [ "$VITE_REVERB_APP_KEY" != "$REVERB_APP_KEY" ]; then
     add_error "VITE_REVERB_APP_KEY must match REVERB_APP_KEY for browser realtime auth."

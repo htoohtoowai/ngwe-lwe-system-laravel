@@ -36,7 +36,7 @@ declare global {
 
 let activeEcho: NgweLweEcho | null = null;
 
-export function createNgweLweEcho(token: string | null): NgweLweEcho | null {
+export function createNgweLweEcho(): NgweLweEcho | null {
     const key = import.meta.env.VITE_REVERB_APP_KEY as string | undefined;
 
     if (!key) {
@@ -45,6 +45,8 @@ export function createNgweLweEcho(token: string | null): NgweLweEcho | null {
 
     activeEcho?.disconnect();
     window.Pusher = Pusher;
+
+    const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
 
     activeEcho = new Echo({
         broadcaster: 'reverb',
@@ -59,11 +61,7 @@ export function createNgweLweEcho(token: string | null): NgweLweEcho | null {
         disableStats: true,
         authEndpoint: '/broadcasting/auth',
         auth: {
-            headers: token
-                ? {
-                      Authorization: `Bearer ${token}`,
-                  }
-                : {},
+            headers: csrfToken ? { 'X-CSRF-TOKEN': csrfToken } : {},
         },
     });
 

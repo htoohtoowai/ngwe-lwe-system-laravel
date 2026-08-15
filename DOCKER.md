@@ -36,10 +36,9 @@ REVERB_APP_ID=local
 REVERB_APP_KEY=replace-with-a-random-key
 REVERB_APP_SECRET=replace-with-a-random-secret
 VITE_REVERB_APP_KEY=replace-with-the-same-value-as-REVERB_APP_KEY
-NGWE_LWE_AUTH_SECRET=replace-with-a-random-32-character-or-longer-secret
 ```
 
-The Docker startup guard checks these values before either app container starts. It also fails fast if `APP_DEBUG=true` while `APP_ENV=production`, if `NGWE_LWE_AUTH_SECRET` is shorter than 32 characters, or if `VITE_REVERB_APP_KEY` does not match `REVERB_APP_KEY`.
+The Docker startup guard checks these values before either app container starts. It also fails fast if `APP_DEBUG=true` while `APP_ENV=production`, or if `VITE_REVERB_APP_KEY` does not match `REVERB_APP_KEY`.
 
 Docker database defaults are already included in `.env.example`:
 
@@ -121,11 +120,20 @@ Demo credentials:
 
 ## Useful Commands
 
-Run tests inside the app container:
+Run the default test suite from the host (in-memory SQLite):
 
 ```powershell
-docker compose exec app php artisan test
+php artisan test
 ```
+
+For MySQL 8.4 integration verification, start the dedicated test service and use `phpunit.mysql.xml` (or run `./scripts/test-mysql.sh` on macOS/Linux):
+
+```powershell
+docker compose --profile test up -d --wait mysql-test
+.\vendor\bin\phpunit --configuration phpunit.mysql.xml
+```
+
+The production-style `app` image installs Composer dependencies with `--no-dev`, so PHPUnit is intentionally run from the host checkout.
 
 Clear Laravel caches:
 
@@ -170,3 +178,25 @@ VITE_REVERB_APP_KEY=
 ```
 
 `VITE_REVERB_APP_KEY` must be exactly the same value as `REVERB_APP_KEY`; otherwise the browser can load but private realtime channels will not authenticate correctly.
+
+## Run The Full Test Suite Locally
+
+The default PHPUnit suite uses in-memory SQLite and never touches the demo/application MySQL database:
+
+```bash
+composer install
+php artisan test
+```
+
+An optional MySQL 8.4 integration configuration is also included. It uses the isolated `mysql-test` Compose profile on host port `3308`:
+
+```bash
+docker compose --profile test up -d --wait mysql-test
+./vendor/bin/phpunit --configuration phpunit.mysql.xml
+```
+
+The MySQL test service uses `tmpfs`, so its data is discarded when the container is removed:
+
+```bash
+docker compose --profile test rm -sf mysql-test
+```

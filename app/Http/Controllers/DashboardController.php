@@ -91,7 +91,7 @@ class DashboardController extends Controller
                 'id' => $account->id,
                 'company' => $account->company?->name ?? 'Account',
                 'name' => $account->account_name,
-                'number' => $account->phone_number,
+                'number' => $account->account_identifier,
                 'balance' => Money::normalize($account->balance ?? 0),
                 'is_fee_account' => (bool) $account->is_fee_account,
             ])

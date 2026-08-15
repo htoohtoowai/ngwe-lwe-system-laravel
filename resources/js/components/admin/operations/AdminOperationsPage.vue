@@ -28,7 +28,8 @@ type Account = {
     id: number;
     company_id?: number | null;
     account_name: string;
-    phone_number: string;
+    account_type: 'PAY' | 'BANK';
+    account_identifier: string;
     balance: MoneyValue;
     is_active: boolean;
     is_fee_account: boolean;
@@ -59,6 +60,19 @@ type ExchangeRate = {
     updated_at?: string | null;
 };
 
+type AgentCommissionEntry = {
+    id: number;
+    account_id: number;
+    account_name?: string | null;
+    company_name?: string | null;
+    direction: 'IN' | 'OUT';
+    base_amount: MoneyValue;
+    calculation_type: 'FIXED' | 'PERCENTAGE';
+    configured_value: MoneyValue;
+    commission_amount: MoneyValue;
+    status: 'EARNED' | 'REVERSED';
+};
+
 type Transaction = {
     id: number;
     transaction_type: string;
@@ -67,6 +81,7 @@ type Transaction = {
     amount: MoneyValue;
     customer_fee: MoneyValue;
     commission_amount: MoneyValue;
+    agent_commissions?: AgentCommissionEntry[];
     fee_payment_method: string | null;
     status: string;
     created_by: number | null;
@@ -315,13 +330,37 @@ const companyForm = ref({
 const accountForm = ref({
     company_id: null as number | null,
     account_name: '',
-    phone_number: '',
+    account_type: 'PAY' as 'PAY' | 'BANK',
+    account_identifier: '',
     balance: 0,
     features: ['cash_in'] as string[],
     is_fee_account: false,
     is_agent: false,
     is_active: true,
 });
+const selectedAccountCompany = computed(() =>
+    companies.value.find((company) => company.id === accountForm.value.company_id) ?? null,
+);
+watch(
+    () => accountForm.value.account_type,
+    (accountType) => {
+        if (accountType === 'BANK') {
+            accountForm.value.is_agent = false;
+        }
+    },
+);
+watch(
+    () => accountForm.value.company_id,
+    (companyId) => {
+        const company = companies.value.find((item) => item.id === companyId);
+        if (company?.category === 'Pay') {
+            accountForm.value.account_type = 'PAY';
+        } else if (company?.category === 'Bank') {
+            accountForm.value.account_type = 'BANK';
+        }
+    },
+);
+
 const adjustForm = ref({
     account_id: null as number | null,
     amount: 0,
@@ -726,10 +765,12 @@ function resetCompanyForm(): void {
 }
 
 function resetAccountForm(): void {
+    const initialCompany = activeCompanies.value[0] ?? null;
     accountForm.value = {
-        company_id: activeCompanies.value[0]?.id ?? null,
+        company_id: initialCompany?.id ?? null,
         account_name: '',
-        phone_number: '',
+        account_type: initialCompany?.category === 'Bank' ? 'BANK' : 'PAY',
+        account_identifier: '',
         balance: 0,
         features: ['cash_in'],
         is_fee_account: false,
@@ -802,7 +843,8 @@ function syncFormsFromRoute(): void {
         accountForm.value = {
             company_id: currentAccount.value.company_id ?? null,
             account_name: currentAccount.value.account_name,
-            phone_number: currentAccount.value.phone_number,
+            account_type: currentAccount.value.account_type,
+            account_identifier: currentAccount.value.account_identifier,
             balance: numeric(currentAccount.value.balance),
             features:
                 currentAccount.value.features &&
@@ -902,7 +944,7 @@ function accountLabel(account: Account | null | undefined): string {
         return '-';
     }
 
-    return `${account.account_name} (${account.phone_number})`;
+    return `${account.account_name} (${account.account_identifier})`;
 }
 
 function transactionTypeLabel(value: string): string {
@@ -2210,9 +2252,16 @@ async function sendBroadcastTest(): Promise<void> {
                             />
                         </label>
                         <label>
-                            <span class="bank-label">Phone / Account No.</span>
+                            <span class="bank-label">Account Type</span>
+                            <select v-model="accountForm.account_type" class="bank-input" required>
+                                <option value="PAY" :disabled="selectedAccountCompany?.category === 'Bank'">Pay</option>
+                                <option value="BANK" :disabled="selectedAccountCompany?.category === 'Pay'">Bank</option>
+                            </select>
+                        </label>
+                        <label>
+                            <span class="bank-label">{{ accountForm.account_type === 'PAY' ? 'Phone Number' : 'Bank Account Number' }}</span>
                             <input
-                                v-model.trim="accountForm.phone_number"
+                                v-model.trim="accountForm.account_identifier"
                                 class="bank-input"
                                 required
                             />
@@ -2264,9 +2313,10 @@ async function sendBroadcastTest(): Promise<void> {
                                 <input
                                     v-model="accountForm.is_agent"
                                     type="checkbox"
-                                    class="size-4 accent-brand"
+                                    :disabled="accountForm.account_type === 'BANK'"
+                                    class="size-4 accent-brand disabled:opacity-40"
                                 />
-                                Agent Account
+                                Agent Account <span v-if="accountForm.account_type === 'BANK'" class="text-xs font-normal text-slate">(Pay only)</span>
                             </label>
                             <label class="flex items-center gap-2">
                                 <input
@@ -2352,10 +2402,14 @@ async function sendBroadcastTest(): Promise<void> {
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt class="font-bold text-slate">Phone</dt>
+                                    <dt class="font-bold text-slate">{{ currentAccount.account_type === 'PAY' ? 'Phone Number' : 'Bank Account Number' }}</dt>
                                     <dd class="font-black text-ink">
-                                        {{ currentAccount.phone_number }}
+                                        {{ currentAccount.account_identifier }}
                                     </dd>
+                                </div>
+                                <div>
+                                    <dt class="font-bold text-slate">Account Type</dt>
+                                    <dd class="font-black text-ink">{{ currentAccount.account_type }}</dd>
                                 </div>
                                 <div>
                                     <dt class="font-bold text-slate">
@@ -2503,7 +2557,7 @@ async function sendBroadcastTest(): Promise<void> {
                         :total="filteredAccounts.length"
                         :page-count="adminListPageCount"
                         :filter-options="statusFilterOptions"
-                        search-placeholder="Search account, service, phone"
+                        search-placeholder="Search account, provider, type, identifier"
                     >
                     <div class="mt-4 overflow-auto rounded-lg border border-line">
                         <table class="w-full min-w-[820px] text-left text-sm">
@@ -2511,7 +2565,7 @@ async function sendBroadcastTest(): Promise<void> {
                                 <tr>
                                     <th class="px-4 py-3">Account</th>
                                     <th class="px-4 py-3">Provider</th>
-                                    <th class="px-4 py-3">Phone</th>
+                                    <th class="px-4 py-3">Type</th><th class="px-4 py-3">Identifier</th>
                                     <th class="px-4 py-3 text-right">
                                         Balance
                                     </th>
@@ -2545,7 +2599,10 @@ async function sendBroadcastTest(): Promise<void> {
                                         {{ account.company?.name ?? '-' }}
                                     </td>
                                     <td class="px-4 py-3 text-slate">
-                                        {{ account.phone_number }}
+                                        {{ account.account_type }}
+                                    </td>
+                                    <td class="px-4 py-3 text-slate">
+                                        {{ account.account_identifier }}
                                     </td>
                                     <td
                                         class="money px-4 py-3 text-right font-bold text-ink"
@@ -3089,6 +3146,39 @@ async function sendBroadcastTest(): Promise<void> {
                                 </dd>
                             </div>
                         </dl>
+                        <div
+                            v-if="currentTransaction.agent_commissions?.length"
+                            class="mt-4 rounded-lg border border-line bg-card p-4"
+                        >
+                            <h3 class="text-sm font-black text-ink">Agent commission entries</h3>
+                            <div class="mt-3 overflow-x-auto">
+                                <table class="w-full min-w-[680px] text-left text-xs">
+                                    <thead class="text-slate uppercase">
+                                        <tr>
+                                            <th class="pb-2 pr-4">Account</th>
+                                            <th class="pb-2 pr-4">Direction</th>
+                                            <th class="pb-2 pr-4">Rule</th>
+                                            <th class="pb-2 pr-4 text-right">Base</th>
+                                            <th class="pb-2 pr-4 text-right">Earned</th>
+                                            <th class="pb-2">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-line">
+                                        <tr v-for="entry in currentTransaction.agent_commissions" :key="entry.id">
+                                            <td class="py-2 pr-4 font-bold"><span>{{ entry.account_name ?? ('#' + entry.account_id) }}</span><span v-if="entry.company_name" class="block text-[11px] text-slate">{{ entry.company_name }}</span></td>
+                                            <td class="py-2 pr-4 font-bold">{{ entry.direction }}</td>
+                                            <td class="money py-2 pr-4">
+                                                {{ entry.calculation_type }} · {{ money(entry.configured_value) }}
+                                                {{ entry.calculation_type === 'PERCENTAGE' ? '%' : 'MMK' }}
+                                            </td>
+                                            <td class="money py-2 pr-4 text-right">{{ money(entry.base_amount) }}</td>
+                                            <td class="money py-2 pr-4 text-right font-black">{{ money(entry.commission_amount) }}</td>
+                                            <td class="py-2 font-black">{{ entry.status }}</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </template>
                     <p v-else class="mt-4 text-sm font-semibold text-slate">
                         Transaction not found.

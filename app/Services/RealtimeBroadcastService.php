@@ -78,7 +78,7 @@ class RealtimeBroadcastService
      */
     private function transactionPayload(Transaction $transaction): array
     {
-        $transaction = $transaction->refresh()->load('creator');
+        $transaction = $transaction->refresh()->load(['creator', 'agentCommissionEntries.account', 'agentCommissionEntries.company']);
         $payload = (new TransactionResource($transaction))->resolve();
 
         if ($transaction->transaction_type !== 'cash_in') {

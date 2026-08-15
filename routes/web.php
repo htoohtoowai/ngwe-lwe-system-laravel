@@ -3,9 +3,8 @@
 use App\Http\Controllers\AdminFeeController;
 use App\Http\Controllers\AdminOperationsActionController;
 use App\Http\Controllers\AdminReadController;
-use App\Http\Controllers\Api\CompanyController;
-use App\Http\Controllers\Api\SystemCompatibilityController;
 use App\Http\Controllers\CashierActionController;
+use App\Http\Controllers\CompanyLogoController;
 use App\Http\Controllers\CashierController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\LoginController;
@@ -20,12 +19,11 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/health', fn () => response()->json(['status' => 'ok']))->name('health');
-Route::middleware('ngwe.auth')->post('/ws-ticket', [SystemCompatibilityController::class, 'wsTicket'])->name('ws-ticket');
 Route::get('/login', LoginController::class)->name('login');
 Route::post('/login', [LoginController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
-Route::middleware('ngwe.auth')->post('/logout', [LoginController::class, 'logout'])->name('logout');
-Route::middleware('ngwe.auth')->get('/', [LoginController::class, 'home'])->name('home');
-Route::middleware(['ngwe.auth', 'role:admin'])->get('/reports/daily/pdf', function (Request $request, DailyReportService $reports) {
+Route::middleware('auth')->post('/logout', [LoginController::class, 'logout'])->name('logout');
+Route::middleware('auth')->get('/', [LoginController::class, 'home'])->name('home');
+Route::middleware(['auth', 'role:admin'])->get('/reports/daily/pdf', function (Request $request, DailyReportService $reports) {
     $date = $request->query('date', now()->toDateString());
     $summary = $reports->summary((string) $date);
     $lines = [
@@ -52,9 +50,9 @@ Route::middleware(['ngwe.auth', 'role:admin'])->get('/reports/daily/pdf', functi
     ]);
 })
     ->name('reports.daily.pdf');
-Route::middleware('ngwe.auth')->get('/dashboard', DashboardController::class)->name('dashboard');
-Route::middleware('ngwe.auth')
-    ->get('/companies/{company}/logo', [CompanyController::class, 'logo'])
+Route::middleware('auth')->get('/dashboard', DashboardController::class)->name('dashboard');
+Route::middleware('auth')
+    ->get('/companies/{company}/logo', CompanyLogoController::class)
     ->name('companies.logo');
 $adminSections = [
     'overview' => 'overview',
@@ -119,7 +117,7 @@ $renderAdminOperations = static function (
         'adminData' => app(AdminOperationsDataService::class)->get($request),
     ]);
 };
-Route::middleware(['ngwe.auth', 'role:admin'])
+Route::middleware(['auth', 'role:admin'])
     ->prefix('admin')
     ->name('admin.operations')
     ->group(function () use ($adminSections, $adminCrudSections, $adminDetailSections, $renderAdminOperations): void {
@@ -138,9 +136,6 @@ Route::middleware(['ngwe.auth', 'role:admin'])
             Route::patch('/accounts/{account}/status', 'toggleAccount')->name('accounts.status');
             Route::delete('/accounts/{account}', 'destroyAccount')->name('accounts.destroy');
             Route::post('/accounts/{account}/balance-adjust', 'adjustAccount')->name('accounts.balance-adjust');
-            Route::post('/commission-tiers', 'storeTier')->name('commission-tiers.store');
-            Route::patch('/commission-tiers/{commissionTier}', 'updateTier')->name('commission-tiers.update');
-            Route::delete('/commission-tiers/{commissionTier}', 'destroyTier')->name('commission-tiers.destroy');
             Route::post('/users', 'storeUser')->name('users.store');
             Route::patch('/users/{user}', 'updateUser')->name('users.update');
             Route::patch('/users/{user}/status', 'toggleUser')->name('users.status');
@@ -159,17 +154,24 @@ Route::middleware(['ngwe.auth', 'role:admin'])
         Route::get('/fees/provider', [AdminFeeController::class, 'provider'])->name('.fees.provider');
         Route::get('/fees/provider/create', [AdminFeeController::class, 'createProvider'])->name('.fees.provider.create');
         Route::post('/fees/provider', [AdminFeeController::class, 'storeProvider'])->name('.fees.provider.store');
-        Route::get('/fees/provider/{commissionTier}/edit', [AdminFeeController::class, 'editProvider'])->name('.fees.provider.edit');
-        Route::put('/fees/provider/{commissionTier}', [AdminFeeController::class, 'updateProvider'])->name('.fees.provider.update');
-        Route::delete('/fees/provider/{commissionTier}', [AdminFeeController::class, 'destroyProvider'])->name('.fees.provider.destroy');
+        Route::get('/fees/provider/{providerFeeTier}/edit', [AdminFeeController::class, 'editProvider'])->name('.fees.provider.edit');
+        Route::put('/fees/provider/{providerFeeTier}', [AdminFeeController::class, 'updateProvider'])->name('.fees.provider.update');
+        Route::delete('/fees/provider/{providerFeeTier}', [AdminFeeController::class, 'destroyProvider'])->name('.fees.provider.destroy');
+        Route::get('/fees/agent', [AdminFeeController::class, 'agent'])->name('.fees.agent');
+        Route::get('/fees/agent/create', [AdminFeeController::class, 'createAgent'])->name('.fees.agent.create');
+        Route::post('/fees/agent', [AdminFeeController::class, 'storeAgent'])->name('.fees.agent.store');
+        Route::get('/fees/agent/{agentCommissionTier}', [AdminFeeController::class, 'showAgent'])->name('.fees.agent.show');
+        Route::get('/fees/agent/{agentCommissionTier}/edit', [AdminFeeController::class, 'editAgent'])->name('.fees.agent.edit');
+        Route::put('/fees/agent/{agentCommissionTier}', [AdminFeeController::class, 'updateAgent'])->name('.fees.agent.update');
+        Route::delete('/fees/agent/{agentCommissionTier}', [AdminFeeController::class, 'destroyAgent'])->name('.fees.agent.destroy');
         Route::get('/fees/transfer', [AdminFeeController::class, 'transfer'])->name('.fees.transfer');
         Route::get('/fees/transfer/create', [AdminFeeController::class, 'createTransfer'])->name('.fees.transfer.create');
         Route::post('/fees/transfer', [AdminFeeController::class, 'storeTransfer'])->name('.fees.transfer.store');
         Route::get('/fees/transfer/{transferFeeTier}/edit', [AdminFeeController::class, 'editTransfer'])->name('.fees.transfer.edit');
         Route::put('/fees/transfer/{transferFeeTier}', [AdminFeeController::class, 'updateTransfer'])->name('.fees.transfer.update');
         Route::delete('/fees/transfer/{transferFeeTier}', [AdminFeeController::class, 'destroyTransfer'])->name('.fees.transfer.destroy');
-        Route::get('/fees/{commissionTier}', [AdminFeeController::class, 'showProvider'])->name('.fees.show');
-        Route::get('/fees/{commissionTier}/edit', [AdminFeeController::class, 'editProvider'])->name('.fees.edit');
+        Route::get('/fees/{providerFeeTier}', [AdminFeeController::class, 'showProvider'])->name('.fees.show');
+        Route::get('/fees/{providerFeeTier}/edit', [AdminFeeController::class, 'editProvider'])->name('.fees.edit');
         Route::get('/transactions', fn (Request $request) => app(AdminReadController::class)->transactions($request))->name('.transactions');
         Route::get('/transactions/cash-in', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'cash_in'))->name('.transactions.cash-in');
         Route::get('/transactions/cash-out', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'cash_out'))->name('.transactions.cash-out');
@@ -194,15 +196,15 @@ Route::middleware(['ngwe.auth', 'role:admin'])
             ->whereNumber('resourceId')
             ->name('.detail');
     });
-Route::middleware(['ngwe.auth', 'role:cashier'])->get('/cashier', CashierController::class)->name('cashier');
-Route::middleware(['ngwe.auth', 'role:cashier'])
+Route::middleware(['auth', 'role:cashier'])->get('/cashier', CashierController::class)->name('cashier');
+Route::middleware(['auth', 'role:cashier'])
     ->prefix('dashboard')
     ->name('dashboard.')
     ->group(function (): void {
         Route::post('/transactions/{transaction}/confirm-cash-in', [CashierActionController::class, 'confirmCashIn'])->name('transactions.confirm-cash-in');
         Route::post('/transactions/{transaction}/cancel-cash-in', [CashierActionController::class, 'cancelCashIn'])->name('transactions.cancel-cash-in');
     });
-Route::middleware(['ngwe.auth', 'role:cashier'])
+Route::middleware(['auth', 'role:cashier'])
     ->prefix('cashier')
     ->name('cashier.')
     ->group(function (): void {
@@ -231,7 +233,7 @@ Route::middleware(['ngwe.auth', 'role:cashier'])
             ])
             ->name('section');
     });
-Route::middleware(['ngwe.auth', 'role:teller'])
+Route::middleware(['auth', 'role:teller'])
     ->prefix('transactions')
     ->name('transactions.')
     ->controller(TransactionEntryController::class)
@@ -241,7 +243,7 @@ Route::middleware(['ngwe.auth', 'role:teller'])
         Route::post('/cash-in', 'cashInStore')->name('cash-in.store');
     });
 
-Route::middleware(['ngwe.auth', 'role:teller'])
+Route::middleware(['auth', 'role:teller'])
     ->prefix('transactions')
     ->name('transactions.')
     ->controller(TransactionEntryController::class)
@@ -255,7 +257,7 @@ Route::middleware(['ngwe.auth', 'role:teller'])
         Route::get('/exchange/history', 'exchangeHistory')->name('exchange.history');
     });
 
-Route::middleware(['ngwe.auth', 'role:teller'])
+Route::middleware(['auth', 'role:teller'])
     ->prefix('transactions')
     ->name('transactions.')
     ->controller(TransactionEntryController::class)
@@ -265,7 +267,7 @@ Route::middleware(['ngwe.auth', 'role:teller'])
         Route::post('/exchange', 'exchangeStore')->name('exchange.store');
     });
 
-Route::middleware(['ngwe.auth', 'role:teller'])
+Route::middleware(['auth', 'role:teller'])
     ->prefix('teller')
     ->name('teller.')
     ->controller(TellerController::class)
@@ -277,12 +279,9 @@ Route::middleware(['ngwe.auth', 'role:teller'])
         Route::redirect('/exchange', '/transactions/exchange')->name('exchange');
         Route::get('/float', 'floatPage')->name('float');
         Route::get('/float/history', 'floatHistory')->name('float.history');
-        Route::post('/transactions/cash-out', 'cashOutStore')->name('transactions.cash-out');
-        Route::post('/transactions/transfer', 'transferStore')->name('transactions.transfer');
-        Route::post('/transactions/exchange', 'exchangeStore')->name('transactions.exchange');
     });
 
-Route::middleware(['ngwe.auth', 'role:teller'])
+Route::middleware(['auth', 'role:teller'])
     ->prefix('teller/floats')
     ->name('teller.floats.')
     ->controller(TellerFloatActionController::class)

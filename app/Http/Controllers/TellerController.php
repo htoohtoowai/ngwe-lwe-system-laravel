@@ -2,40 +2,20 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\AccountFeature;
-use App\Exceptions\InsufficientBalanceException;
-use App\Exceptions\InsufficientFloatDenominationException;
-use App\Exceptions\InsufficientFloatException;
-use App\Http\Requests\CashInRequest;
-use App\Http\Requests\CashOutRequest;
-use App\Http\Requests\ExchangeRequest;
-use App\Http\Requests\TransferRequest;
-use App\Models\Account;
 use App\Models\CashFloatAssignment;
 use App\Models\Transaction;
-use App\Repositories\AccountRepository;
 use App\Repositories\CashFloatRepository;
-use App\Repositories\ExchangeRateRepository;
 use App\Repositories\TransactionRepository;
-use App\Services\TransactionFeeCalculator;
-use App\Services\TransactionService;
 use App\Support\Money;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
-use InvalidArgumentException;
-use RuntimeException;
 
 class TellerController extends Controller
 {
     public function __construct(
-        private readonly AccountRepository $accounts,
         private readonly CashFloatRepository $floats,
         private readonly TransactionRepository $transactions,
-        private readonly ExchangeRateRepository $exchangeRates,
-        private readonly TransactionFeeCalculator $fees,
-        private readonly TransactionService $transactionService,
     ) {}
 
     public function counter(Request $request): Response
@@ -45,65 +25,6 @@ class TellerController extends Controller
             'denominations' => $this->denominationRows($request),
             'today' => $this->today($request),
             'recent' => $this->recent($request),
-        ]);
-    }
-
-    public function cashIn(Request $request): Response
-    {
-        return Inertia::render('teller/CashIn', [
-            'float' => $this->floatProp($request),
-            'notes' => $this->notes(),
-            'floatStock' => $this->onHand($request),
-            'accounts' => $this->accounts(AccountFeature::CashIn),
-            'completed' => $this->pullCompleted($request),
-        ]);
-    }
-
-    public function cashOut(Request $request): Response
-    {
-        return Inertia::render('teller/CashOut', [
-            'float' => $this->floatProp($request),
-            'notes' => $this->notes(),
-            'floatStock' => $this->onHand($request),
-            'accounts' => $this->accounts(AccountFeature::CashOut),
-            'fee' => $this->fee($request, TransactionFeeCalculator::MODE_CASH_OUT),
-            'commission' => $this->commission($request, TransactionFeeCalculator::COMMISSION_RECEIVE),
-            'completed' => $this->pullCompleted($request),
-        ]);
-    }
-
-    public function transfer(Request $request): Response
-    {
-        return Inertia::render('teller/Transfer', [
-            'float' => $this->floatProp($request),
-            'notes' => $this->notes(),
-            'floatStock' => $this->onHand($request),
-            'accounts' => $this->accounts(),
-            'fee' => $this->fee($request, TransactionFeeCalculator::MODE_CASH_IN),
-            'completed' => $this->pullCompleted($request),
-        ]);
-    }
-
-    public function exchange(Request $request): Response
-    {
-        $rate = $this->exchangeRates->getLatest('THB', 'MMK');
-        $baseAmount = (float) ($rate?->base_amount ?? 1);
-
-        if ($baseAmount <= 0) {
-            $baseAmount = 1.0;
-        }
-
-        return Inertia::render('teller/Exchange', [
-            'float' => $this->floatProp($request),
-            'notes' => $this->notes(),
-            'floatStock' => $this->onHand($request),
-            'accounts' => $this->accounts(),
-            'fee' => $this->fee($request, TransactionFeeCalculator::MODE_CASH_IN),
-            'rate' => [
-                'buy_rate' => Money::normalize($rate !== null ? (float) $rate->buy_rate / $baseAmount : 0, 4),
-                'sell_rate' => Money::normalize($rate !== null ? (float) $rate->sell_rate / $baseAmount : 0, 4),
-            ],
-            'completed' => $this->pullCompleted($request),
         ]);
     }
 
@@ -129,48 +50,6 @@ class TellerController extends Controller
         ]);
     }
 
-    public function cashInStore(CashInRequest $request): RedirectResponse
-    {
-        return $this->storeTransaction(
-            fn (): Transaction => $this->transactionService->createCashIn($request->validated(), $request->user())
-        );
-    }
-
-    public function cashOutStore(CashOutRequest $request): RedirectResponse
-    {
-        return $this->storeTransaction(
-            fn (): Transaction => $this->transactionService->createCashOut($request->validated(), $request->user())
-        );
-    }
-
-    public function transferStore(TransferRequest $request): RedirectResponse
-    {
-        return $this->storeTransaction(
-            fn (): Transaction => $this->transactionService->createTransfer($request->validated(), $request->user())
-        );
-    }
-
-    public function exchangeStore(ExchangeRequest $request): RedirectResponse
-    {
-        return $this->storeTransaction(
-            fn (): Transaction => $this->transactionService->createExchange($request->validated(), $request->user())
-        );
-    }
-
-    private function storeTransaction(\Closure $create): RedirectResponse
-    {
-        try {
-            /** @var Transaction $transaction */
-            $transaction = $create();
-        } catch (InsufficientBalanceException|InsufficientFloatDenominationException|InsufficientFloatException|InvalidArgumentException|RuntimeException $exception) {
-            return redirect()->back()->withErrors([
-                'request' => $exception->getMessage(),
-            ])->withInput();
-        }
-
-        return redirect()->back()->with('completed', $this->completed($transaction));
-    }
-
     /**
      * @return array<int, int>
      */
@@ -180,26 +59,6 @@ class TellerController extends Controller
         rsort($notes);
 
         return $notes;
-    }
-
-    /**
-     * @return array<int, array{id:int,name:string,company:string,balance:string}>
-     */
-    private function accounts(?AccountFeature $feature = null): array
-    {
-        $accounts = $feature !== null
-            ? $this->accounts->activeForFeature($feature)
-            : $this->accounts->active();
-
-        return $accounts
-            ->map(fn (Account $account): array => [
-                'id' => $account->id,
-                'name' => $account->account_name,
-                'company' => $account->company?->name ?? 'Account',
-                'balance' => $account->balance,
-            ])
-            ->values()
-            ->all();
     }
 
     private function selectedFloat(Request $request): ?CashFloatAssignment
@@ -373,95 +232,5 @@ class TellerController extends Controller
         ];
     }
 
-    private function fee(Request $request, string $mode): string
-    {
-        $amount = $request->float('amount');
-        $accountId = $request->integer('account_id');
 
-        if ($amount <= 0 || $accountId <= 0) {
-            return '0.00';
-        }
-
-        $account = $this->accounts->find($accountId);
-
-        if ($account === null || ! $account->is_active) {
-            return '0.00';
-        }
-
-        return $this->fees->resolveFees($account, $amount, $mode)['customer_fee'];
-    }
-
-    private function commission(Request $request, string $direction): string
-    {
-        $amount = $request->float('amount');
-        $accountId = $request->integer('account_id');
-
-        if ($amount <= 0 || $accountId <= 0) {
-            return '0.00';
-        }
-
-        $account = $this->accounts->find($accountId);
-
-        if ($account === null || ! $account->is_active) {
-            return '0.00';
-        }
-
-        return $this->fees->commission($account, $amount, $direction);
-    }
-
-    /**
-     * @return array<string, mixed>|null
-     */
-    private function pullCompleted(Request $request): ?array
-    {
-        $completed = $request->session()->pull('completed');
-
-        return is_array($completed) ? $completed : null;
-    }
-
-    /**
-     * @return array{id:int,type:string,amount:string,fee_amount:string,status:string,created_at:string,account_label:string|null,change_given:string,customer_name:string|null,customer_phone:string|null}
-     */
-    private function completed(Transaction $transaction): array
-    {
-        $transaction = $transaction->refresh();
-
-        return [
-            'id' => $transaction->id,
-            'type' => $transaction->transaction_type,
-            'amount' => $transaction->amount,
-            'fee_amount' => $transaction->customer_fee ?? '0.00',
-            'status' => $transaction->status,
-            'created_at' => $transaction->created_at?->toDateTimeString() ?? now()->toDateTimeString(),
-            'account_label' => $this->accountLabel($transaction),
-            'change_given' => $transaction->change_given ?? '0.00',
-            'customer_name' => $transaction->customer_name,
-            'customer_phone' => $transaction->customer_phone,
-        ];
-    }
-
-    private function accountLabel(Transaction $transaction): ?string
-    {
-        $from = $transaction->account_id ? $this->accountName((int) $transaction->account_id) : null;
-        $to = $transaction->to_account_id ? $this->accountName((int) $transaction->to_account_id) : null;
-
-        if ($from !== null && $to !== null) {
-            return "{$from} -> {$to}";
-        }
-
-        return $from ?? $to;
-    }
-
-    private function accountName(int $accountId): ?string
-    {
-        $account = $this->accounts->find($accountId);
-
-        if ($account === null) {
-            return null;
-        }
-
-        $company = $account->company?->name;
-
-        return trim(($company ? "{$company} - " : '').$account->account_name);
-    }
 }

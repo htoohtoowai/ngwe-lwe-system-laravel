@@ -23,7 +23,9 @@ class NgweLweSchemaTest extends TestCase
             'accounts',
             'account_features',
             'transactions',
-            'commission_tiers',
+            'provider_fee_tiers',
+            'agent_commission_tiers',
+            'agent_commission_entries',
             'transfer_fee_tiers',
             'exchange_rates',
             'daily_summary',
@@ -45,7 +47,8 @@ class NgweLweSchemaTest extends TestCase
     {
         $this->assertFalse(Schema::hasTable('service_types'));
         $this->assertFalse(Schema::hasColumn('accounts', 'service_type_id'));
-        $this->assertFalse(Schema::hasColumn('commission_tiers', 'service_type_id'));
+        $this->assertFalse(Schema::hasTable('commission_tiers'));
+        $this->assertFalse(Schema::hasColumn('provider_fee_tiers', 'service_type_id'));
     }
 
     public function test_users_table_has_ngwe_lwe_auth_and_role_columns(): void
@@ -57,19 +60,37 @@ class NgweLweSchemaTest extends TestCase
 
     public function test_new_requirement_fee_schema_columns_are_available(): void
     {
-        foreach (['company_id', 'is_agent'] as $column) {
+        foreach (['company_id', 'account_type', 'account_identifier', 'is_agent'] as $column) {
             $this->assertTrue(Schema::hasColumn('accounts', $column), "Missing accounts.{$column}");
         }
 
-        foreach (['company_id', 'feature', 'fee_type', 'fee_amount', 'additional_fee_amount', 'comm_amount'] as $column) {
-            $this->assertTrue(Schema::hasColumn('commission_tiers', $column), "Missing commission_tiers.{$column}");
+        foreach (['company_id', 'feature', 'fee_type', 'fee_value', 'additional_fee_type', 'additional_fee_value'] as $column) {
+            $this->assertTrue(Schema::hasColumn('provider_fee_tiers', $column), "Missing provider_fee_tiers.{$column}");
         }
+
+        foreach (['company_id', 'amount_from', 'amount_to', 'commission_type', 'out_commission_value', 'in_commission_value'] as $column) {
+            $this->assertTrue(Schema::hasColumn('agent_commission_tiers', $column), "Missing agent_commission_tiers.{$column}");
+        }
+
+        foreach (['transaction_id', 'account_id', 'direction', 'calculation_type', 'configured_value', 'commission_amount', 'status'] as $column) {
+            $this->assertTrue(Schema::hasColumn('agent_commission_entries', $column), "Missing agent_commission_entries.{$column}");
+        }
+
+        foreach (['commission_amount', 'receive_commission_amount', 'payout_commission_amount'] as $column) {
+            $this->assertFalse(
+                Schema::hasColumn('transactions', $column),
+                "transactions must not duplicate agent commission column {$column}",
+            );
+        }
+
+        $this->assertFalse(Schema::hasColumn('agent_commission_tiers', 'feature'));
+        $this->assertFalse(Schema::hasColumn('agent_commission_entries', 'feature'));
 
         foreach (['account_id', 'feature'] as $column) {
             $this->assertTrue(Schema::hasColumn('account_features', $column), "Missing account_features.{$column}");
         }
 
-        foreach (['company_from_id', 'company_to_id', 'fee_type', 'fee_amount', 'additional_fee_amount'] as $column) {
+        foreach (['company_from_id', 'company_to_id', 'fee_type', 'fee_value', 'additional_fee_value'] as $column) {
             $this->assertTrue(Schema::hasColumn('transfer_fee_tiers', $column), "Missing transfer_fee_tiers.{$column}");
         }
 

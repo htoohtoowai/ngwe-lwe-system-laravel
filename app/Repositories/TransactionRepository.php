@@ -18,7 +18,7 @@ class TransactionRepository
 
     public function find(int $id): ?Transaction
     {
-        return Transaction::query()->find($id);
+        return Transaction::query()->with(['agentCommissionEntries.account', 'agentCommissionEntries.company'])->find($id);
     }
 
     /**
@@ -32,6 +32,7 @@ class TransactionRepository
         int $limit = 200,
     ): Collection {
         return Transaction::query()
+            ->with(['agentCommissionEntries.account', 'agentCommissionEntries.company'])
             ->when($dateFrom !== null, fn ($q) => $q->whereDate('created_at', '>=', $dateFrom))
             ->when($dateTo !== null, fn ($q) => $q->whereDate('created_at', '<=', $dateTo))
             ->when($type !== null, fn ($q) => $q->where('transaction_type', $type))
@@ -52,6 +53,7 @@ class TransactionRepository
     public function recentForUser(User $user, int $limit = 50): Collection
     {
         return Transaction::query()
+            ->with(['agentCommissionEntries.account', 'agentCommissionEntries.company'])
             ->where('created_by', $user->id)
             ->orderByDesc('created_at')
             ->limit(min($limit, 1000))
@@ -64,6 +66,7 @@ class TransactionRepository
     public function recent(int $limit = 50): Collection
     {
         return Transaction::query()
+            ->with(['agentCommissionEntries.account', 'agentCommissionEntries.company'])
             ->orderByDesc('created_at')
             ->limit(min($limit, 1000))
             ->get();

@@ -46,7 +46,8 @@ export type Account = {
     id: number;
     company_id: number | null;
     account_name: string;
-    phone_number: string | null;
+    account_type: 'PAY' | 'BANK';
+    account_identifier: string | null;
     balance: string;
     is_active: boolean;
     is_fee_account: boolean;
@@ -62,7 +63,12 @@ export type Transaction = {
     customer_name: string | null;
     customer_phone: string | null;
     amount: string;
+    commission_amount?: string | null;
+    receive_commission_amount?: string | null;
+    payout_commission_amount?: string | null;
+    agent_commissions?: AgentCommissionEntry[];
     customer_fee: string | null;
+    additional_fee_amount?: string | null;
     fee_payment_method?: string | null;
     received_denominations?: DenominationMap | null;
     handoff_denominations?: DenominationMap | null;
@@ -158,19 +164,45 @@ export type ActivityLog = {
     } | null;
 };
 
-export type CommissionTier = {
+export type ProviderFeeTier = {
     id: number;
-    company_id?: number | null;
-    feature?: string | null;
+    company_id: number;
+    feature: string;
     amount_from: string;
     amount_to: string;
-    fee_type?: 'FIXED' | 'PERCENTAGE';
-    fee_amount?: string;
-    comm_type: 'FIXED' | 'PERCENTAGE';
-    comm_amount: string;
+    fee_type: 'FIXED' | 'PERCENTAGE';
+    fee_value: string;
     additional_fee_type: 'FIXED' | 'PERCENTAGE';
-    additional_fee_amount: string;
+    additional_fee_value: string;
     is_active: boolean;
+};
+
+export type AgentCommissionTier = {
+    id: number;
+    company_id: number;
+    amount_from: string;
+    amount_to: string;
+    commission_type: 'FIXED' | 'PERCENTAGE';
+    out_commission_value: string;
+    in_commission_value: string;
+    is_active: boolean;
+};
+
+export type AgentCommissionEntry = {
+    id: number;
+    transaction_id: number;
+    account_id: number;
+    account_name?: string | null;
+    company_id: number;
+    company_name?: string | null;
+    agent_commission_tier_id: number | null;
+    direction: 'IN' | 'OUT';
+    base_amount: string;
+    calculation_type: 'FIXED' | 'PERCENTAGE';
+    configured_value: string;
+    commission_amount: string;
+    status: 'EARNED' | 'REVERSED';
+    created_at: string | null;
 };
 
 export type ReportDenominationRow = {
