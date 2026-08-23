@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\CancelCashInRequest;
-use App\Http\Requests\CashierVaultEntryRequest;
 use App\Http\Requests\ChangePasswordRequest;
 use App\Http\Requests\ConfirmFloatReturnRequest;
 use App\Http\Requests\IssueCashFloatRequest;
@@ -11,7 +10,6 @@ use App\Http\Requests\SetPinRequest;
 use App\Models\CashFloatAssignment;
 use App\Models\Transaction;
 use App\Models\TransactionNotificationRead;
-use App\Repositories\CashDenominationRepository;
 use App\Repositories\UserRepository;
 use App\Services\CashFloatService;
 use App\Services\PinVerifier;
@@ -28,33 +26,11 @@ use Throwable;
 class CashierActionController extends Controller
 {
     public function __construct(
-        private readonly CashDenominationRepository $vault,
         private readonly CashFloatService $floats,
         private readonly TransactionService $transactions,
         private readonly PinVerifier $pinVerifier,
         private readonly UserRepository $users,
     ) {}
-
-    public function recordVaultEntry(CashierVaultEntryRequest $request): RedirectResponse
-    {
-        $data = $request->validated();
-        $denominations = collect($data['denominations'])
-            ->mapWithKeys(fn ($quantity, $denomination): array => [(int) $denomination => (int) $quantity])
-            ->all();
-
-        try {
-            $this->vault->recordBulk(
-                entryType: $data['entry_type'],
-                denominations: $denominations,
-                createdBy: $request->user()->id,
-                note: $data['note'] ?? null,
-            );
-        } catch (Throwable $exception) {
-            $this->fail($exception);
-        }
-
-        return back()->with('success', 'Vault entry recorded.');
-    }
 
     public function issueFloat(IssueCashFloatRequest $request): RedirectResponse
     {

@@ -147,6 +147,7 @@ Route::middleware(['auth', 'role:admin'])
             Route::post('/password', 'changePassword')->name('password');
             Route::post('/close-day', 'closeDay')->name('close-day');
             Route::post('/backup', 'backup')->name('backup');
+            Route::post('/vault/entries', 'recordCashierVaultEntry')->name('vault.entries.store');
             Route::post('/broadcast-test', 'broadcastTest')->name('broadcast-test');
         });
         Route::get('/fees', [AdminFeeController::class, 'index'])->name('.fees');
@@ -211,7 +212,6 @@ Route::middleware(['auth', 'role:cashier'])
         Route::get('/profile', [CashierController::class, 'profile'])->name('profile');
         Route::post('/profile/password', [CashierActionController::class, 'updatePassword'])->name('profile.password');
         Route::post('/profile/pin', [CashierActionController::class, 'updatePin'])->name('profile.pin');
-        Route::post('/vault/entries', [CashierActionController::class, 'recordVaultEntry'])->name('vault.entries.store');
         Route::post('/cash-floats', [CashierActionController::class, 'issueFloat'])->name('cash-floats.store');
         Route::post('/cash-floats/{float}/confirm-return', [CashierActionController::class, 'confirmFloatReturn'])->name('cash-floats.confirm-return');
         Route::post('/notifications/{transaction}/read', [CashierActionController::class, 'markNotificationRead'])->name('notifications.read');

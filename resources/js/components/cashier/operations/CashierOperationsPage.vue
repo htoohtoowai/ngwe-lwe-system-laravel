@@ -151,9 +151,6 @@ const sectionPaths: Record<CashierSection, string> = {
     'main-vault-audit-log': '/cashier/main-vault-audit-log',
 };
 
-const vaultEntryOpen = ref(false);
-const vaultEntryType = ref<'vault_in' | 'adjustment'>('vault_in');
-const vaultEntryDenoms = ref<Denoms>({});
 const issueEmployeeId = ref<number | null>(null);
 const issueDenoms = ref<Denoms>({});
 const issueNote = ref('');
@@ -221,9 +218,6 @@ const availableByNumber = computed(() => {
 
     return result;
 });
-const vaultEntryTotal = computed(() =>
-    denominationTotal(vaultEntryDenoms.value),
-);
 const issueTotal = computed(() => denominationTotal(issueDenoms.value));
 const selectedIssueTeller = computed(() =>
     props.tellers.find((teller) => teller.id === issueEmployeeId.value),
@@ -652,45 +646,6 @@ onBeforeUnmount(() => {
     unsubscribeRole?.();
     disconnectNgweLweEcho();
 });
-
-function openVaultEntry(entryType: 'vault_in' | 'adjustment') {
-    vaultEntryType.value = entryType;
-    vaultEntryDenoms.value = {};
-    vaultEntryOpen.value = true;
-}
-
-function recordVaultEntry() {
-    if (vaultEntryTotal.value <= 0) {
-        return;
-    }
-
-    busy.value = true;
-    error.value = '';
-    notice.value = '';
-
-    router.post(
-        '/cashier/vault/entries',
-        {
-            entry_type: vaultEntryType.value,
-            denominations: vaultEntryDenoms.value,
-            note:
-                vaultEntryType.value === 'vault_in'
-                    ? 'Cash received into main vault.'
-                    : 'Cashier vault adjustment.',
-        },
-        {
-            headers: authHeaders(),
-            preserveScroll: true,
-            onSuccess: () => {
-                vaultEntryDenoms.value = {};
-                vaultEntryOpen.value = false;
-                notice.value = 'Cash received into the main vault.';
-            },
-            onError: (errors) => (error.value = firstInertiaError(errors)),
-            onFinish: () => (busy.value = false),
-        },
-    );
-}
 
 function issueFloat() {
     if (!canIssue.value || issueEmployeeId.value === null) {
@@ -1287,24 +1242,14 @@ function statusLabel(status: string): string {
                     </h2>
                     <p class="mt-1 text-xs text-slate">
                         Available stock is the live main vault balance after
-                        issued Teller floats are removed.
+                        issued Teller floats are removed. Only the Owner/Admin
+                        can deposit, withdraw, or manually adjust this vault.
                     </p>
                 </div>
-                <div class="flex flex-wrap gap-2">
-                    <button
-                        type="button"
-                        class="rounded-pill bg-ink px-4 py-2 text-xs font-bold text-white transition hover:bg-brand"
-                        @click="openVaultEntry('vault_in')"
-                    >
-                        Record cash received
-                    </button>
-                    <button
-                        type="button"
-                        class="rounded-pill border border-line px-4 py-2 text-xs font-bold text-slate transition hover:border-brand hover:text-brand"
-                        @click="openVaultEntry('adjustment')"
-                    >
-                        Record adjustment
-                    </button>
+                <div
+                    class="rounded-pill border border-balance/20 bg-balance/5 px-3 py-2 text-xs font-bold text-balance"
+                >
+                    Owner managed · read only
                 </div>
             </div>
             <div class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4 sm:p-6">
@@ -2234,79 +2179,6 @@ function statusLabel(status: string): string {
                         @click="requestCashInReview('confirm')"
                     >
                         Confirm Cash In
-                    </button>
-                </footer>
-            </section>
-        </div>
-
-        <div
-            v-if="vaultEntryOpen"
-            class="fixed inset-0 z-40 grid place-items-center bg-ink/55 p-4"
-            @click.self="vaultEntryOpen = false"
-        >
-            <section
-                class="max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-line bg-card shadow-2xl"
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="vault-entry-title"
-            >
-                <header
-                    class="flex items-start justify-between border-b border-line px-5 py-4"
-                >
-                    <div>
-                        <h2 id="vault-entry-title" class="text-lg font-black">
-                            {{
-                                vaultEntryType === 'vault_in'
-                                    ? 'Record cash received'
-                                    : 'Record vault adjustment'
-                            }}
-                        </h2>
-                        <p class="mt-1 text-xs text-slate">
-                            {{
-                                vaultEntryType === 'vault_in'
-                                    ? 'Add physical cash to the shared Cashier main vault.'
-                                    : 'Use only for an approved physical cash correction.'
-                            }}
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        class="text-xl text-slate"
-                        @click="vaultEntryOpen = false"
-                    >
-                        ×
-                    </button>
-                </header>
-                <div class="p-4 sm:p-5">
-                    <DenomDrawer
-                        v-model="vaultEntryDenoms"
-                        :notes="notes"
-                        label="Cash received"
-                    />
-                </div>
-                <footer
-                    class="flex justify-end gap-2 border-t border-line px-5 py-4"
-                >
-                    <button
-                        type="button"
-                        class="rounded-pill border border-line px-4 py-2 text-xs font-bold text-slate"
-                        @click="vaultEntryOpen = false"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        :disabled="vaultEntryTotal <= 0 || busy"
-                        class="rounded-pill bg-ink px-4 py-2 text-xs font-bold text-white disabled:opacity-40"
-                        @click="recordVaultEntry"
-                    >
-                        {{
-                            busy
-                                ? 'Saving…'
-                                : 'Save ' +
-                                  formatMoney(vaultEntryTotal) +
-                                  ' MMK'
-                        }}
                     </button>
                 </footer>
             </section>

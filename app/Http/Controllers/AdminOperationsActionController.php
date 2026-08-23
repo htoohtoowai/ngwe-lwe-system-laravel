@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\AccountType;
 use App\Http\Requests\AccountRequest;
+use App\Http\Requests\AdminVaultEntryRequest;
 use App\Http\Requests\BalanceAdjustRequest;
 use App\Http\Requests\CompanyRequest;
 use App\Http\Requests\ExchangeRateRequest;
@@ -15,9 +16,11 @@ use App\Models\Company;
 use App\Models\ExchangeRate;
 use App\Models\User;
 use App\Repositories\AccountRepository;
+use App\Repositories\CashDenominationRepository;
 use App\Repositories\CompanyRepository;
 use App\Repositories\ExchangeRateRepository;
 use App\Repositories\UserRepository;
+use App\Repositories\VaultTransactionRepository;
 use App\Services\DailyReportService;
 use App\Services\DatabaseBackupService;
 use App\Services\RealtimeBroadcastService;
@@ -41,6 +44,8 @@ class AdminOperationsActionController extends Controller
         private readonly DailyReportService $reports,
         private readonly RealtimeBroadcastService $broadcasts,
         private readonly DatabaseBackupService $backups,
+        private readonly CashDenominationRepository $vault,
+        private readonly VaultTransactionRepository $vaultTransactions,
     ) {}
 
     public function storeCompany(CompanyRequest $request): RedirectResponse
@@ -161,10 +166,99 @@ class AdminOperationsActionController extends Controller
         return back()->with('success', 'Account balance adjusted.');
     }
 
+    public function recordCashierVaultEntry(AdminVaultEntryRequest $request): RedirectResponse
+    {
+        $data = $request->validated();
+        $denominations = collect($data['denominations'])
+            ->mapWithKeys(fn ($quantity, $denomination): array => [(int) $denomination => (int) $quantity])
+            ->all();
+        $total = Money::denominationTotal($denominations);
+        $cashier = User::query()
+            ->where('role', 'cashier')
+            ->where('is_active', true)
+            ->first();
+
+        if ($cashier === null) {
+            throw ValidationException::withMessages([
+                'form' => 'An active Cashier is required before the Owner can manage the Cashier vault.',
+            ]);
+        }
+
+        $isDeposit = $data['entry_type'] === 'vault_in';
+        $direction = $isDeposit ? 'deposit' : 'withdraw';
+        $defaultNote = $isDeposit
+            ? 'Owner deposited cash into the Cashier main vault.'
+            : 'Owner withdrew cash from the Cashier main vault.';
+        $note = trim((string) ($data['note'] ?? '')) ?: $defaultNote;
+        $auditNote = sprintf(
+            'Owner %s for Cashier %s. %s',
+            $isDeposit ? 'deposit to Cashier vault' : 'withdrawal from Cashier vault',
+            $cashier->full_name,
+            $note,
+        );
+
+        try {
+            DB::transaction(function () use (
+                $request,
+                $cashier,
+                $data,
+                $denominations,
+                $total,
+                $direction,
+                $auditNote,
+            ): void {
+                $this->vault->recordBulk(
+                    entryType: $data['entry_type'],
+                    denominations: $denominations,
+                    createdBy: $request->user()->id,
+                    note: $auditNote,
+                );
+
+                // Keep the existing vault_transactions enum stable and use the
+                // immutable note plus ActivityLog to distinguish deposit/withdraw.
+                $this->vaultTransactions->recordBulk(
+                    txnType: 'adjustment',
+                    denominations: $denominations,
+                    performedBy: $request->user()->id,
+                    note: $auditNote,
+                );
+
+                ActivityLog::query()->create([
+                    'user_id' => $request->user()->id,
+                    'action' => 'cashier_vault_'.$direction,
+                    'entity_type' => 'cashier_vault',
+                    'entity_id' => $cashier->id,
+                    'details' => [
+                        'cashier_id' => $cashier->id,
+                        'cashier_name' => $cashier->full_name,
+                        'direction' => $direction,
+                        'amount' => $total,
+                        'denominations' => $denominations,
+                        'note' => $auditNote,
+                    ],
+                ]);
+            });
+        } catch (\RuntimeException|\InvalidArgumentException $exception) {
+            throw ValidationException::withMessages(['denominations' => $exception->getMessage()]);
+        }
+
+        $this->broadcasts->balanceUpdated();
+
+        return back()->with(
+            'success',
+            $isDeposit
+                ? 'Cash deposited into the Cashier vault.'
+                : 'Cash withdrawn from the Cashier vault.',
+        );
+    }
+
     public function storeUser(UserRequest $request): RedirectResponse
     {
+        $data = $request->validated();
+        $this->assertSingleCashier($data);
+
         try {
-            $user = $this->users->create($request->validated());
+            $user = $this->users->create($data);
         } catch (QueryException) {
             throw ValidationException::withMessages(['username' => 'Username or email already exists.']);
         }
@@ -175,6 +269,7 @@ class AdminOperationsActionController extends Controller
     public function updateUser(UserRequest $request, User $user): RedirectResponse
     {
         $data = $request->validated();
+        $this->assertSingleCashier($data, $user);
         if ($request->user()->is($user) && (($data['is_active'] ?? true) === false)) {
             throw ValidationException::withMessages(['is_active' => 'Admins cannot deactivate their own active session.']);
         }
@@ -191,6 +286,7 @@ class AdminOperationsActionController extends Controller
     public function toggleUser(Request $request, User $user): RedirectResponse
     {
         $data = $request->validate(['is_active' => ['required', 'boolean']]);
+        $this->assertSingleCashier($data, $user);
         if ($request->user()->is($user) && $data['is_active'] === false) {
             throw ValidationException::withMessages(['is_active' => 'Admins cannot deactivate their own active session.']);
         }
@@ -283,6 +379,27 @@ class AdminOperationsActionController extends Controller
         $this->broadcasts->ping($request->user());
 
         return back()->with('success', 'Broadcast test sent.');
+    }
+
+    /** @param array<string, mixed> $data */
+    private function assertSingleCashier(array $data, ?User $target = null): void
+    {
+        $role = (string) ($data['role'] ?? $target?->role ?? '');
+
+        if ($role !== 'cashier') {
+            return;
+        }
+
+        $otherCashierExists = User::query()
+            ->where('role', 'cashier')
+            ->when($target !== null, fn ($query) => $query->whereKeyNot($target->id))
+            ->exists();
+
+        if ($otherCashierExists) {
+            throw ValidationException::withMessages([
+                'role' => 'Only one Cashier account is allowed. Update the existing Cashier instead of creating or assigning another one.',
+            ]);
+        }
     }
 
     private function storeCompanyLogo(Request $request, Company $company): void

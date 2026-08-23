@@ -2,13 +2,15 @@
 import { Link, router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ConfirmActionModal from '@/components/bank/ConfirmActionModal.vue';
+import DenomDrawer from '@/components/bank/DenomDrawer.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
 import AdminListFrame from '@/components/admin/operations/AdminListFrame.vue';
 
 type Role = 'admin' | 'cashier' | 'teller';
 type MoneyValue = string | number | null;
 type DenominationMap = Record<string, number>;
-type RequestOptions = {
+type Denoms = Record<number, number>;
+type InertiaVisitOptions = {
     method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
     body?: Record<string, unknown> | FormData;
 };
@@ -206,10 +208,7 @@ const props = defineProps<{
 const page = usePage<{ adminData?: AdminData }>();
 const initialData = props.adminData ?? page.props.adminData;
 
-const setupSections: AdminTab[] = [
-    'companies',
-    'exchange-rates',
-];
+const setupSections: AdminTab[] = ['companies', 'exchange-rates'];
 
 const activeTab = computed<AdminTab>(() => props.section ?? 'overview');
 const activeMode = computed<AdminMode>(() => props.mode ?? 'list');
@@ -255,7 +254,13 @@ const users = ref<User[]>(initialData?.users ?? []);
 const transactions = ref<Transaction[]>(initialData?.transactions ?? []);
 const activityLogs = ref<ActivityLog[]>(initialData?.activityLogs ?? []);
 const cashFloats = ref<CashFloat[]>(initialData?.cashFloats ?? []);
-const vaultInventory = ref<VaultInventory | null>(initialData?.vaultInventory ?? null);
+const vaultInventory = ref<VaultInventory | null>(
+    initialData?.vaultInventory ?? null,
+);
+const vaultEntryOpen = ref(false);
+const vaultEntryMode = ref<'deposit' | 'withdraw'>('deposit');
+const vaultEntryDenoms = ref<Denoms>({});
+const vaultEntryNote = ref('');
 const exchangeRates = ref<ExchangeRate[]>(initialData?.exchangeRates ?? []);
 const adminListSearch = ref('');
 const adminListFilter = ref('');
@@ -286,23 +291,31 @@ const activeCompanies = computed(() =>
     companies.value.filter((company) => company.is_active),
 );
 const selectableAccounts = computed(() =>
-    accounts.value.filter((account) => account.is_active && account.company?.is_active !== false),
+    accounts.value.filter(
+        (account) => account.is_active && account.company?.is_active !== false,
+    ),
 );
 const filteredExchangeRates = computed(() => filteredList(exchangeRates.value));
 const filteredAccounts = computed(() => filteredList(accounts.value));
 const filteredUsers = computed(() => filteredList(users.value));
 const currentAdminList = computed(() => {
     if (activeTab.value === 'companies') return filteredCompanies.value;
-    if (activeTab.value === 'exchange-rates') return filteredExchangeRates.value;
+    if (activeTab.value === 'exchange-rates')
+        return filteredExchangeRates.value;
     if (activeTab.value === 'accounts') return filteredAccounts.value;
     if (activeTab.value === 'users') return filteredUsers.value;
     return [];
 });
 const adminListPageCount = computed(() =>
-    Math.max(1, Math.ceil(currentAdminList.value.length / adminListPageSize.value)),
+    Math.max(
+        1,
+        Math.ceil(currentAdminList.value.length / adminListPageSize.value),
+    ),
 );
 const paginatedCompanies = computed(() => pagedList(filteredCompanies.value));
-const paginatedExchangeRates = computed(() => pagedList(filteredExchangeRates.value));
+const paginatedExchangeRates = computed(() =>
+    pagedList(filteredExchangeRates.value),
+);
 const paginatedAccounts = computed(() => pagedList(filteredAccounts.value));
 const paginatedUsers = computed(() => pagedList(filteredUsers.value));
 const statusFilterOptions = [
@@ -338,8 +351,11 @@ const accountForm = ref({
     is_agent: false,
     is_active: true,
 });
-const selectedAccountCompany = computed(() =>
-    companies.value.find((company) => company.id === accountForm.value.company_id) ?? null,
+const selectedAccountCompany = computed(
+    () =>
+        companies.value.find(
+            (company) => company.id === accountForm.value.company_id,
+        ) ?? null,
 );
 watch(
     () => accountForm.value.account_type,
@@ -418,16 +434,28 @@ const filteredTransactions = computed(() => {
             transaction.customer_fee,
             transaction.status,
             userName(transaction.created_by),
-        ].some((value) => String(value ?? '').toLowerCase().includes(query)),
+        ].some((value) =>
+            String(value ?? '')
+                .toLowerCase()
+                .includes(query),
+        ),
     );
 });
 const transactionPageCount = computed(() =>
-    Math.max(1, Math.ceil(filteredTransactions.value.length / transactionPageSize.value)),
+    Math.max(
+        1,
+        Math.ceil(
+            filteredTransactions.value.length / transactionPageSize.value,
+        ),
+    ),
 );
 const paginatedTransactions = computed(() => {
     const start = (transactionPage.value - 1) * transactionPageSize.value;
 
-    return filteredTransactions.value.slice(start, start + transactionPageSize.value);
+    return filteredTransactions.value.slice(
+        start,
+        start + transactionPageSize.value,
+    );
 });
 const activityPageSize = ref(10);
 const activityPage = ref(1);
@@ -500,6 +528,44 @@ const currentAccount = computed(
 );
 const currentUser = computed(
     () => users.value.find((user) => user.id === resourceId.value) ?? null,
+);
+const cashierUser = computed(
+    () => users.value.find((user) => user.role === 'cashier') ?? null,
+);
+const activeCashier = computed(() =>
+    cashierUser.value?.is_active ? cashierUser.value : null,
+);
+const cashierRoleUnavailable = computed(
+    () =>
+        cashierUser.value !== null &&
+        cashierUser.value.id !== currentUser.value?.id,
+);
+const vaultNotes = computed(() => {
+    const values = Object.keys(vaultInventory.value?.main_vault ?? {})
+        .map(Number)
+        .filter((value) => Number.isFinite(value) && value > 0)
+        .sort((left, right) => right - left);
+
+    return values.length > 0
+        ? values
+        : [20000, 10000, 5000, 1000, 500, 200, 100, 50];
+});
+const vaultStock = computed<Denoms>(() => {
+    const stock: Denoms = {};
+    for (const note of vaultNotes.value) {
+        stock[note] = Number(
+            vaultInventory.value?.main_vault?.[String(note)] ?? 0,
+        );
+    }
+
+    return stock;
+});
+const vaultEntryTotal = computed(() =>
+    vaultNotes.value.reduce(
+        (total, note) =>
+            total + note * Number(vaultEntryDenoms.value[note] ?? 0),
+        0,
+    ),
 );
 const currentExchangeRate = computed(
     () =>
@@ -680,12 +746,9 @@ async function refreshCompanyLogoUrls(
     await Promise.all(
         companiesWithLogos.map(async (company) => {
             try {
-                const response = await fetch(
-                    `/companies/${company.id}/logo`,
-                    {
-                        headers: authHeaders(),
-                    },
-                );
+                const response = await fetch(`/companies/${company.id}/logo`, {
+                    headers: authHeaders(),
+                });
 
                 if (!response.ok) {
                     return;
@@ -713,9 +776,7 @@ function isSetupSection(tab: AdminTab): boolean {
     return setupSections.includes(tab);
 }
 
-function showSetupCard(
-    tab: 'companies' | 'exchange-rates',
-): boolean {
+function showSetupCard(tab: 'companies' | 'exchange-rates'): boolean {
     return activeTab.value === tab;
 }
 
@@ -805,10 +866,8 @@ function syncFormsFromRoute(): void {
     if (activeMode.value === 'create') {
         if (activeTab.value === 'companies') {
             resetCompanyForm();
-
         } else if (activeTab.value === 'accounts') {
             resetAccountForm();
-
         } else if (activeTab.value === 'users') {
             resetUserForm();
         } else if (activeTab.value === 'exchange-rates') {
@@ -838,7 +897,6 @@ function syncFormsFromRoute(): void {
             category: currentCompany.value.category,
             is_active: currentCompany.value.is_active,
         };
-
     } else if (activeTab.value === 'accounts' && currentAccount.value) {
         accountForm.value = {
             company_id: currentAccount.value.company_id ?? null,
@@ -879,10 +937,15 @@ function syncFormsFromRoute(): void {
     }
 }
 
-function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+function inertiaVisit<T>(path: string, options: InertiaVisitOptions = {}): Promise<T> {
     return new Promise((resolve, reject) => {
         router.visit(path, {
-            method: (options.method ?? 'GET').toLowerCase() as 'get' | 'post' | 'put' | 'patch' | 'delete',
+            method: (options.method ?? 'GET').toLowerCase() as
+                | 'get'
+                | 'post'
+                | 'put'
+                | 'patch'
+                | 'delete',
             data: (options.body ?? {}) as never,
             preserveScroll: true,
             forceFormData: options.body instanceof FormData,
@@ -898,9 +961,10 @@ function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
 function firstError(value: unknown): string {
     const data = value as {
         message?: string;
-        errors?: Record<string, string[]>;
+        errors?: Record<string, string | string[]>;
     };
-    const validation = data.errors ? Object.values(data.errors)[0]?.[0] : null;
+    const first = data.errors ? Object.values(data.errors)[0] : null;
+    const validation = Array.isArray(first) ? first[0] : first;
 
     return validation ?? data.message ?? 'Request failed.';
 }
@@ -916,7 +980,6 @@ function money(value: MoneyValue | undefined): string {
         maximumFractionDigits: 2,
     });
 }
-
 
 function dateTime(value: string | null | undefined): string {
     return value ? new Date(value).toLocaleString() : '-';
@@ -1072,8 +1135,10 @@ async function saveCompany(): Promise<void> {
         body.append('is_active', companyForm.value.is_active ? '1' : '0');
         if (companyLogoFile.value) body.append('logo', companyLogoFile.value);
 
-        await request(
-            isEdit ? `/admin/actions/companies/${resourceId.value}` : '/admin/actions/companies',
+        await inertiaVisit(
+            isEdit
+                ? `/admin/actions/companies/${resourceId.value}`
+                : '/admin/actions/companies',
             {
                 method: 'POST',
                 body,
@@ -1085,7 +1150,7 @@ async function saveCompany(): Promise<void> {
 
 async function toggleCompany(company: Company): Promise<void> {
     await runAction('Company status updated.', async () => {
-        await request(`/admin/actions/companies/${company.id}/status`, {
+        await inertiaVisit(`/admin/actions/companies/${company.id}/status`, {
             method: 'PATCH',
             body: { is_active: !company.is_active },
         });
@@ -1110,7 +1175,9 @@ async function confirmCompanyDelete(): Promise<void> {
     }
 
     await runAction('Company deleted.', async () => {
-        await request(`/admin/actions/companies/${company.id}`, { method: 'DELETE' });
+        await inertiaVisit(`/admin/actions/companies/${company.id}`, {
+            method: 'DELETE',
+        });
         companyPendingDelete.value = null;
     });
 }
@@ -1124,8 +1191,10 @@ async function saveAccount(): Promise<void> {
 
     await runAction('Account saved.', async () => {
         const isEdit = activeMode.value === 'edit' && resourceId.value !== null;
-        await request(
-            isEdit ? `/admin/actions/accounts/${resourceId.value}` : '/admin/actions/accounts',
+        await inertiaVisit(
+            isEdit
+                ? `/admin/actions/accounts/${resourceId.value}`
+                : '/admin/actions/accounts',
             {
                 method: isEdit ? 'PATCH' : 'POST',
                 body: {
@@ -1140,7 +1209,7 @@ async function saveAccount(): Promise<void> {
 
 async function toggleAccount(account: Account): Promise<void> {
     await runAction('Account status updated.', async () => {
-        await request(`/admin/actions/accounts/${account.id}/status`, {
+        await inertiaVisit(`/admin/actions/accounts/${account.id}/status`, {
             method: 'PATCH',
             body: { is_active: !account.is_active },
         });
@@ -1165,7 +1234,9 @@ async function confirmAccountDelete(): Promise<void> {
     }
 
     await runAction('Account deleted.', async () => {
-        await request(`/admin/actions/accounts/${account.id}`, { method: 'DELETE' });
+        await inertiaVisit(`/admin/actions/accounts/${account.id}`, {
+            method: 'DELETE',
+        });
         accountPendingDelete.value = null;
     });
 }
@@ -1178,7 +1249,7 @@ async function adjustAccountBalance(): Promise<void> {
     }
 
     await runAction('Account balance adjusted.', async () => {
-        await request(
+        await inertiaVisit(
             `/admin/actions/accounts/${adjustForm.value.account_id}/balance-adjust`,
             {
                 method: 'POST',
@@ -1195,6 +1266,58 @@ async function adjustAccountBalance(): Promise<void> {
             amount: 0,
             remark: '',
         };
+    });
+}
+
+function openVaultEntry(mode: 'deposit' | 'withdraw'): void {
+    if (activeCashier.value === null) {
+        error.value =
+            'Create or activate the Cashier before managing the Cashier vault.';
+        return;
+    }
+
+    clearFeedback();
+    vaultEntryMode.value = mode;
+    vaultEntryDenoms.value = {};
+    vaultEntryNote.value = '';
+    vaultEntryOpen.value = true;
+}
+
+function closeVaultEntry(): void {
+    if (busy.value === '') {
+        vaultEntryOpen.value = false;
+        vaultEntryDenoms.value = {};
+        vaultEntryNote.value = '';
+    }
+}
+
+async function saveVaultEntry(): Promise<void> {
+    if (vaultEntryTotal.value <= 0) {
+        error.value = 'Enter at least one banknote.';
+        return;
+    }
+
+    const isDeposit = vaultEntryMode.value === 'deposit';
+    const success = isDeposit
+        ? 'Cash deposited into Cashier vault.'
+        : 'Cash withdrawn from Cashier vault.';
+
+    await runAction(success, async () => {
+        await inertiaVisit('/admin/actions/vault/entries', {
+            method: 'POST',
+            body: {
+                entry_type: isDeposit ? 'vault_in' : 'vault_out',
+                denominations: vaultEntryDenoms.value,
+                note:
+                    vaultEntryNote.value ||
+                    (isDeposit
+                        ? 'Owner deposited cash into the Cashier main vault.'
+                        : 'Owner withdrew cash from the Cashier main vault.'),
+            },
+        });
+        vaultEntryOpen.value = false;
+        vaultEntryDenoms.value = {};
+        vaultEntryNote.value = '';
     });
 }
 
@@ -1217,8 +1340,10 @@ async function saveUser(): Promise<void> {
             body.pin = userForm.value.pin;
         }
 
-        await request(
-            isEdit ? `/admin/actions/users/${resourceId.value}` : '/admin/actions/users',
+        await inertiaVisit(
+            isEdit
+                ? `/admin/actions/users/${resourceId.value}`
+                : '/admin/actions/users',
             {
                 method: isEdit ? 'PATCH' : 'POST',
                 body,
@@ -1230,7 +1355,7 @@ async function saveUser(): Promise<void> {
 
 async function toggleUser(user: User): Promise<void> {
     await runAction('User status updated.', async () => {
-        await request(`/admin/actions/users/${user.id}/status`, {
+        await inertiaVisit(`/admin/actions/users/${user.id}/status`, {
             method: 'PATCH',
             body: { is_active: !user.is_active },
         });
@@ -1245,7 +1370,7 @@ async function resetUserPassword(): Promise<void> {
     }
 
     await runAction('User password reset.', async () => {
-        await request(
+        await inertiaVisit(
             `/admin/actions/users/${credentialForm.value.user_id}/reset-password`,
             {
                 method: 'POST',
@@ -1264,10 +1389,13 @@ async function setUserPin(): Promise<void> {
     }
 
     await runAction('User PIN updated.', async () => {
-        await request(`/admin/actions/users/${credentialForm.value.user_id}/pin`, {
-            method: 'POST',
-            body: { pin: credentialForm.value.pin },
-        });
+        await inertiaVisit(
+            `/admin/actions/users/${credentialForm.value.user_id}/pin`,
+            {
+                method: 'POST',
+                body: { pin: credentialForm.value.pin },
+            },
+        );
         credentialForm.value.pin = '';
     });
 }
@@ -1275,7 +1403,7 @@ async function setUserPin(): Promise<void> {
 async function saveExchangeRate(): Promise<void> {
     await runAction('Exchange rate saved.', async () => {
         const isEdit = activeMode.value === 'edit' && resourceId.value !== null;
-        await request(
+        await inertiaVisit(
             isEdit
                 ? `/admin/actions/exchange-rates/${resourceId.value}`
                 : '/admin/actions/exchange-rates',
@@ -1306,7 +1434,7 @@ async function confirmExchangeRateDelete(): Promise<void> {
     }
 
     await runAction('Exchange rate deleted.', async () => {
-        await request('/admin/actions/exchange-rates/' + rate.id, {
+        await inertiaVisit('/admin/actions/exchange-rates/' + rate.id, {
             method: 'DELETE',
         });
         exchangeRatePendingDelete.value = null;
@@ -1325,7 +1453,7 @@ const exchangeRateDeleteDescription = computed(() => {
 });
 async function changePassword(): Promise<void> {
     await runAction('Password changed.', async () => {
-        await request('/admin/actions/password', {
+        await inertiaVisit('/admin/actions/password', {
             method: 'POST',
             body: { ...passwordForm.value },
         });
@@ -1335,7 +1463,7 @@ async function changePassword(): Promise<void> {
 
 async function closeDay(): Promise<void> {
     await runAction('Day closed.', async () => {
-        await request('/admin/actions/close-day', {
+        await inertiaVisit('/admin/actions/close-day', {
             method: 'POST',
             body: {
                 date: reportDate.value,
@@ -1361,7 +1489,7 @@ async function createBackup(): Promise<void> {
 
 async function sendBroadcastTest(): Promise<void> {
     await runAction('Broadcast test sent.', async () => {
-        await request('/admin/actions/broadcast-test', { method: 'POST' });
+        await inertiaVisit('/admin/actions/broadcast-test', { method: 'POST' });
     });
 }
 </script>
@@ -1495,7 +1623,9 @@ async function sendBroadcastTest(): Promise<void> {
                             </p>
                         </div>
                         <div class="rounded-lg bg-mist p-4">
-                            <p class="text-xs font-bold text-slate">Transactions</p>
+                            <p class="text-xs font-bold text-slate">
+                                Transactions
+                            </p>
                             <p class="money mt-1 font-black text-ink">
                                 {{ dailySummary?.transaction_count ?? 0 }}
                             </p>
@@ -1579,9 +1709,9 @@ async function sendBroadcastTest(): Promise<void> {
                             <span class="text-sm font-bold text-slate"
                                 >Account Features</span
                             >
-                            <strong class="money text-ink"
-                                >{{ accountFeatureOptions.length }}</strong
-                            >
+                            <strong class="money text-ink">{{
+                                accountFeatureOptions.length
+                            }}</strong>
                         </div>
                         <div
                             class="flex items-center justify-between rounded-lg bg-mist px-4 py-3"
@@ -1605,7 +1735,6 @@ async function sendBroadcastTest(): Promise<void> {
                             }}</strong>
                         </div>
                     </div>
-
                 </div>
             </section>
 
@@ -1805,123 +1934,131 @@ async function sendBroadcastTest(): Promise<void> {
                         :filter-options="statusFilterOptions"
                         search-placeholder="Search company"
                     >
-                    <div class="mt-4 overflow-auto rounded-lg border border-line">
-                        <table class="w-full text-left text-sm">
-                            <tbody class="divide-y divide-line">
-                                <tr
-                                    v-for="company in paginatedCompanies"
-                                    :key="company.id"
-                                >
-                                    <td class="px-3 py-3">
-                                        <div class="flex items-center gap-3">
-                                            <span
-                                                class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-card text-sm font-black text-brand"
+                        <div
+                            class="mt-4 overflow-auto rounded-lg border border-line"
+                        >
+                            <table class="w-full text-left text-sm">
+                                <tbody class="divide-y divide-line">
+                                    <tr
+                                        v-for="company in paginatedCompanies"
+                                        :key="company.id"
+                                    >
+                                        <td class="px-3 py-3">
+                                            <div
+                                                class="flex items-center gap-3"
                                             >
-                                                <img
-                                                    v-if="
-                                                        companyLogoUrls[
-                                                            company.id
-                                                        ]
-                                                    "
-                                                    :src="
-                                                        companyLogoUrls[
-                                                            company.id
-                                                        ]
-                                                    "
-                                                    :alt="`${company.name} logo`"
-                                                    class="size-full object-contain"
-                                                />
-                                                <span v-else>{{
-                                                    companyInitial(company)
-                                                }}</span>
-                                            </span>
-                                            <div class="min-w-0">
-                                                <p
-                                                    class="truncate font-bold text-ink"
+                                                <span
+                                                    class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-card text-sm font-black text-brand"
                                                 >
-                                                    {{ company.name }}
-                                                </p>
-                                                <p
-                                                    class="text-xs font-semibold text-slate"
-                                                >
-                                                    {{ company.category }}
-                                                    <span
-                                                        v-if="company.logo_path"
-                                                        class="text-slate/70"
+                                                    <img
+                                                        v-if="
+                                                            companyLogoUrls[
+                                                                company.id
+                                                            ]
+                                                        "
+                                                        :src="
+                                                            companyLogoUrls[
+                                                                company.id
+                                                            ]
+                                                        "
+                                                        :alt="`${company.name} logo`"
+                                                        class="size-full object-contain"
+                                                    />
+                                                    <span v-else>{{
+                                                        companyInitial(company)
+                                                    }}</span>
+                                                </span>
+                                                <div class="min-w-0">
+                                                    <p
+                                                        class="truncate font-bold text-ink"
                                                     >
-                                                        / Logo
-                                                    </span>
-                                                </p>
+                                                        {{ company.name }}
+                                                    </p>
+                                                    <p
+                                                        class="text-xs font-semibold text-slate"
+                                                    >
+                                                        {{ company.category }}
+                                                        <span
+                                                            v-if="
+                                                                company.logo_path
+                                                            "
+                                                            class="text-slate/70"
+                                                        >
+                                                            / Logo
+                                                        </span>
+                                                    </p>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </td>
-                                    <td class="px-3 py-3 text-right">
-                                        <div class="flex justify-end gap-1.5">
-                                            <Link
-                                                :href="
-                                                    adminPath(
-                                                        'companies',
-                                                        'detail',
-                                                        company.id,
-                                                    )
-                                                "
-                                                :headers="authHeaders()"
-                                                class="rounded-pill bg-mist px-3 py-1 text-xs font-black text-slate"
+                                        </td>
+                                        <td class="px-3 py-3 text-right">
+                                            <div
+                                                class="flex justify-end gap-1.5"
                                             >
-                                                View
-                                            </Link>
-                                            <Link
-                                                :href="
-                                                    adminPath(
-                                                        'companies',
-                                                        'edit',
-                                                        company.id,
-                                                    )
-                                                "
-                                                :headers="authHeaders()"
-                                                class="rounded-pill bg-ink px-3 py-1 text-xs font-black text-white"
-                                            >
-                                                Edit
-                                            </Link>
+                                                <Link
+                                                    :href="
+                                                        adminPath(
+                                                            'companies',
+                                                            'detail',
+                                                            company.id,
+                                                        )
+                                                    "
+                                                    :headers="authHeaders()"
+                                                    class="rounded-pill bg-mist px-3 py-1 text-xs font-black text-slate"
+                                                >
+                                                    View
+                                                </Link>
+                                                <Link
+                                                    :href="
+                                                        adminPath(
+                                                            'companies',
+                                                            'edit',
+                                                            company.id,
+                                                        )
+                                                    "
+                                                    :headers="authHeaders()"
+                                                    class="rounded-pill bg-ink px-3 py-1 text-xs font-black text-white"
+                                                >
+                                                    Edit
+                                                </Link>
+                                                <button
+                                                    v-if="company.is_active"
+                                                    type="button"
+                                                    class="rounded-pill border border-brand/25 bg-brand-soft px-3 py-1 text-xs font-black text-brand"
+                                                    :disabled="busy !== ''"
+                                                    @click="
+                                                        openCompanyDeleteModal(
+                                                            company,
+                                                        )
+                                                    "
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td class="px-3 py-3 text-right">
                                             <button
-                                                v-if="company.is_active"
                                                 type="button"
-                                                class="rounded-pill border border-brand/25 bg-brand-soft px-3 py-1 text-xs font-black text-brand"
-                                                :disabled="busy !== ''"
-                                                @click="
-                                                    openCompanyDeleteModal(
-                                                        company,
+                                                class="rounded-pill px-3 py-1 text-xs font-black"
+                                                :class="
+                                                    statusClass(
+                                                        statusTone(
+                                                            company.is_active,
+                                                        ),
                                                     )
                                                 "
+                                                @click="toggleCompany(company)"
                                             >
-                                                Delete
+                                                {{
+                                                    company.is_active
+                                                        ? 'Active'
+                                                        : 'Inactive'
+                                                }}
                                             </button>
-                                        </div>
-                                    </td>
-                                    <td class="px-3 py-3 text-right">
-                                        <button
-                                            type="button"
-                                            class="rounded-pill px-3 py-1 text-xs font-black"
-                                            :class="
-                                                statusClass(
-                                                    statusTone(
-                                                        company.is_active,
-                                                    ),
-                                                )
-                                            "
-                                            @click="toggleCompany(company)"
-                                        >
-                                            {{
-                                                company.is_active
-                                                    ? 'Active'
-                                                    : 'Inactive'
-                                            }}
-                                        </button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </AdminListFrame>
                 </div>
 
@@ -2142,62 +2279,66 @@ async function sendBroadcastTest(): Promise<void> {
                         :page-count="adminListPageCount"
                         search-placeholder="Search currency or rate"
                     >
-                    <div class="mt-4 space-y-2">
-                        <div
-                            v-for="rate in paginatedExchangeRates"
-                            :key="rate.id"
-                            class="flex items-center justify-between gap-3 rounded-lg bg-mist px-3 py-2"
-                        >
-                            <span class="text-sm font-bold text-ink"
-                                >{{ rate.base_currency }}/{{
-                                    rate.quote_currency
-                                }}</span
+                        <div class="mt-4 space-y-2">
+                            <div
+                                v-for="rate in paginatedExchangeRates"
+                                :key="rate.id"
+                                class="flex items-center justify-between gap-3 rounded-lg bg-mist px-3 py-2"
                             >
-                            <span class="money text-xs font-bold text-slate"
-                                >{{ money(rate.buy_rate) }} /
-                                {{ money(rate.sell_rate) }}</span
-                            >
-                            <span class="text-xs font-semibold text-slate">
-                                {{ dateTime(rate.updated_at ?? rate.created_at) }}
-                            </span>
-                            <div class="flex gap-1.5">
-                                <Link
-                                    :href="
-                                        adminPath(
-                                            'exchange-rates',
-                                            'detail',
-                                            rate.id,
+                                <span class="text-sm font-bold text-ink"
+                                    >{{ rate.base_currency }}/{{
+                                        rate.quote_currency
+                                    }}</span
+                                >
+                                <span class="money text-xs font-bold text-slate"
+                                    >{{ money(rate.buy_rate) }} /
+                                    {{ money(rate.sell_rate) }}</span
+                                >
+                                <span class="text-xs font-semibold text-slate">
+                                    {{
+                                        dateTime(
+                                            rate.updated_at ?? rate.created_at,
                                         )
-                                    "
-                                    :headers="authHeaders()"
-                                    class="rounded-pill bg-card px-3 py-1 text-xs font-black text-slate"
-                                >
-                                    View
-                                </Link>
-                                <Link
-                                    :href="
-                                        adminPath(
-                                            'exchange-rates',
-                                            'edit',
-                                            rate.id,
-                                        )
-                                    "
-                                    :headers="authHeaders()"
-                                    class="rounded-pill bg-ink px-3 py-1 text-xs font-black text-white"
-                                >
-                                    Edit
-                                </Link>
-                                <button
-                                    type="button"
-                                    class="rounded-pill bg-card px-3 py-1 text-xs font-black text-brand"
-                                    :disabled="busy !== ''"
-                                    @click="deleteExchangeRate(rate)"
-                                >
-                                    Delete
-                                </button>
+                                    }}
+                                </span>
+                                <div class="flex gap-1.5">
+                                    <Link
+                                        :href="
+                                            adminPath(
+                                                'exchange-rates',
+                                                'detail',
+                                                rate.id,
+                                            )
+                                        "
+                                        :headers="authHeaders()"
+                                        class="rounded-pill bg-card px-3 py-1 text-xs font-black text-slate"
+                                    >
+                                        View
+                                    </Link>
+                                    <Link
+                                        :href="
+                                            adminPath(
+                                                'exchange-rates',
+                                                'edit',
+                                                rate.id,
+                                            )
+                                        "
+                                        :headers="authHeaders()"
+                                        class="rounded-pill bg-ink px-3 py-1 text-xs font-black text-white"
+                                    >
+                                        Edit
+                                    </Link>
+                                    <button
+                                        type="button"
+                                        class="rounded-pill bg-card px-3 py-1 text-xs font-black text-brand"
+                                        :disabled="busy !== ''"
+                                        @click="deleteExchangeRate(rate)"
+                                    >
+                                        Delete
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
                     </AdminListFrame>
                 </div>
             </section>
@@ -2253,13 +2394,37 @@ async function sendBroadcastTest(): Promise<void> {
                         </label>
                         <label>
                             <span class="bank-label">Account Type</span>
-                            <select v-model="accountForm.account_type" class="bank-input" required>
-                                <option value="PAY" :disabled="selectedAccountCompany?.category === 'Bank'">Pay</option>
-                                <option value="BANK" :disabled="selectedAccountCompany?.category === 'Pay'">Bank</option>
+                            <select
+                                v-model="accountForm.account_type"
+                                class="bank-input"
+                                required
+                            >
+                                <option
+                                    value="PAY"
+                                    :disabled="
+                                        selectedAccountCompany?.category ===
+                                        'Bank'
+                                    "
+                                >
+                                    Pay
+                                </option>
+                                <option
+                                    value="BANK"
+                                    :disabled="
+                                        selectedAccountCompany?.category ===
+                                        'Pay'
+                                    "
+                                >
+                                    Bank
+                                </option>
                             </select>
                         </label>
                         <label>
-                            <span class="bank-label">{{ accountForm.account_type === 'PAY' ? 'Phone Number' : 'Bank Account Number' }}</span>
+                            <span class="bank-label">{{
+                                accountForm.account_type === 'PAY'
+                                    ? 'Phone Number'
+                                    : 'Bank Account Number'
+                            }}</span>
                             <input
                                 v-model.trim="accountForm.account_identifier"
                                 class="bank-input"
@@ -2279,10 +2444,14 @@ async function sendBroadcastTest(): Promise<void> {
                         <fieldset
                             class="grid gap-2 rounded-lg border border-line p-3 lg:col-span-2"
                         >
-                            <legend class="px-1 text-xs font-black uppercase text-slate">
+                            <legend
+                                class="px-1 text-xs font-black text-slate uppercase"
+                            >
                                 Account Features
                             </legend>
-                            <div class="flex flex-wrap items-center gap-4 text-sm font-bold text-ink">
+                            <div
+                                class="flex flex-wrap items-center gap-4 text-sm font-bold text-ink"
+                            >
                                 <label
                                     v-for="feature in accountFeatureOptions"
                                     :key="feature.value"
@@ -2313,10 +2482,17 @@ async function sendBroadcastTest(): Promise<void> {
                                 <input
                                     v-model="accountForm.is_agent"
                                     type="checkbox"
-                                    :disabled="accountForm.account_type === 'BANK'"
+                                    :disabled="
+                                        accountForm.account_type === 'BANK'
+                                    "
                                     class="size-4 accent-brand disabled:opacity-40"
                                 />
-                                Agent Account <span v-if="accountForm.account_type === 'BANK'" class="text-xs font-normal text-slate">(Pay only)</span>
+                                Agent Account
+                                <span
+                                    v-if="accountForm.account_type === 'BANK'"
+                                    class="text-xs font-normal text-slate"
+                                    >(Pay only)</span
+                                >
                             </label>
                             <label class="flex items-center gap-2">
                                 <input
@@ -2402,21 +2578,34 @@ async function sendBroadcastTest(): Promise<void> {
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt class="font-bold text-slate">{{ currentAccount.account_type === 'PAY' ? 'Phone Number' : 'Bank Account Number' }}</dt>
+                                    <dt class="font-bold text-slate">
+                                        {{
+                                            currentAccount.account_type ===
+                                            'PAY'
+                                                ? 'Phone Number'
+                                                : 'Bank Account Number'
+                                        }}
+                                    </dt>
                                     <dd class="font-black text-ink">
                                         {{ currentAccount.account_identifier }}
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt class="font-bold text-slate">Account Type</dt>
-                                    <dd class="font-black text-ink">{{ currentAccount.account_type }}</dd>
+                                    <dt class="font-bold text-slate">
+                                        Account Type
+                                    </dt>
+                                    <dd class="font-black text-ink">
+                                        {{ currentAccount.account_type }}
+                                    </dd>
                                 </div>
                                 <div>
                                     <dt class="font-bold text-slate">
                                         Provider
                                     </dt>
                                     <dd class="font-black text-ink">
-                                        {{ currentAccount.company?.name ?? '-' }}
+                                        {{
+                                            currentAccount.company?.name ?? '-'
+                                        }}
                                     </dd>
                                 </div>
                                 <div>
@@ -2559,123 +2748,136 @@ async function sendBroadcastTest(): Promise<void> {
                         :filter-options="statusFilterOptions"
                         search-placeholder="Search account, provider, type, identifier"
                     >
-                    <div class="mt-4 overflow-auto rounded-lg border border-line">
-                        <table class="w-full min-w-[820px] text-left text-sm">
-                            <thead class="bg-mist text-xs text-slate uppercase">
-                                <tr>
-                                    <th class="px-4 py-3">Account</th>
-                                    <th class="px-4 py-3">Provider</th>
-                                    <th class="px-4 py-3">Type</th><th class="px-4 py-3">Identifier</th>
-                                    <th class="px-4 py-3 text-right">
-                                        Balance
-                                    </th>
-                                    <th class="px-4 py-3 text-right">Action</th>
-                                    <th class="px-4 py-3 text-right">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-line">
-                                <tr
-                                    v-for="account in paginatedAccounts"
-                                    :key="account.id"
+                        <div
+                            class="mt-4 overflow-auto rounded-lg border border-line"
+                        >
+                            <table
+                                class="w-full min-w-[820px] text-left text-sm"
+                            >
+                                <thead
+                                    class="bg-mist text-xs text-slate uppercase"
                                 >
-                                    <td class="px-4 py-3">
-                                        <p class="font-bold text-ink">
-                                            {{ account.account_name }}
-                                        </p>
-                                        <p
-                                            v-if="account.is_fee_account"
-                                            class="text-xs font-black text-brand"
-                                        >
-                                            Fee account
-                                        </p>
-                                        <p
-                                            v-if="account.is_agent"
-                                            class="text-xs font-black text-balance"
-                                        >
-                                            Agent account
-                                        </p>
-                                    </td>
-                                    <td class="px-4 py-3 text-slate">
-                                        {{ account.company?.name ?? '-' }}
-                                    </td>
-                                    <td class="px-4 py-3 text-slate">
-                                        {{ account.account_type }}
-                                    </td>
-                                    <td class="px-4 py-3 text-slate">
-                                        {{ account.account_identifier }}
-                                    </td>
-                                    <td
-                                        class="money px-4 py-3 text-right font-bold text-ink"
+                                    <tr>
+                                        <th class="px-4 py-3">Account</th>
+                                        <th class="px-4 py-3">Provider</th>
+                                        <th class="px-4 py-3">Type</th>
+                                        <th class="px-4 py-3">Identifier</th>
+                                        <th class="px-4 py-3 text-right">
+                                            Balance
+                                        </th>
+                                        <th class="px-4 py-3 text-right">
+                                            Action
+                                        </th>
+                                        <th class="px-4 py-3 text-right">
+                                            Status
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-line">
+                                    <tr
+                                        v-for="account in paginatedAccounts"
+                                        :key="account.id"
                                     >
-                                        {{ money(account.balance) }}
-                                    </td>
-                                    <td class="px-4 py-3 text-right">
-                                        <div class="flex justify-end gap-1.5">
-                                            <Link
-                                                :href="
-                                                    adminPath(
-                                                        'accounts',
-                                                        'detail',
-                                                        account.id,
-                                                    )
-                                                "
-                                                :headers="authHeaders()"
-                                                class="rounded-pill bg-mist px-3 py-1 text-xs font-black text-slate"
+                                        <td class="px-4 py-3">
+                                            <p class="font-bold text-ink">
+                                                {{ account.account_name }}
+                                            </p>
+                                            <p
+                                                v-if="account.is_fee_account"
+                                                class="text-xs font-black text-brand"
                                             >
-                                                View
-                                            </Link>
-                                            <Link
-                                                :href="
-                                                    adminPath(
-                                                        'accounts',
-                                                        'edit',
-                                                        account.id,
-                                                    )
-                                                "
-                                                :headers="authHeaders()"
-                                                class="rounded-pill bg-ink px-3 py-1 text-xs font-black text-white"
+                                                Fee account
+                                            </p>
+                                            <p
+                                                v-if="account.is_agent"
+                                                class="text-xs font-black text-balance"
                                             >
-                                                Edit
-                                            </Link>
-                                            <button
-                                                v-if="account.is_active"
-                                                type="button"
-                                                class="rounded-pill bg-[#d92d45] px-3 py-1 text-xs font-black text-white"
-                                                :disabled="busy !== ''"
-                                                @click="
-                                                    openAccountDeleteModal(
-                                                        account,
-                                                    )
-                                                "
-                                            >
-                                                Delete
-                                            </button>
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-3 text-right">
-                                        <button
-                                            type="button"
-                                            class="rounded-pill px-3 py-1 text-xs font-black"
-                                            :class="
-                                                statusClass(
-                                                    statusTone(
-                                                        account.is_active,
-                                                    ),
-                                                )
-                                            "
-                                            @click="toggleAccount(account)"
+                                                Agent account
+                                            </p>
+                                        </td>
+                                        <td class="px-4 py-3 text-slate">
+                                            {{ account.company?.name ?? '-' }}
+                                        </td>
+                                        <td class="px-4 py-3 text-slate">
+                                            {{ account.account_type }}
+                                        </td>
+                                        <td class="px-4 py-3 text-slate">
+                                            {{ account.account_identifier }}
+                                        </td>
+                                        <td
+                                            class="money px-4 py-3 text-right font-bold text-ink"
                                         >
-                                            {{
-                                                account.is_active
-                                                    ? 'Active'
-                                                    : 'Inactive'
-                                            }}
-                                        </button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                                            {{ money(account.balance) }}
+                                        </td>
+                                        <td class="px-4 py-3 text-right">
+                                            <div
+                                                class="flex justify-end gap-1.5"
+                                            >
+                                                <Link
+                                                    :href="
+                                                        adminPath(
+                                                            'accounts',
+                                                            'detail',
+                                                            account.id,
+                                                        )
+                                                    "
+                                                    :headers="authHeaders()"
+                                                    class="rounded-pill bg-mist px-3 py-1 text-xs font-black text-slate"
+                                                >
+                                                    View
+                                                </Link>
+                                                <Link
+                                                    :href="
+                                                        adminPath(
+                                                            'accounts',
+                                                            'edit',
+                                                            account.id,
+                                                        )
+                                                    "
+                                                    :headers="authHeaders()"
+                                                    class="rounded-pill bg-ink px-3 py-1 text-xs font-black text-white"
+                                                >
+                                                    Edit
+                                                </Link>
+                                                <button
+                                                    v-if="account.is_active"
+                                                    type="button"
+                                                    class="rounded-pill bg-[#d92d45] px-3 py-1 text-xs font-black text-white"
+                                                    :disabled="busy !== ''"
+                                                    @click="
+                                                        openAccountDeleteModal(
+                                                            account,
+                                                        )
+                                                    "
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3 text-right">
+                                            <button
+                                                type="button"
+                                                class="rounded-pill px-3 py-1 text-xs font-black"
+                                                :class="
+                                                    statusClass(
+                                                        statusTone(
+                                                            account.is_active,
+                                                        ),
+                                                    )
+                                                "
+                                                @click="toggleAccount(account)"
+                                            >
+                                                {{
+                                                    account.is_active
+                                                        ? 'Active'
+                                                        : 'Inactive'
+                                                }}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </AdminListFrame>
                 </div>
             </section>
@@ -2733,9 +2935,21 @@ async function sendBroadcastTest(): Promise<void> {
                             <span class="bank-label">Role</span>
                             <select v-model="userForm.role" class="bank-input">
                                 <option value="teller">Teller</option>
-                                <option value="cashier">Cashier</option>
+                                <option
+                                    value="cashier"
+                                    :disabled="cashierRoleUnavailable"
+                                >
+                                    Cashier
+                                </option>
                                 <option value="admin">Admin</option>
                             </select>
+                            <span
+                                v-if="cashierRoleUnavailable"
+                                class="mt-1 block text-xs font-semibold text-slate"
+                            >
+                                Only one Cashier account is allowed. Current:
+                                {{ cashierUser?.full_name }}.
+                            </span>
                         </label>
                         <label>
                             <span class="bank-label">Password</span>
@@ -2973,95 +3187,114 @@ async function sendBroadcastTest(): Promise<void> {
                         :filter-options="statusFilterOptions"
                         search-placeholder="Search staff, username, email or role"
                     >
-                    <div class="mt-4 overflow-auto rounded-lg border border-line">
-                        <table class="w-full min-w-[760px] text-left text-sm">
-                            <thead class="bg-mist text-xs text-slate uppercase">
-                                <tr>
-                                    <th class="px-4 py-3">Name</th>
-                                    <th class="px-4 py-3">Username</th>
-                                    <th class="px-4 py-3">Role</th>
-                                    <th class="px-4 py-3">PIN</th>
-                                    <th class="px-4 py-3 text-right">Action</th>
-                                    <th class="px-4 py-3 text-right">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-line">
-                                <tr v-for="user in paginatedUsers" :key="user.id">
-                                    <td class="px-4 py-3">
-                                        <p class="font-bold text-ink">
-                                            {{ user.full_name }}
-                                        </p>
-                                        <p
-                                            class="text-xs font-semibold text-slate"
-                                        >
-                                            {{ user.email ?? '-' }}
-                                        </p>
-                                    </td>
-                                    <td
-                                        class="px-4 py-3 font-semibold text-slate"
+                        <div
+                            class="mt-4 overflow-auto rounded-lg border border-line"
+                        >
+                            <table
+                                class="w-full min-w-[760px] text-left text-sm"
+                            >
+                                <thead
+                                    class="bg-mist text-xs text-slate uppercase"
+                                >
+                                    <tr>
+                                        <th class="px-4 py-3">Name</th>
+                                        <th class="px-4 py-3">Username</th>
+                                        <th class="px-4 py-3">Role</th>
+                                        <th class="px-4 py-3">PIN</th>
+                                        <th class="px-4 py-3 text-right">
+                                            Action
+                                        </th>
+                                        <th class="px-4 py-3 text-right">
+                                            Status
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-line">
+                                    <tr
+                                        v-for="user in paginatedUsers"
+                                        :key="user.id"
                                     >
-                                        {{ user.username }}
-                                    </td>
-                                    <td
-                                        class="px-4 py-3 font-bold text-ink capitalize"
-                                    >
-                                        {{ user.role }}
-                                    </td>
-                                    <td class="px-4 py-3 text-slate">
-                                        {{ user.has_pin ? 'Set' : 'Missing' }}
-                                    </td>
-                                    <td class="px-4 py-3 text-right">
-                                        <div class="flex justify-end gap-1.5">
-                                            <Link
-                                                :href="
-                                                    adminPath(
-                                                        'users',
-                                                        'detail',
-                                                        user.id,
-                                                    )
-                                                "
-                                                :headers="authHeaders()"
-                                                class="rounded-pill bg-mist px-3 py-1 text-xs font-black text-slate"
+                                        <td class="px-4 py-3">
+                                            <p class="font-bold text-ink">
+                                                {{ user.full_name }}
+                                            </p>
+                                            <p
+                                                class="text-xs font-semibold text-slate"
                                             >
-                                                View
-                                            </Link>
-                                            <Link
-                                                :href="
-                                                    adminPath(
-                                                        'users',
-                                                        'edit',
-                                                        user.id,
-                                                    )
-                                                "
-                                                :headers="authHeaders()"
-                                                class="rounded-pill bg-ink px-3 py-1 text-xs font-black text-white"
-                                            >
-                                                Edit
-                                            </Link>
-                                        </div>
-                                    </td>
-                                    <td class="px-4 py-3 text-right">
-                                        <button
-                                            type="button"
-                                            class="rounded-pill px-3 py-1 text-xs font-black"
-                                            :class="
-                                                statusClass(
-                                                    statusTone(user.is_active),
-                                                )
-                                            "
-                                            @click="toggleUser(user)"
+                                                {{ user.email ?? '-' }}
+                                            </p>
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 font-semibold text-slate"
                                         >
+                                            {{ user.username }}
+                                        </td>
+                                        <td
+                                            class="px-4 py-3 font-bold text-ink capitalize"
+                                        >
+                                            {{ user.role }}
+                                        </td>
+                                        <td class="px-4 py-3 text-slate">
                                             {{
-                                                user.is_active
-                                                    ? 'Active'
-                                                    : 'Inactive'
+                                                user.has_pin ? 'Set' : 'Missing'
                                             }}
-                                        </button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+                                        </td>
+                                        <td class="px-4 py-3 text-right">
+                                            <div
+                                                class="flex justify-end gap-1.5"
+                                            >
+                                                <Link
+                                                    :href="
+                                                        adminPath(
+                                                            'users',
+                                                            'detail',
+                                                            user.id,
+                                                        )
+                                                    "
+                                                    :headers="authHeaders()"
+                                                    class="rounded-pill bg-mist px-3 py-1 text-xs font-black text-slate"
+                                                >
+                                                    View
+                                                </Link>
+                                                <Link
+                                                    :href="
+                                                        adminPath(
+                                                            'users',
+                                                            'edit',
+                                                            user.id,
+                                                        )
+                                                    "
+                                                    :headers="authHeaders()"
+                                                    class="rounded-pill bg-ink px-3 py-1 text-xs font-black text-white"
+                                                >
+                                                    Edit
+                                                </Link>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3 text-right">
+                                            <button
+                                                type="button"
+                                                class="rounded-pill px-3 py-1 text-xs font-black"
+                                                :class="
+                                                    statusClass(
+                                                        statusTone(
+                                                            user.is_active,
+                                                        ),
+                                                    )
+                                                "
+                                                @click="toggleUser(user)"
+                                            >
+                                                {{
+                                                    user.is_active
+                                                        ? 'Active'
+                                                        : 'Inactive'
+                                                }}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </AdminListFrame>
                 </div>
             </section>
@@ -3150,30 +3383,79 @@ async function sendBroadcastTest(): Promise<void> {
                             v-if="currentTransaction.agent_commissions?.length"
                             class="mt-4 rounded-lg border border-line bg-card p-4"
                         >
-                            <h3 class="text-sm font-black text-ink">Agent commission entries</h3>
+                            <h3 class="text-sm font-black text-ink">
+                                Agent commission entries
+                            </h3>
                             <div class="mt-3 overflow-x-auto">
-                                <table class="w-full min-w-[680px] text-left text-xs">
+                                <table
+                                    class="w-full min-w-[680px] text-left text-xs"
+                                >
                                     <thead class="text-slate uppercase">
                                         <tr>
-                                            <th class="pb-2 pr-4">Account</th>
-                                            <th class="pb-2 pr-4">Direction</th>
-                                            <th class="pb-2 pr-4">Rule</th>
-                                            <th class="pb-2 pr-4 text-right">Base</th>
-                                            <th class="pb-2 pr-4 text-right">Earned</th>
+                                            <th class="pr-4 pb-2">Account</th>
+                                            <th class="pr-4 pb-2">Direction</th>
+                                            <th class="pr-4 pb-2">Rule</th>
+                                            <th class="pr-4 pb-2 text-right">
+                                                Base
+                                            </th>
+                                            <th class="pr-4 pb-2 text-right">
+                                                Earned
+                                            </th>
                                             <th class="pb-2">Status</th>
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-line">
-                                        <tr v-for="entry in currentTransaction.agent_commissions" :key="entry.id">
-                                            <td class="py-2 pr-4 font-bold"><span>{{ entry.account_name ?? ('#' + entry.account_id) }}</span><span v-if="entry.company_name" class="block text-[11px] text-slate">{{ entry.company_name }}</span></td>
-                                            <td class="py-2 pr-4 font-bold">{{ entry.direction }}</td>
-                                            <td class="money py-2 pr-4">
-                                                {{ entry.calculation_type }} · {{ money(entry.configured_value) }}
-                                                {{ entry.calculation_type === 'PERCENTAGE' ? '%' : 'MMK' }}
+                                        <tr
+                                            v-for="entry in currentTransaction.agent_commissions"
+                                            :key="entry.id"
+                                        >
+                                            <td class="py-2 pr-4 font-bold">
+                                                <span>{{
+                                                    entry.account_name ??
+                                                    '#' + entry.account_id
+                                                }}</span
+                                                ><span
+                                                    v-if="entry.company_name"
+                                                    class="block text-[11px] text-slate"
+                                                    >{{
+                                                        entry.company_name
+                                                    }}</span
+                                                >
                                             </td>
-                                            <td class="money py-2 pr-4 text-right">{{ money(entry.base_amount) }}</td>
-                                            <td class="money py-2 pr-4 text-right font-black">{{ money(entry.commission_amount) }}</td>
-                                            <td class="py-2 font-black">{{ entry.status }}</td>
+                                            <td class="py-2 pr-4 font-bold">
+                                                {{ entry.direction }}
+                                            </td>
+                                            <td class="money py-2 pr-4">
+                                                {{ entry.calculation_type }} ·
+                                                {{
+                                                    money(
+                                                        entry.configured_value,
+                                                    )
+                                                }}
+                                                {{
+                                                    entry.calculation_type ===
+                                                    'PERCENTAGE'
+                                                        ? '%'
+                                                        : 'MMK'
+                                                }}
+                                            </td>
+                                            <td
+                                                class="money py-2 pr-4 text-right"
+                                            >
+                                                {{ money(entry.base_amount) }}
+                                            </td>
+                                            <td
+                                                class="money py-2 pr-4 text-right font-black"
+                                            >
+                                                {{
+                                                    money(
+                                                        entry.commission_amount,
+                                                    )
+                                                }}
+                                            </td>
+                                            <td class="py-2 font-black">
+                                                {{ entry.status }}
+                                            </td>
                                         </tr>
                                     </tbody>
                                 </table>
@@ -3369,7 +3651,9 @@ async function sendBroadcastTest(): Promise<void> {
                                             </Link>
                                         </td>
                                     </tr>
-                                    <tr v-if="filteredTransactions.length === 0">
+                                    <tr
+                                        v-if="filteredTransactions.length === 0"
+                                    >
                                         <td
                                             colspan="9"
                                             class="px-4 py-8 text-center text-sm font-semibold text-slate"
@@ -3423,11 +3707,16 @@ async function sendBroadcastTest(): Promise<void> {
                                 >
                                     Previous
                                 </button>
-                                <span>{{ transactionPage }} / {{ transactionPageCount }}</span>
+                                <span
+                                    >{{ transactionPage }} /
+                                    {{ transactionPageCount }}</span
+                                >
                                 <button
                                     type="button"
                                     class="bank-button bank-button-secondary px-4 py-2"
-                                    :disabled="transactionPage >= transactionPageCount"
+                                    :disabled="
+                                        transactionPage >= transactionPageCount
+                                    "
                                     @click="transactionPage++"
                                 >
                                     Next
@@ -3590,11 +3879,16 @@ async function sendBroadcastTest(): Promise<void> {
                                 >
                                     Previous
                                 </button>
-                                <span>{{ activityPage }} / {{ activityPageCount }}</span>
+                                <span
+                                    >{{ activityPage }} /
+                                    {{ activityPageCount }}</span
+                                >
                                 <button
                                     type="button"
                                     class="bank-button bank-button-secondary px-4 py-2"
-                                    :disabled="activityPage >= activityPageCount"
+                                    :disabled="
+                                        activityPage >= activityPageCount
+                                    "
                                     @click="activityPage++"
                                 >
                                     Next
@@ -3613,21 +3907,88 @@ async function sendBroadcastTest(): Promise<void> {
                     <div
                         class="order-1 min-w-0 rounded-xl border border-line bg-card p-5 shadow-sm"
                     >
-                        <h2 class="text-lg font-black text-ink">Main Vault</h2>
-                        <p class="money mt-2 text-3xl font-black text-ink">
+                        <div
+                            class="flex flex-wrap items-start justify-between gap-3"
+                        >
+                            <div>
+                                <h2 class="text-lg font-black text-ink">
+                                    Cashier Main Vault
+                                </h2>
+                                <p
+                                    class="mt-1 text-xs font-semibold text-slate"
+                                >
+                                    Owner-managed physical cash. Cashier can
+                                    view this vault but cannot manually add,
+                                    remove, or adjust cash.
+                                </p>
+                                <p
+                                    class="mt-2 text-xs font-bold"
+                                    :class="
+                                        activeCashier
+                                            ? 'text-balance'
+                                            : 'text-brand'
+                                    "
+                                >
+                                    {{
+                                        activeCashier
+                                            ? `Active Cashier: ${activeCashier.full_name}`
+                                            : 'No active Cashier'
+                                    }}
+                                </p>
+                            </div>
+                            <div class="flex flex-wrap gap-2">
+                                <button
+                                    type="button"
+                                    class="bank-button bank-button-primary"
+                                    :disabled="
+                                        activeCashier === null || busy !== ''
+                                    "
+                                    @click="openVaultEntry('deposit')"
+                                >
+                                    Deposit to Cashier
+                                </button>
+                                <button
+                                    type="button"
+                                    class="bank-button bank-button-secondary"
+                                    :disabled="
+                                        activeCashier === null ||
+                                        busy !== '' ||
+                                        numeric(
+                                            vaultInventory?.main_vault_total,
+                                        ) <= 0
+                                    "
+                                    @click="openVaultEntry('withdraw')"
+                                >
+                                    Withdraw from Cashier
+                                </button>
+                            </div>
+                        </div>
+                        <p class="money mt-3 text-3xl font-black text-ink">
                             {{ money(vaultInventory?.main_vault_total) }}
                         </p>
                         <div class="mt-4 grid gap-3 sm:grid-cols-2">
                             <div class="rounded-lg bg-mist p-3">
-                                <p class="text-xs font-bold text-slate">Employee Cash</p>
+                                <p class="text-xs font-bold text-slate">
+                                    Employee Cash
+                                </p>
                                 <p class="money mt-1 font-black text-ink">
-                                    {{ money(vaultInventory?.total_employee_cash) }}
+                                    {{
+                                        money(
+                                            vaultInventory?.total_employee_cash,
+                                        )
+                                    }}
                                 </p>
                             </div>
                             <div class="rounded-lg bg-mist p-3">
-                                <p class="text-xs font-bold text-slate">Total Physical Cash</p>
+                                <p class="text-xs font-bold text-slate">
+                                    Total Physical Cash
+                                </p>
                                 <p class="money mt-1 font-black text-ink">
-                                    {{ money(vaultInventory?.grand_physical_total) }}
+                                    {{
+                                        money(
+                                            vaultInventory?.grand_physical_total,
+                                        )
+                                    }}
                                 </p>
                             </div>
                         </div>
@@ -3660,7 +4021,6 @@ async function sendBroadcastTest(): Promise<void> {
                             </table>
                         </div>
                     </div>
-
                 </div>
 
                 <div class="contents">
@@ -3671,9 +4031,7 @@ async function sendBroadcastTest(): Promise<void> {
                         <div
                             class="mt-4 max-w-full overflow-hidden rounded-lg border border-line"
                         >
-                            <table
-                                class="w-full table-fixed text-left text-sm"
-                            >
+                            <table class="w-full table-fixed text-left text-sm">
                                 <thead
                                     class="bg-mist text-xs text-slate uppercase"
                                 >
@@ -3697,13 +4055,17 @@ async function sendBroadcastTest(): Promise<void> {
                                         >
                                             #{{ float.id }}
                                         </td>
-                                        <td class="break-words px-3 py-3 text-slate">
+                                        <td
+                                            class="px-3 py-3 break-words text-slate"
+                                        >
                                             {{
                                                 float.employee_name ??
                                                 `Employee #${float.employee_id}`
                                             }}
                                         </td>
-                                        <td class="break-words px-3 py-3 text-slate">
+                                        <td
+                                            class="px-3 py-3 break-words text-slate"
+                                        >
                                             {{ float.issued_by_name ?? '-' }}
                                         </td>
                                         <td
@@ -3719,14 +4081,10 @@ async function sendBroadcastTest(): Promise<void> {
                             </table>
                         </div>
                     </div>
-
                 </div>
             </section>
 
-            <section
-                v-if="activeTab === 'reports'"
-                class="grid gap-5"
-            >
+            <section v-if="activeTab === 'reports'" class="grid gap-5">
                 <div class="space-y-5">
                     <div
                         class="rounded-xl border border-line bg-card p-5 shadow-sm"
@@ -3806,10 +4164,124 @@ async function sendBroadcastTest(): Promise<void> {
                             </div>
                         </form>
                     </div>
-
                 </div>
             </section>
         </div>
+
+        <Teleport to="body">
+            <div
+                v-if="vaultEntryOpen"
+                class="fixed inset-0 z-[90] grid place-items-center bg-ink/60 p-4 backdrop-blur-sm"
+                @click.self="closeVaultEntry"
+            >
+                <section
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="admin-vault-entry-title"
+                    class="max-h-[calc(100vh-2rem)] w-full max-w-xl overflow-y-auto rounded-2xl border border-line bg-card shadow-2xl"
+                >
+                    <header
+                        class="flex items-start justify-between gap-3 border-b border-line px-5 py-4"
+                    >
+                        <div>
+                            <h2
+                                id="admin-vault-entry-title"
+                                class="text-lg font-black text-ink"
+                            >
+                                {{
+                                    vaultEntryMode === 'deposit'
+                                        ? 'Deposit to Cashier Vault'
+                                        : 'Withdraw from Cashier Vault'
+                                }}
+                            </h2>
+                            <p class="mt-1 text-xs font-semibold text-slate">
+                                {{ activeCashier?.full_name ?? 'Cashier' }} ·
+                                Owner authorization
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            class="text-xl text-slate"
+                            :disabled="busy !== ''"
+                            @click="closeVaultEntry"
+                        >
+                            ×
+                        </button>
+                    </header>
+                    <div class="space-y-4 p-4 sm:p-5">
+                        <DenomDrawer
+                            v-model="vaultEntryDenoms"
+                            :notes="vaultNotes"
+                            :stock="
+                                vaultEntryMode === 'withdraw'
+                                    ? vaultStock
+                                    : null
+                            "
+                            :enforce-stock="vaultEntryMode === 'withdraw'"
+                            :label="
+                                vaultEntryMode === 'deposit'
+                                    ? 'Cash to deposit'
+                                    : 'Cash to withdraw'
+                            "
+                            id-prefix="admin-vault-entry"
+                        />
+                        <label class="block">
+                            <span class="bank-label">Audit note</span>
+                            <textarea
+                                v-model.trim="vaultEntryNote"
+                                rows="3"
+                                class="bank-input resize-none"
+                                :placeholder="
+                                    vaultEntryMode === 'deposit'
+                                        ? 'Reason/source of cash deposit'
+                                        : 'Reason/destination of cash withdrawal'
+                                "
+                            />
+                        </label>
+                        <p class="text-xs font-semibold text-slate">
+                            This action is recorded in both Vault Log and
+                            Activity Logs under the signed-in Owner/Admin.
+                        </p>
+                    </div>
+                    <footer
+                        class="flex flex-wrap items-center justify-between gap-3 border-t border-line px-5 py-4"
+                    >
+                        <p class="money text-sm font-black text-ink">
+                            Total: {{ money(vaultEntryTotal) }} MMK
+                        </p>
+                        <div class="flex gap-2">
+                            <button
+                                type="button"
+                                class="bank-button bank-button-secondary"
+                                :disabled="busy !== ''"
+                                @click="closeVaultEntry"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                class="bank-button"
+                                :class="
+                                    vaultEntryMode === 'deposit'
+                                        ? 'bank-button-primary'
+                                        : 'bank-button-danger'
+                                "
+                                :disabled="vaultEntryTotal <= 0 || busy !== ''"
+                                @click="saveVaultEntry"
+                            >
+                                {{
+                                    busy !== ''
+                                        ? 'Saving…'
+                                        : vaultEntryMode === 'deposit'
+                                          ? 'Confirm Deposit'
+                                          : 'Confirm Withdrawal'
+                                }}
+                            </button>
+                        </div>
+                    </footer>
+                </section>
+            </div>
+        </Teleport>
 
         <ConfirmActionModal
             :open="exchangeRatePendingDelete !== null"
@@ -3838,12 +4310,12 @@ async function sendBroadcastTest(): Promise<void> {
                     >
                         Delete company?
                     </h2>
-                    <p class="mt-2 text-sm font-semibold leading-6 text-slate">
+                    <p class="mt-2 text-sm leading-6 font-semibold text-slate">
                         <strong class="text-ink">{{
                             companyPendingDelete.name
                         }}</strong>
-                        will be marked inactive and removed from selection lists.
-                        Existing records will be kept.
+                        will be marked inactive and removed from selection
+                        lists. Existing records will be kept.
                     </p>
                     <div
                         class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
@@ -3862,7 +4334,11 @@ async function sendBroadcastTest(): Promise<void> {
                             :disabled="busy !== ''"
                             @click="confirmCompanyDelete"
                         >
-                            {{ busy === 'Company deleted.' ? 'Deleting…' : 'Delete company' }}
+                            {{
+                                busy === 'Company deleted.'
+                                    ? 'Deleting…'
+                                    : 'Delete company'
+                            }}
                         </button>
                     </div>
                 </section>
@@ -3887,13 +4363,13 @@ async function sendBroadcastTest(): Promise<void> {
                     >
                         Delete account?
                     </h2>
-                    <p class="mt-2 text-sm font-semibold leading-6 text-slate">
+                    <p class="mt-2 text-sm leading-6 font-semibold text-slate">
                         <strong class="text-ink">{{
                             accountPendingDelete.account_name
                         }}</strong>
-                        will be marked inactive and removed from selection lists.
-                        Existing balances, adjustments and transactions will be
-                        kept.
+                        will be marked inactive and removed from selection
+                        lists. Existing balances, adjustments and transactions
+                        will be kept.
                     </p>
                     <div
                         class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"
