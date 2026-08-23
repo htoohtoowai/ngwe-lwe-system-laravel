@@ -286,6 +286,8 @@ Route::middleware(['auth', 'role:teller'])
     ->name('teller.floats.')
     ->controller(TellerFloatActionController::class)
     ->group(function (): void {
+        Route::post('/issues/{issue}/receive', 'receiveIssue')->name('issues.receive');
+        Route::post('/issues/{issue}/reject', 'rejectIssue')->name('issues.reject');
         Route::post('/{float}/activate', 'activate')->name('activate');
         Route::post('/{float}/reject', 'reject')->name('reject');
         Route::post('/{float}/initiate-return', 'initiateReturn')->name('initiate-return');

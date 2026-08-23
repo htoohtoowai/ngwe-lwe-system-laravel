@@ -38,4 +38,9 @@ class CashFloatAssignment extends Model
     {
         return $this->hasMany(CashFloatDenomination::class, 'float_id')->orderBy('denomination');
     }
+
+    public function issues(): HasMany
+    {
+        return $this->hasMany(CashFloatIssue::class, 'float_id')->orderByDesc('created_at')->orderByDesc('id');
+    }
 }

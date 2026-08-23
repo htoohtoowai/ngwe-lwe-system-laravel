@@ -45,11 +45,25 @@ type FloatRow = {
     denominations: FloatDenomination[];
 };
 
+type FloatIssueRow = {
+    id: number;
+    float_id: number;
+    status: 'PENDING_RECEIPT' | 'RECEIVED' | 'REJECTED' | string;
+    amount: string;
+    issued_by_name: string | null;
+    created_at: string | null;
+    received_at: string | null;
+    rejected_at: string | null;
+    note: string | null;
+    denominations: FloatDenomination[];
+};
+
 const props = withDefaults(
     defineProps<{
         view?: 'current' | 'history';
         float: TellerFloat;
         floats: FloatRow[];
+        floatIssues: FloatIssueRow[];
         notes: number[];
         issued: Record<number, number>;
         onHand: Record<number, number>;
@@ -58,18 +72,23 @@ const props = withDefaults(
         view: 'current',
         float: null,
         floats: () => [],
+        floatIssues: () => [],
     },
 );
 
 const counted = ref<Record<number, number>>({});
 const returning = ref<Record<number, number>>({});
 const reviewFloat = ref<FloatRow | null>(null);
+const reviewIssue = ref<FloatIssueRow | null>(null);
 const reviewCounted = ref<Record<number, number>>({});
 const actionFloat = ref<FloatRow | null>(null);
+const actionIssue = ref<FloatIssueRow | null>(null);
 const pinOpen = ref(false);
 const pinBusy = ref(false);
 const pinError = ref<string | null>(null);
-const intent = ref<'receive' | 'return' | 'reject'>('receive');
+const intent = ref<
+    'receive' | 'return' | 'reject' | 'receive-issue' | 'reject-issue'
+>('receive');
 const page = usePage<{
     auth?: {
         user?: {
@@ -109,6 +128,9 @@ watch([historyPerPage, () => rows.value.length], () => {
 const pendingRows = computed(() =>
     rows.value.filter((float) => float.status === 'PENDING_RECEIPT'),
 );
+const pendingAdditionalIssues = computed(() =>
+    props.floatIssues.filter((issue) => issue.status === 'PENDING_RECEIPT'),
+);
 const issuedTotal = computed(() =>
     props.notes.reduce((s, n) => s + n * (props.issued[n] ?? 0), 0),
 );
@@ -129,7 +151,11 @@ const returnStockMatches = computed(() =>
     ),
 );
 const reviewIssued = computed(() =>
-    denominationsToMap(reviewFloat.value?.denominations ?? []),
+    denominationsToMap(
+        reviewIssue.value?.denominations ??
+            reviewFloat.value?.denominations ??
+            [],
+    ),
 );
 const reviewIssuedTotal = computed(() => denominationTotal(reviewIssued.value));
 const reviewCountedTotal = computed(() =>
@@ -143,7 +169,7 @@ const reviewCountMatches = computed(() =>
 const { t } = useLocale();
 
 const pinTitle = computed(() => {
-    if (intent.value === 'receive') {
+    if (intent.value === 'receive' || intent.value === 'receive-issue') {
         return t('teller.confirmCount');
     }
 
@@ -155,7 +181,7 @@ const pinTitle = computed(() => {
 });
 
 const pinDetail = computed(() => {
-    if (intent.value === 'receive') {
+    if (intent.value === 'receive' || intent.value === 'receive-issue') {
         return t('teller.pinCount');
     }
 
@@ -170,7 +196,7 @@ const pinDetail = computed(() => {
 });
 
 const pinConfirmLabel = computed(() => {
-    if (intent.value === 'receive') {
+    if (intent.value === 'receive' || intent.value === 'receive-issue') {
         return t('teller.receiveFloatPin');
     }
 
@@ -192,9 +218,11 @@ function closePin() {
     pinOpen.value = false;
     pinError.value = null;
     actionFloat.value = null;
+    actionIssue.value = null;
 }
 
 function reviewIncoming(float: FloatRow) {
+    reviewIssue.value = null;
     reviewFloat.value = float;
     reviewCounted.value = {};
     pinError.value = null;
@@ -202,16 +230,28 @@ function reviewIncoming(float: FloatRow) {
 
 function closeReview() {
     reviewFloat.value = null;
+    reviewIssue.value = null;
     reviewCounted.value = {};
 }
 
 function receiveReviewed() {
+    if (reviewIssue.value) {
+        intent.value = 'receive-issue';
+        actionIssue.value = reviewIssue.value;
+        actionFloat.value = null;
+        pinError.value = null;
+        pinOpen.value = true;
+
+        return;
+    }
+
     if (!reviewFloat.value) {
         return;
     }
 
     intent.value = 'receive';
     actionFloat.value = reviewFloat.value;
+    actionIssue.value = null;
     pinError.value = null;
     pinOpen.value = true;
 }
@@ -219,6 +259,21 @@ function receiveReviewed() {
 function rejectIncoming(float: FloatRow) {
     intent.value = 'reject';
     actionFloat.value = float;
+    pinError.value = null;
+    pinOpen.value = true;
+}
+
+function reviewAdditionalIssue(issue: FloatIssueRow) {
+    reviewFloat.value = null;
+    reviewIssue.value = issue;
+    reviewCounted.value = {};
+    pinError.value = null;
+}
+
+function rejectAdditionalIssue(issue: FloatIssueRow) {
+    intent.value = 'reject-issue';
+    actionIssue.value = issue;
+    actionFloat.value = null;
     pinError.value = null;
     pinOpen.value = true;
 }
@@ -240,10 +295,6 @@ function denominationTotal(denominations: Record<number, number>): number {
         (sum, note) => sum + note * Number(denominations[note] ?? 0),
         0,
     );
-}
-
-function rowTotal(float: FloatRow): number {
-    return denominationTotal(denominationsToMap(float.denominations));
 }
 
 function rowBalance(float: FloatRow): string | number {
@@ -273,12 +324,29 @@ function rowDate(float: FloatRow): string {
     }).format(new Date(value));
 }
 
+function issueDate(issue: FloatIssueRow): string {
+    const value = issue.received_at ?? issue.rejected_at ?? issue.created_at;
+
+    if (!value) {
+        return '-';
+    }
+
+    return new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(new Date(value));
+}
+
 function statusText(value: string): string {
     const labels: Record<string, string> = {
         PENDING_RECEIPT: 'Pending receipt',
         ACTIVE: 'Active',
         PENDING_RECONCILIATION: 'With cashier',
         CLOSED: 'Closed',
+        RECEIVED: 'Received',
+        REJECTED: 'Rejected',
     };
 
     return labels[value] ?? value;
@@ -302,46 +370,64 @@ function authHeaders(): Record<string, string> {
 
 const refreshFloatPage = () =>
     router.reload({
-        only: ['float', 'floats', 'issued', 'onHand'],
+        only: ['float', 'floats', 'floatIssues', 'issued', 'onHand'],
         headers: authHeaders(),
     });
 
 async function confirm(pin: string) {
-    const floatId = actionFloat.value?.id ?? props.float?.id;
+    const isIssueAction =
+        intent.value === 'receive-issue' || intent.value === 'reject-issue';
+    const resourceId = isIssueAction
+        ? actionIssue.value?.id
+        : (actionFloat.value?.id ?? props.float?.id);
 
-    if (!floatId) {
+    if (!resourceId) {
         return;
     }
 
     pinBusy.value = true;
     pinError.value = null;
 
-    const url =
-        intent.value === 'receive'
-            ? `/teller/floats/${floatId}/activate`
-            : intent.value === 'return'
-              ? `/teller/floats/${floatId}/initiate-return`
-              : `/teller/floats/${floatId}/reject`;
-    const data =
-        intent.value === 'receive'
-            ? {
-                  pin,
-                  verified_denominations: actionFloat.value
-                      ? reviewCounted.value
-                      : counted.value,
-              }
-            : intent.value === 'return'
-              ? { pin, return_denominations: returning.value }
-              : {
-                    pin,
-                    note: `Rejected by Teller from My Float page for float #${floatId}.`,
-                };
+    let url: string;
+    let data: Record<string, unknown>;
+
+    if (intent.value === 'receive-issue') {
+        url = `/teller/floats/issues/${resourceId}/receive`;
+        data = {
+            pin,
+            verified_denominations: reviewCounted.value,
+        };
+    } else if (intent.value === 'reject-issue') {
+        url = `/teller/floats/issues/${resourceId}/reject`;
+        data = {
+            pin,
+            note: `Rejected additional float issue #${resourceId} by Teller.`,
+        };
+    } else if (intent.value === 'receive') {
+        url = `/teller/floats/${resourceId}/activate`;
+        data = {
+            pin,
+            verified_denominations: actionFloat.value
+                ? reviewCounted.value
+                : counted.value,
+        };
+    } else if (intent.value === 'return') {
+        url = `/teller/floats/${resourceId}/initiate-return`;
+        data = { pin, return_denominations: returning.value };
+    } else {
+        url = `/teller/floats/${resourceId}/reject`;
+        data = {
+            pin,
+            note: `Rejected by Teller from My Float page for float #${resourceId}.`,
+        };
+    }
 
     router.post(url, data, {
         preserveScroll: true,
         onSuccess: () => {
             pinOpen.value = false;
             actionFloat.value = null;
+            actionIssue.value = null;
             closeReview();
         },
         onError: (errors) => {
@@ -494,6 +580,15 @@ onBeforeUnmount(() => {
                 v-else-if="status === 'ACTIVE'"
                 class="grid gap-6 lg:grid-cols-[1fr_20rem]"
             >
+                <div
+                    v-if="pendingAdditionalIssues.length"
+                    class="rounded-counter border border-held/30 bg-held/5 px-4 py-3 text-sm font-semibold text-held lg:col-span-2"
+                >
+                    {{ pendingAdditionalIssues.length }} additional float
+                    issue(s) are waiting for your count and PIN confirmation.
+                    Your on-hand balance will increase only after you receive
+                    them below.
+                </div>
                 <DenominationDrawer
                     v-model="returning"
                     :notes="notes"
@@ -537,7 +632,10 @@ onBeforeUnmount(() => {
                     </p>
                     <button
                         type="button"
-                        :disabled="!returnStockMatches"
+                        :disabled="
+                            !returnStockMatches ||
+                            pendingAdditionalIssues.length > 0
+                        "
                         @click="open('return')"
                         class="mt-5 w-full rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110 disabled:opacity-35"
                     >
@@ -565,6 +663,106 @@ onBeforeUnmount(() => {
         </template>
 
         <section
+            v-if="floatIssues.length"
+            class="mt-6 overflow-hidden rounded-counter border border-paper-edge bg-white"
+        >
+            <header
+                class="flex flex-wrap items-center justify-between gap-3 border-b border-paper-edge px-4 py-3"
+            >
+                <div>
+                    <h2 class="font-display text-base font-semibold">
+                        Additional float issues
+                    </h2>
+                    <p class="mt-0.5 text-xs text-ink-700/60">
+                        Cashier can issue more cash to your ACTIVE float more
+                        than once during the day. Count each pending issue
+                        separately.
+                    </p>
+                </div>
+                <span
+                    v-if="pendingAdditionalIssues.length"
+                    class="rounded-full bg-held/10 px-3 py-1 text-xs font-bold text-held"
+                >
+                    {{ pendingAdditionalIssues.length }} pending
+                </span>
+            </header>
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[44rem] text-left text-sm">
+                    <thead class="bg-paper text-xs text-ink-700/60">
+                        <tr>
+                            <th class="px-4 py-2 font-semibold">Issue</th>
+                            <th class="px-4 py-2 font-semibold">Float</th>
+                            <th class="px-4 py-2 font-semibold">Status</th>
+                            <th class="px-4 py-2 text-right font-semibold">
+                                Amount
+                            </th>
+                            <th class="px-4 py-2 font-semibold">Cashier</th>
+                            <th class="px-4 py-2 font-semibold">Time</th>
+                            <th class="px-4 py-2 text-right font-semibold">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-paper-edge">
+                        <tr
+                            v-for="issue in floatIssues"
+                            :key="issue.id"
+                            :class="
+                                issue.status === 'PENDING_RECEIPT'
+                                    ? 'bg-held/5'
+                                    : ''
+                            "
+                        >
+                            <td class="px-4 py-3 font-semibold">
+                                #{{ issue.id }}
+                            </td>
+                            <td class="px-4 py-3">#{{ issue.float_id }}</td>
+                            <td class="px-4 py-3">
+                                {{ statusText(issue.status) }}
+                            </td>
+                            <td class="px-4 py-3 text-right font-semibold">
+                                <MoneyText :value="issue.amount" />
+                            </td>
+                            <td class="px-4 py-3 text-ink-700/70">
+                                {{ issue.issued_by_name ?? '-' }}
+                            </td>
+                            <td class="px-4 py-3 text-ink-700/70">
+                                {{ issueDate(issue) }}
+                            </td>
+                            <td class="px-4 py-3">
+                                <div
+                                    v-if="issue.status === 'PENDING_RECEIPT'"
+                                    class="flex justify-end gap-2"
+                                >
+                                    <button
+                                        type="button"
+                                        class="bank-button rounded-counter bg-seal px-3 py-1.5 text-xs font-semibold text-ink-950"
+                                        @click="reviewAdditionalIssue(issue)"
+                                    >
+                                        Count & receive
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="bank-button bank-button-danger rounded-counter px-3 py-1.5 text-xs"
+                                        @click="rejectAdditionalIssue(issue)"
+                                    >
+                                        Reject
+                                    </button>
+                                </div>
+                                <span
+                                    v-else
+                                    class="block text-right text-xs font-semibold text-ink-700/55"
+                                >
+                                    {{ statusText(issue.status) }}
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section
             class="mt-6 overflow-hidden rounded-counter border border-paper-edge bg-white"
         >
             <header
@@ -581,7 +779,7 @@ onBeforeUnmount(() => {
                     </h2>
                     <p class="mt-0.5 text-xs text-ink-700/60">
                         {{
-                            pendingRows.length
+                            pendingRows.length || pendingAdditionalIssues.length
                                 ? t(
                                       'teller.incomingFloatCount',
                                       'Incoming float requests are waiting for your PIN.',
@@ -661,7 +859,7 @@ onBeforeUnmount(() => {
                                 </div>
                             </td>
                             <td class="px-4 py-3 text-right font-semibold">
-                                <MoneyText :value="rowTotal(floatRow)" />
+                                <MoneyText :value="floatRow.total_amount" />
                             </td>
                             <td class="px-4 py-3 text-right">
                                 <MoneyText :value="rowBalance(floatRow)" />
@@ -759,7 +957,7 @@ onBeforeUnmount(() => {
         </section>
 
         <div
-            v-if="reviewFloat"
+            v-if="reviewFloat || reviewIssue"
             class="fixed inset-0 z-40 grid place-items-center bg-ink-950/55 p-4"
             @keydown.esc="closeReview"
         >
@@ -773,13 +971,20 @@ onBeforeUnmount(() => {
                 >
                     <div>
                         <p class="field-label">
-                            {{ t('teller.floatNumber') }} #{{ reviewFloat.id }}
+                            {{
+                                reviewIssue
+                                    ? 'Additional issue'
+                                    : t('teller.floatNumber')
+                            }}
+                            #{{ reviewIssue?.id ?? reviewFloat?.id }}
                         </p>
                         <h2 class="font-display text-lg font-semibold">
                             {{
                                 t(
                                     'teller.countIncomingFloat',
-                                    'Count incoming float',
+                                    reviewIssue
+                                        ? 'Count additional float issue'
+                                        : 'Count incoming float',
                                 )
                             }}
                         </h2>
@@ -846,7 +1051,10 @@ onBeforeUnmount(() => {
                             <button
                                 type="button"
                                 @click="
-                                    reviewFloat && rejectIncoming(reviewFloat)
+                                    reviewIssue
+                                        ? rejectAdditionalIssue(reviewIssue)
+                                        : reviewFloat &&
+                                          rejectIncoming(reviewFloat)
                                 "
                                 class="bank-button bank-button-danger rounded-counter py-3 text-sm font-semibold"
                             >

@@ -6,6 +6,7 @@ use App\Http\Requests\ActivateCashFloatRequest;
 use App\Http\Requests\InitiateFloatReturnRequest;
 use App\Http\Requests\RejectCashFloatRequest;
 use App\Models\CashFloatAssignment;
+use App\Models\CashFloatIssue;
 use App\Services\CashFloatService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Validation\ValidationException;
@@ -53,6 +54,44 @@ class TellerFloatActionController extends Controller
         return back()->with('success', 'Teller float rejected.');
     }
 
+
+    public function receiveIssue(ActivateCashFloatRequest $request, CashFloatIssue $issue): RedirectResponse
+    {
+        $this->ensureIssueOwner($request->user()->id, $issue);
+
+        try {
+            $data = $request->validated();
+            $this->service->receiveAdditionalIssue(
+                $request->user(),
+                $issue,
+                $data['pin'],
+                $data['verified_denominations'],
+            );
+        } catch (InvalidArgumentException|RuntimeException $exception) {
+            $this->fail($exception);
+        }
+
+        return back()->with('success', 'Additional Teller float received.');
+    }
+
+    public function rejectIssue(RejectCashFloatRequest $request, CashFloatIssue $issue): RedirectResponse
+    {
+        $this->ensureIssueOwner($request->user()->id, $issue);
+
+        try {
+            $this->service->rejectAdditionalIssue(
+                $request->user(),
+                $issue,
+                $request->validated()['pin'],
+                $request->validated()['note'] ?? null,
+            );
+        } catch (InvalidArgumentException|RuntimeException $exception) {
+            $this->fail($exception);
+        }
+
+        return back()->with('success', 'Additional Teller float rejected.');
+    }
+
     public function initiateReturn(InitiateFloatReturnRequest $request, CashFloatAssignment $float): RedirectResponse
     {
         $this->ensureOwner($request->user()->id, $float);
@@ -74,6 +113,11 @@ class TellerFloatActionController extends Controller
     private function ensureOwner(int $userId, CashFloatAssignment $float): void
     {
         abort_unless($float->employee_id === $userId, 403, "Float #{$float->id} does not belong to this Teller.");
+    }
+
+    private function ensureIssueOwner(int $userId, CashFloatIssue $issue): void
+    {
+        abort_unless($issue->employee_id === $userId, 403, "Float issue #{$issue->id} does not belong to this Teller.");
     }
 
     private function fail(Throwable $exception): never

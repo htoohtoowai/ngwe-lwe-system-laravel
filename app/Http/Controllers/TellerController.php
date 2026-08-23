@@ -44,6 +44,7 @@ class TellerController extends Controller
             'view' => $view,
             'float' => $this->floatProp($request),
             'floats' => $this->floatRows($request),
+            'floatIssues' => $this->floatIssueRows($request),
             'notes' => $this->notes(),
             'issued' => $this->issued($request),
             'onHand' => $this->onHand($request),
@@ -127,6 +128,44 @@ class TellerController extends Controller
                         'denomination' => (int) $row->denomination,
                         'quantity' => (int) $row->quantity,
                     ])
+                    ->values()
+                    ->all(),
+            ])
+            ->values()
+            ->all();
+    }
+
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function floatIssueRows(Request $request): array
+    {
+        $user = $request->user();
+
+        if ($user === null) {
+            return [];
+        }
+
+        return $this->floats->issuesForEmployee($user->id)
+            ->where('issue_type', 'ADDITIONAL')
+            ->take(100)
+            ->map(fn ($issue): array => [
+                'id' => $issue->id,
+                'float_id' => $issue->float_id,
+                'status' => $issue->status,
+                'amount' => $issue->amount,
+                'issued_by_name' => $issue->issuer?->full_name ?? $issue->issuer?->username,
+                'created_at' => $issue->created_at?->toISOString(),
+                'received_at' => $issue->received_at?->toISOString(),
+                'rejected_at' => $issue->rejected_at?->toISOString(),
+                'note' => $issue->note,
+                'denominations' => collect($issue->denominations_json ?? [])
+                    ->map(fn ($quantity, $denomination): array => [
+                        'denomination' => (int) $denomination,
+                        'quantity' => (int) $quantity,
+                    ])
+                    ->filter(fn (array $row): bool => $row['quantity'] > 0)
                     ->values()
                     ->all(),
             ])

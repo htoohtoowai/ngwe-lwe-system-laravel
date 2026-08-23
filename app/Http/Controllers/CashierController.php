@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\CashFloatAssignment;
+use App\Models\CashFloatIssue;
 use App\Models\Transaction;
 use App\Models\TransactionNotificationRead;
 use App\Models\User;
@@ -59,6 +60,12 @@ class CashierController extends Controller
 
         $vault = $this->vault->getVaultBalance();
         $floatRows = $this->floats->list();
+        $pendingAdditionalIssueCounts = CashFloatIssue::query()
+            ->where('issue_type', 'ADDITIONAL')
+            ->where('status', 'PENDING_RECEIPT')
+            ->selectRaw('float_id, COUNT(*) as aggregate')
+            ->groupBy('float_id')
+            ->pluck('aggregate', 'float_id');
 
         return Inertia::render(self::PAGE_COMPONENTS[$section], [
             'role' => $request->user()->role,
@@ -92,10 +99,23 @@ class CashierController extends Controller
                 ->where('is_active', true)
                 ->orderBy('full_name')
                 ->get(['id', 'username', 'full_name'])
-                ->map(fn (User $user): array => [
-                    'id' => $user->id,
-                    'name' => $user->full_name ?: $user->username,
-                ])->values()->all(),
+                ->map(function (User $user) use ($floatRows, $pendingAdditionalIssueCounts): array {
+                    $openFloat = $floatRows->first(
+                        fn (CashFloatAssignment $float): bool =>
+                            $float->employee_id === $user->id
+                            && in_array($float->status, ['PENDING_RECEIPT', 'ACTIVE', 'PENDING_RECONCILIATION'], true),
+                    );
+
+                    return [
+                        'id' => $user->id,
+                        'name' => $user->full_name ?: $user->username,
+                        'open_float_id' => $openFloat?->id,
+                        'open_float_status' => $openFloat?->status,
+                        'pending_additional_issues' => $openFloat
+                            ? (int) ($pendingAdditionalIssueCounts[$openFloat->id] ?? 0)
+                            : 0,
+                    ];
+                })->values()->all(),
             'transactions' => Transaction::query()
                 ->with('creator')
                 ->whereHas('creator', fn ($query) => $query->where('role', 'teller'))

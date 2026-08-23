@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ActivityLog;
 use App\Models\CashFloatAssignment;
+use App\Models\CashFloatIssue;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
 use App\Repositories\CashFloatRepository;
@@ -50,18 +51,71 @@ class CashFloatService
         $float = DB::transaction(function () use ($cashier, $employeeId, $denominations, $note): CashFloatAssignment {
             User::query()->whereKey($employeeId)->lockForUpdate()->firstOrFail();
 
-            $hasOpenFloat = CashFloatAssignment::query()
+            $pendingInitial = CashFloatAssignment::query()
                 ->where('employee_id', $employeeId)
-                ->whereIn('status', ['PENDING_RECEIPT', 'ACTIVE', 'PENDING_RECONCILIATION'])
-                ->exists();
+                ->where('status', 'PENDING_RECEIPT')
+                ->orderByDesc('created_at')
+                ->lockForUpdate()
+                ->first();
 
-            if ($hasOpenFloat) {
+            if ($pendingInitial !== null) {
                 throw new RuntimeException(
-                    'This Teller already has an open float. Close the current float before issuing another one.',
+                    "Teller already has float #{$pendingInitial->id} waiting for receipt. Receive or reject it before issuing more cash.",
                 );
             }
 
+            $pendingReturn = CashFloatAssignment::query()
+                ->where('employee_id', $employeeId)
+                ->where('status', 'PENDING_RECONCILIATION')
+                ->orderByDesc('created_at')
+                ->lockForUpdate()
+                ->first();
+
+            if ($pendingReturn !== null) {
+                throw new RuntimeException(
+                    "Float #{$pendingReturn->id} is being reconciled. Close it before issuing a new float.",
+                );
+            }
+
+            $active = CashFloatAssignment::query()
+                ->where('employee_id', $employeeId)
+                ->where('status', 'ACTIVE')
+                ->orderByDesc('created_at')
+                ->lockForUpdate()
+                ->first();
+
+            if ($active !== null) {
+                $issue = $this->floats->createAdditionalIssue($active, $cashier->id, $denominations, $note);
+
+                $this->vault->recordBulk(
+                    entryType: 'vault_out',
+                    denominations: $denominations,
+                    createdBy: $cashier->id,
+                    floatId: $active->id,
+                    note: $note ?? "Additional float issue #{$issue->id} for float #{$active->id}",
+                );
+
+                $this->vaultTransactions->recordBulk(
+                    txnType: 'float_issue',
+                    denominations: $denominations,
+                    performedBy: $cashier->id,
+                    floatId: $active->id,
+                    note: "Additional issue #{$issue->id}. ".($note ?? ''),
+                );
+
+                $this->log($cashier->id, 'float_additional_issued', $active->id, [
+                    'issue_id' => $issue->id,
+                    'employee_id' => $employeeId,
+                    'amount' => Money::normalize($issue->amount),
+                    'denominations' => $denominations,
+                    'note' => $note,
+                ]);
+
+                return $active->refresh()->load(['denominations', 'employee', 'issuer', 'issues']);
+            }
+
             $float = $this->floats->issue($employeeId, $cashier->id, $denominations, $note);
+            $initialIssue = $float->issues->firstWhere('status', 'PENDING_RECEIPT');
 
             $this->vault->recordBulk(
                 entryType: 'vault_out',
@@ -76,10 +130,13 @@ class CashFloatService
                 denominations: $denominations,
                 performedBy: $cashier->id,
                 floatId: $float->id,
-                note: $note,
+                note: $initialIssue
+                    ? "Initial issue #{$initialIssue->id}. ".($note ?? '')
+                    : $note,
             );
 
             $this->log($cashier->id, 'float_issued', $float->id, [
+                'issue_id' => $initialIssue?->id,
                 'employee_id' => $employeeId,
                 'total_amount' => Money::normalize($float->total_amount),
                 'denominations' => $denominations,
@@ -196,6 +253,110 @@ class CashFloatService
     }
 
     /**
+     * Teller confirms an additional same-session float issue.
+     * Balance and denomination stock are merged only after this receipt step.
+     *
+     * @param  array<int|string, int|string>  $verifiedDenominations
+     */
+    public function receiveAdditionalIssue(
+        User $employee,
+        CashFloatIssue $issue,
+        ?string $pin,
+        array $verifiedDenominations,
+    ): CashFloatAssignment {
+        if ($issue->employee_id !== $employee->id) {
+            throw new InvalidArgumentException("Float issue #{$issue->id} does not belong to this employee.");
+        }
+
+        $this->pinVerifier->verify($employee, $pin);
+        $this->assertVerifiedIssueDenominationsMatch($issue, $verifiedDenominations);
+
+        $updated = DB::transaction(function () use ($employee, $issue): CashFloatAssignment {
+            $denominations = $this->denominationsFromIssue($issue);
+            $updated = $this->floats->receiveAdditionalIssue($issue);
+
+            $this->vaultTransactions->recordBulk(
+                txnType: 'float_receipt',
+                denominations: $denominations,
+                performedBy: $employee->id,
+                floatId: $updated->id,
+                note: "Additional float issue #{$issue->id} receipt completed",
+            );
+
+            $this->log($employee->id, 'float_additional_received', $updated->id, [
+                'issue_id' => $issue->id,
+                'amount' => Money::normalize($issue->amount),
+                'denominations' => $denominations,
+                'current_balance' => Money::normalize($updated->current_balance ?? 0),
+                'total_amount' => Money::normalize($updated->total_amount),
+            ]);
+
+            return $updated;
+        });
+
+        $this->broadcasts->floatStatusChanged($updated);
+
+        return $updated;
+    }
+
+    public function rejectAdditionalIssue(
+        User $employee,
+        CashFloatIssue $issue,
+        ?string $pin,
+        ?string $note = null,
+    ): CashFloatIssue {
+        if ($issue->employee_id !== $employee->id) {
+            throw new InvalidArgumentException("Float issue #{$issue->id} does not belong to this employee.");
+        }
+
+        $this->pinVerifier->verify($employee, $pin);
+        $denominations = $this->denominationsFromIssue($issue);
+        $this->guardNonEmptyDenominations($denominations);
+
+        $auditNote = trim((string) $note);
+        if ($auditNote === '') {
+            $auditNote = "Additional float issue #{$issue->id} rejected by Teller";
+        }
+
+        $rejected = DB::transaction(function () use ($employee, $issue, $denominations, $auditNote): CashFloatIssue {
+            $rejected = $this->floats->rejectAdditionalIssue($issue);
+
+            $this->vault->recordBulk(
+                entryType: 'float_returned',
+                denominations: $denominations,
+                createdBy: $employee->id,
+                floatId: $issue->float_id,
+                note: $auditNote,
+            );
+
+            $this->vaultTransactions->recordBulk(
+                txnType: 'float_reject',
+                denominations: $denominations,
+                performedBy: $employee->id,
+                floatId: $issue->float_id,
+                verifiedBy: $employee->id,
+                note: "Additional issue #{$issue->id}. {$auditNote}",
+            );
+
+            $this->log($employee->id, 'float_additional_rejected', $issue->float_id, [
+                'issue_id' => $issue->id,
+                'amount' => Money::normalize($issue->amount),
+                'denominations' => $denominations,
+                'note' => $auditNote,
+            ]);
+
+            return $rejected;
+        });
+
+        $float = CashFloatAssignment::query()->find($issue->float_id);
+        if ($float !== null) {
+            $this->broadcasts->floatStatusChanged($float);
+        }
+
+        return $rejected;
+    }
+
+    /**
      * @param  array<int|string, int|string>  $verifiedDenominations
      */
     private function assertVerifiedDenominationsMatch(CashFloatAssignment $float, array $verifiedDenominations): void
@@ -226,6 +387,15 @@ class CashFloatService
     {
         if ($float->employee_id !== $employee->id) {
             throw new InvalidArgumentException("Float #{$float->id} does not belong to this employee.");
+        }
+
+        $hasPendingIssue = CashFloatIssue::query()
+            ->where('float_id', $float->id)
+            ->where('status', 'PENDING_RECEIPT')
+            ->exists();
+
+        if ($hasPendingIssue) {
+            throw new RuntimeException('Receive or reject all pending additional float issues before returning this float.');
         }
 
         $this->pinVerifier->verify($employee, $pin);
@@ -336,6 +506,36 @@ class CashFloatService
         }
 
         return $denominations;
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function denominationsFromIssue(CashFloatIssue $issue): array
+    {
+        return $this->normalizeReturnDenominations($issue->denominations_json ?? []);
+    }
+
+    /**
+     * @param  array<int|string, int|string>  $verifiedDenominations
+     */
+    private function assertVerifiedIssueDenominationsMatch(CashFloatIssue $issue, array $verifiedDenominations): void
+    {
+        $issued = $this->denominationsFromIssue($issue);
+        $verified = $this->normalizeReturnDenominations($verifiedDenominations);
+
+        Money::denominationTotal($verified);
+
+        foreach (Money::supportedDenominations() as $denomination) {
+            $issuedQuantity = $issued[$denomination] ?? 0;
+            $verifiedQuantity = $verified[$denomination] ?? 0;
+
+            if ($issuedQuantity !== $verifiedQuantity) {
+                throw new InvalidArgumentException(
+                    "Denomination {$denomination} MMK — Issued: {$issuedQuantity}, You counted: {$verifiedQuantity}"
+                );
+            }
+        }
     }
 
     /**

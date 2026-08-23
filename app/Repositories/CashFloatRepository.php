@@ -5,6 +5,7 @@ namespace App\Repositories;
 use App\Exceptions\InsufficientFloatException;
 use App\Models\CashFloatAssignment;
 use App\Models\CashFloatDenomination;
+use App\Models\CashFloatIssue;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -82,7 +83,18 @@ class CashFloatRepository
                 ]);
             }
 
-            return $float->refresh()->load(['denominations', 'employee', 'issuer']);
+            CashFloatIssue::query()->create([
+                'float_id' => $float->id,
+                'employee_id' => $employeeId,
+                'issued_by' => $issuedBy,
+                'issue_type' => 'INITIAL',
+                'status' => 'PENDING_RECEIPT',
+                'amount' => Money::normalize($total),
+                'denominations_json' => $denominations,
+                'note' => $note,
+            ]);
+
+            return $float->refresh()->load(['denominations', 'employee', 'issuer', 'issues']);
         });
     }
 
@@ -101,7 +113,20 @@ class CashFloatRepository
             throw new \RuntimeException("Float #{$float->id} is not PENDING_RECEIPT.");
         }
 
-        return $float->refresh()->load(['denominations', 'employee', 'issuer']);
+        $initialIssue = CashFloatIssue::query()
+            ->where('float_id', $float->id)
+            ->where('issue_type', 'INITIAL')
+            ->where('status', 'PENDING_RECEIPT')
+            ->orderBy('id')
+            ->first();
+
+        if ($initialIssue !== null) {
+            $initialIssue->status = 'RECEIVED';
+            $initialIssue->received_at = now();
+            $initialIssue->save();
+        }
+
+        return $float->refresh()->load(['denominations', 'employee', 'issuer', 'issues']);
     }
 
     /**
@@ -172,7 +197,152 @@ class CashFloatRepository
             throw new \RuntimeException("Float #{$float->id} is not PENDING_RECEIPT.");
         }
 
-        return $float->refresh()->load(['denominations', 'employee', 'issuer']);
+        $initialIssue = CashFloatIssue::query()
+            ->where('float_id', $float->id)
+            ->where('issue_type', 'INITIAL')
+            ->where('status', 'PENDING_RECEIPT')
+            ->orderBy('id')
+            ->first();
+
+        if ($initialIssue !== null) {
+            $initialIssue->status = 'REJECTED';
+            $initialIssue->rejected_at = now();
+            $initialIssue->save();
+        }
+
+        return $float->refresh()->load(['denominations', 'employee', 'issuer', 'issues']);
+    }
+
+    /**
+     * Create an additional issue against an already ACTIVE float session.
+     * The money is not added to Teller on-hand until the Teller confirms receipt.
+     *
+     * @param  array<int, int>  $denominations
+     */
+    public function createAdditionalIssue(
+        CashFloatAssignment $float,
+        int $issuedBy,
+        array $denominations,
+        ?string $note = null,
+    ): CashFloatIssue {
+        $total = Money::denominationTotal($denominations);
+
+        $current = CashFloatAssignment::query()
+            ->whereKey($float->id)
+            ->where('status', 'ACTIVE')
+            ->first();
+
+        if ($current === null) {
+            throw new \RuntimeException("Float #{$float->id} is not ACTIVE.");
+        }
+
+        return CashFloatIssue::query()->create([
+            'float_id' => $current->id,
+            'employee_id' => $current->employee_id,
+            'issued_by' => $issuedBy,
+            'issue_type' => 'ADDITIONAL',
+            'status' => 'PENDING_RECEIPT',
+            'amount' => Money::normalize($total),
+            'denominations_json' => $denominations,
+            'note' => $note,
+        ])->load(['float', 'employee', 'issuer']);
+    }
+
+    /**
+     * @return Collection<int, CashFloatIssue>
+     */
+    public function issuesForEmployee(int $employeeId, ?string $status = null): Collection
+    {
+        return CashFloatIssue::query()
+            ->with(['float', 'employee', 'issuer'])
+            ->where('employee_id', $employeeId)
+            ->when($status !== null, fn ($query) => $query->where('status', $status))
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    /**
+     * Atomically merge a confirmed additional issue into the ACTIVE float.
+     */
+    public function receiveAdditionalIssue(CashFloatIssue $issue): CashFloatAssignment
+    {
+        return DB::transaction(function () use ($issue): CashFloatAssignment {
+            $lockedIssue = CashFloatIssue::query()
+                ->whereKey($issue->id)
+                ->where('status', 'PENDING_RECEIPT')
+                ->lockForUpdate()
+                ->first();
+
+            if ($lockedIssue === null) {
+                throw new \RuntimeException("Float issue #{$issue->id} is not PENDING_RECEIPT.");
+            }
+
+            $float = CashFloatAssignment::query()
+                ->whereKey($lockedIssue->float_id)
+                ->where('employee_id', $lockedIssue->employee_id)
+                ->where('status', 'ACTIVE')
+                ->lockForUpdate()
+                ->first();
+
+            if ($float === null) {
+                throw new \RuntimeException("Float #{$lockedIssue->float_id} is not ACTIVE.");
+            }
+
+            $denominations = array_map('intval', $lockedIssue->denominations_json ?? []);
+            foreach ($denominations as $denomination => $quantity) {
+                $denomination = (int) $denomination;
+                $quantity = (int) $quantity;
+                if ($quantity <= 0) {
+                    continue;
+                }
+
+                $line = CashFloatDenomination::query()
+                    ->where('float_id', $float->id)
+                    ->where('denomination', $denomination)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($line === null) {
+                    CashFloatDenomination::query()->create([
+                        'float_id' => $float->id,
+                        'denomination' => $denomination,
+                        'quantity' => $quantity,
+                    ]);
+                } else {
+                    $line->quantity = (int) $line->quantity + $quantity;
+                    $line->save();
+                }
+            }
+
+            $amount = Money::normalize($lockedIssue->amount);
+            $float->current_balance = Money::normalize((float) ($float->current_balance ?? 0) + (float) $amount);
+            $float->total_amount = Money::normalize((float) $float->total_amount + (float) $amount);
+            $float->save();
+
+            $lockedIssue->status = 'RECEIVED';
+            $lockedIssue->received_at = now();
+            $lockedIssue->save();
+
+            return $float->refresh()->load(['denominations', 'employee', 'issuer', 'issues']);
+        });
+    }
+
+    public function rejectAdditionalIssue(CashFloatIssue $issue): CashFloatIssue
+    {
+        $affected = CashFloatIssue::query()
+            ->whereKey($issue->id)
+            ->where('status', 'PENDING_RECEIPT')
+            ->update([
+                'status' => 'REJECTED',
+                'rejected_at' => now(),
+            ]);
+
+        if ($affected === 0) {
+            throw new \RuntimeException("Float issue #{$issue->id} is not PENDING_RECEIPT.");
+        }
+
+        return $issue->refresh()->load(['float', 'employee', 'issuer']);
     }
 
     /**

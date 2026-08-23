@@ -31,6 +31,7 @@ class NgweLweSchemaTest extends TestCase
             'daily_summary',
             'activity_logs',
             'cash_float_assignments',
+            'cash_float_issues',
             'cash_denomination_logs',
             'cash_float_denominations',
             'vault_transactions',
