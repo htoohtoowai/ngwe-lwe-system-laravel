@@ -182,22 +182,32 @@ const NAV: NavItem[] = [
         section: 'Banking',
     },
     {
-        label: 'My Float',
-        labelMm: 'ကောင်တာငွေလက်ကျန်',
+        label: 'Float',
+        labelMm: 'ကောင်တာငွေ',
         href: '/teller/float',
         icon: 'floats',
         roles: ['teller'],
         section: 'Banking',
         children: [
             {
-                label: 'Current',
-                labelMm: 'လက်ရှိလက်ကျန်',
+                label: 'My Float',
+                labelMm: 'ကိုယ်ပိုင်ငွေ',
                 href: '/teller/float',
                 exactOnly: true,
             },
             {
+                label: 'Receive Float',
+                labelMm: 'ငွေလက်ခံ',
+                href: '/teller/float/receive',
+            },
+            {
+                label: 'Return Cash',
+                labelMm: 'ငွေပြန်အပ်',
+                href: '/teller/float/return',
+            },
+            {
                 label: 'History',
-                labelMm: 'လက်ကျန်မှတ်တမ်း',
+                labelMm: 'ငွေခွဲမှတ်တမ်း',
                 href: '/teller/float/history',
             },
         ],

@@ -390,6 +390,39 @@ const messages: Record<Locale, Record<string, string>> = {
             'Nothing entered yet. Your first transaction of the day appears here.',
         'teller.floatDescription':
             'Cash you are personally accountable for until the cashier signs it back in.',
+        'teller.receiveFloatPage': 'Receive float',
+        'teller.returnCashPage': 'Return cash',
+        'teller.floatHistoryPage': 'Float history',
+        'teller.receiveFloatDescription':
+            'Review cashier-entered notes, then receive or reject with your PIN.',
+        'teller.returnCashDescription':
+            'Count the cash you are handing back to the cashier once, then confirm with your PIN.',
+        'teller.floatHistoryDescription':
+            'Review your float sessions and additional issues.',
+        'teller.cashierIssuedNotes': 'Cashier issued notes',
+        'teller.pendingReceiptTitle': 'Float waiting to be received',
+        'teller.openReceiveFloat': 'Open Receive Float',
+        'teller.pendingAdditionalFloatNotice':
+            'additional float issue(s) are waiting for your review.',
+        'teller.reviewNow': 'Review now',
+        'teller.onHandBreakdown': 'Current note breakdown',
+        'teller.myFloatReadOnlyHint':
+            'This page is read-only. Use Return Cash when you hand money back to the cashier.',
+        'teller.noPendingFloat': 'No float is waiting for receipt',
+        'teller.noPendingFloatDescription':
+            'When the cashier issues an initial or additional float, it will appear here for review and PIN confirmation.',
+        'teller.additionalFloatIssues': 'Additional float issues',
+        'teller.additionalReceiveHint':
+            'Review the cashier-entered breakdown. Do not re-enter note quantities.',
+        'teller.reviewReceive': 'Review & receive',
+        'teller.receiveBeforeReturn':
+            'Receive or reject all pending additional float issues before returning cash.',
+        'teller.receiveBeforeReturnTitle': 'Receive your float first',
+        'teller.additionalIssueHistory': 'Additional issue history',
+        'teller.additionalIssueHistoryHint':
+            'Read-only record of additional float issues and their final status.',
+        'teller.floatHistoryReadOnly':
+            'Historical float sessions are read-only. Receive and return actions live in their own menus.',
         'teller.noFloat': 'No float issued',
         'teller.askCashier':
             'Ask the cashier to issue one. Review the cashier-entered note breakdown, then receive it with your PIN to open the counter.',
@@ -772,6 +805,39 @@ const messages: Record<Locale, Record<string, string>> = {
             'စာရင်းမရှိသေးပါ။ ယနေ့ပထမဆုံးစာရင်းကို ဒီနေရာမှာ ပြပါမယ်။',
         'teller.floatDescription':
             'Cashier ထံ ပြန်အပ်ပြီး စာရင်းပိတ်သည်အထိ သင့်တာဝန်ယူထားရမည့် ငွေသားဖြစ်ပါတယ်။',
+        'teller.receiveFloatPage': 'ငွေခွဲလက်ခံရန်',
+        'teller.returnCashPage': 'ငွေပြန်အပ်ရန်',
+        'teller.floatHistoryPage': 'ငွေခွဲမှတ်တမ်း',
+        'teller.receiveFloatDescription':
+            'Cashier ထည့်ထားသော ငွေစက္ကူစာရင်းကို စစ်ပြီး PIN ဖြင့် လက်ခံ သို့မဟုတ် Reject လုပ်ပါ။',
+        'teller.returnCashDescription':
+            'Cashier ထံ ပြန်အပ်မည့် ငွေစက္ကူအရေအတွက်ကို တစ်ကြိမ်တည်းရေတွက်ထည့်ပြီး PIN ဖြင့် အတည်ပြုပါ။',
+        'teller.floatHistoryDescription':
+            'မိမိ၏ ငွေခွဲ session များနှင့် ထပ်မံထုတ်ပေးထားသော ငွေခွဲမှတ်တမ်းများကို ကြည့်ပါ။',
+        'teller.cashierIssuedNotes': 'Cashier ထုတ်ပေးသော ငွေစက္ကူများ',
+        'teller.pendingReceiptTitle': 'လက်ခံရန် ငွေခွဲစောင့်နေသည်',
+        'teller.openReceiveFloat': 'ငွေခွဲလက်ခံရန် သွားမည်',
+        'teller.pendingAdditionalFloatNotice':
+            'ထပ်မံထုတ်ပေးထားသော ငွေခွဲကို စစ်ဆေးလက်ခံရန် စောင့်နေသည်။',
+        'teller.reviewNow': 'ယခုစစ်မည်',
+        'teller.onHandBreakdown': 'လက်ရှိ ငွေစက္ကူစာရင်း',
+        'teller.myFloatReadOnlyHint':
+            'ဒီစာမျက်နှာမှာ လက်ကျန်ကိုသာကြည့်နိုင်ပါတယ်။ Cashier ထံ ငွေပြန်အပ်ရန် Return Cash ကိုသုံးပါ။',
+        'teller.noPendingFloat': 'လက်ခံရန် ငွေခွဲမရှိပါ',
+        'teller.noPendingFloatDescription':
+            'Cashier က ပထမဆုံး သို့မဟုတ် ထပ်မံ ငွေခွဲထုတ်ပေးပါက ဒီနေရာမှာ PIN ဖြင့် စစ်ဆေးလက်ခံနိုင်ပါမယ်။',
+        'teller.additionalFloatIssues': 'ထပ်မံထုတ်ပေးသော ငွေခွဲများ',
+        'teller.additionalReceiveHint':
+            'Cashier ထည့်ထားသော ငွေစက္ကူစာရင်းကိုသာ စစ်ပါ။ အရွက်အရေအတွက်ကို ပြန်ရိုက်ရန်မလိုပါ။',
+        'teller.reviewReceive': 'စစ်ပြီး လက်ခံမည်',
+        'teller.receiveBeforeReturn':
+            'ငွေပြန်အပ်မီ စောင့်နေသော ထပ်မံငွေခွဲအားလုံးကို လက်ခံ သို့မဟုတ် Reject လုပ်ပါ။',
+        'teller.receiveBeforeReturnTitle': 'ငွေခွဲကို အရင်လက်ခံပါ',
+        'teller.additionalIssueHistory': 'ထပ်မံငွေခွဲ မှတ်တမ်း',
+        'teller.additionalIssueHistoryHint':
+            'ထပ်မံထုတ်ပေးခဲ့သော ငွေခွဲများနှင့် နောက်ဆုံးအခြေအနေကို ဖတ်ရှုရန်သာဖြစ်သည်။',
+        'teller.floatHistoryReadOnly':
+            'ငွေခွဲမှတ်တမ်းများကို ဖတ်ရှုရန်သာဖြစ်သည်။ လက်ခံခြင်းနှင့် ပြန်အပ်ခြင်းကို သီးခြား menu များမှ လုပ်ပါ။',
         'teller.noFloat': 'ငွေခွဲ မထုတ်ပေးရသေးပါ',
         'teller.askCashier':
             'Cashier ထံမှ ငွေခွဲထုတ်ခိုင်းပါ။ Cashier ထည့်ထားသော ငွေစက္ကူအမျိုးအစားနှင့် အရေအတွက်ကို စစ်ပြီး PIN ဖြင့်လက်ခံပါက ကောင်တာဖွင့်ပါမယ်။',
@@ -796,6 +862,10 @@ const messages: Record<Locale, Record<string, string>> = {
         'teller.return': 'ပြန်အပ်ရန်',
         'teller.receiveFloatPin': 'PIN ဖြင့် ငွေခွဲလက်ခံမည်',
         'teller.handBackCashier': 'Cashier ထံ ပြန်အပ်မည်',
+        'teller.confirmHandBackPin': 'PIN ဖြင့် ငွေပြန်အပ်မည်',
+        'teller.returnPinHint':
+            'ရေတွက်ထားသောငွေကို Cashier ထံ လက်တွေ့အပ်ပြီးနောက် PIN ဖြင့် အတည်ပြုပါ။',
+        'teller.rejectFloatPin': 'PIN ဖြင့် Reject လုပ်မည်',
         'teller.waitingCashier': 'Cashier အတည်ပြုရန် စောင့်နေပါတယ်',
         'common.choose': 'ရွေးပါ',
         'transaction.company': 'ကုမ္ပဏီ',

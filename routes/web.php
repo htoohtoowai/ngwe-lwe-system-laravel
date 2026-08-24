@@ -278,6 +278,8 @@ Route::middleware(['auth', 'role:teller'])
         Route::redirect('/transfer', '/transactions/transfer')->name('transfer');
         Route::redirect('/exchange', '/transactions/exchange')->name('exchange');
         Route::get('/float', 'floatPage')->name('float');
+        Route::get('/float/receive', 'floatReceive')->name('float.receive');
+        Route::get('/float/return', 'floatReturn')->name('float.return');
         Route::get('/float/history', 'floatHistory')->name('float.history');
     });
 

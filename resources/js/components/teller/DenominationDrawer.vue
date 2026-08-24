@@ -268,8 +268,8 @@ const mismatch = (n: number) =>
                         class="text-lg font-semibold"
                         :class="difference > 0 ? 'text-held' : 'text-debit'"
                     />
-                    <p v-else class="money text-lg font-semibold text-credit">
-                        OK 0
+                    <p v-else class="text-lg font-semibold text-credit" aria-label="Matched">
+                        ✓
                     </p>
                 </div>
             </template>

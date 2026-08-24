@@ -33,6 +33,16 @@ class TellerController extends Controller
         return $this->floatResponse($request, 'current');
     }
 
+    public function floatReceive(Request $request): Response
+    {
+        return $this->floatResponse($request, 'receive');
+    }
+
+    public function floatReturn(Request $request): Response
+    {
+        return $this->floatResponse($request, 'return');
+    }
+
     public function floatHistory(Request $request): Response
     {
         return $this->floatResponse($request, 'history');

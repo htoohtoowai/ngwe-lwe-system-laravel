@@ -61,7 +61,7 @@ type FloatIssueRow = {
 
 const props = withDefaults(
     defineProps<{
-        view?: 'current' | 'history';
+        view?: 'current' | 'receive' | 'return' | 'history';
         float: TellerFloat;
         floats: FloatRow[];
         floatIssues: FloatIssueRow[];
@@ -102,6 +102,9 @@ let stopRealtimeFallback: (() => void) | null = null;
 let realtimeConnected = false;
 
 const status = computed(() => props.float?.status ?? 'CLOSED');
+const currentOnly = computed(() => props.view === 'current');
+const receiveOnly = computed(() => props.view === 'receive');
+const returnOnly = computed(() => props.view === 'return');
 const historyOnly = computed(() => props.view === 'history');
 const rows = computed(() => props.floats);
 const historyPerPage = ref(25);
@@ -124,9 +127,6 @@ const historyLastRecord = computed(() =>
 watch([historyPerPage, () => rows.value.length], () => {
     historyPage.value = Math.min(historyPage.value, historyPageCount.value);
 });
-const pendingRows = computed(() =>
-    rows.value.filter((float) => float.status === 'PENDING_RECEIPT'),
-);
 const pendingAdditionalIssues = computed(() =>
     props.floatIssues.filter((issue) => issue.status === 'PENDING_RECEIPT'),
 );
@@ -153,6 +153,45 @@ const reviewIssued = computed(() =>
 );
 const reviewIssuedTotal = computed(() => denominationTotal(reviewIssued.value));
 const { t } = useLocale();
+const pageTitle = computed(() => {
+    if (receiveOnly.value) {
+        return t('teller.receiveFloatPage', 'Receive float');
+    }
+
+    if (returnOnly.value) {
+        return t('teller.returnCashPage', 'Return cash');
+    }
+
+    if (historyOnly.value) {
+        return t('teller.floatHistoryPage', 'Float history');
+    }
+
+    return t('teller.float');
+});
+const pageDescription = computed(() => {
+    if (receiveOnly.value) {
+        return t(
+            'teller.receiveFloatDescription',
+            'Review cashier-entered notes, then receive or reject with your PIN.',
+        );
+    }
+
+    if (returnOnly.value) {
+        return t(
+            'teller.returnCashDescription',
+            'Count the cash you are handing back to the cashier once, then confirm with your PIN.',
+        );
+    }
+
+    if (historyOnly.value) {
+        return t(
+            'teller.floatHistoryDescription',
+            'Review your float sessions and additional issues.',
+        );
+    }
+
+    return t('teller.floatDescription');
+});
 
 const pinTitle = computed(() => {
     if (intent.value === 'receive' || intent.value === 'receive-issue') {
@@ -467,19 +506,20 @@ onBeforeUnmount(() => {
 
 <template>
     <BankLayout role="teller">
-        <header class="mb-5 flex items-start justify-between">
+        <header class="mb-5 flex items-start justify-between gap-4">
             <div>
                 <h1 class="font-display text-2xl font-semibold tracking-tight">
-                    {{ t('teller.float') }}
+                    {{ pageTitle }}
                 </h1>
-                <p class="mt-1 text-sm text-ink-700/70">
-                    {{ t('teller.floatDescription') }}
+                <p class="mt-1 max-w-2xl text-sm text-ink-700/70">
+                    {{ pageDescription }}
                 </p>
             </div>
             <StateChip :status="status" />
         </header>
 
-        <template v-if="!historyOnly">
+        <!-- My Float: read-only operational snapshot. -->
+        <template v-if="currentOnly">
             <div
                 v-if="!float || status === 'CLOSED'"
                 class="rounded-counter border border-dashed border-paper-edge bg-white px-6 py-16 text-center"
@@ -487,13 +527,126 @@ onBeforeUnmount(() => {
                 <p class="font-display text-lg font-semibold">
                     {{ t('teller.noFloat') }}
                 </p>
-                <p class="mx-auto mt-1.5 max-w-sm text-sm text-ink-700/70">
+                <p class="mx-auto mt-1.5 max-w-md text-sm text-ink-700/70">
                     {{ t('teller.askCashier') }}
                 </p>
             </div>
 
             <div
                 v-else-if="status === 'PENDING_RECEIPT'"
+                class="grid gap-6 lg:grid-cols-[1fr_20rem]"
+            >
+                <DenominationDrawer
+                    :model-value="issued"
+                    :notes="notes"
+                    :target="issuedTotal"
+                    :readonly="true"
+                    :label="t('teller.cashierIssuedNotes', 'Cashier issued notes')"
+                />
+                <aside
+                    class="h-fit rounded-counter border border-held/30 bg-held/5 p-5"
+                >
+                    <h2 class="font-display text-base font-semibold text-held">
+                        {{ t('teller.pendingReceiptTitle', 'Float waiting to be received') }}
+                    </h2>
+                    <p class="mt-2 text-sm leading-relaxed text-ink-700/70">
+                        {{ t('teller.pendingReceipt') }}
+                    </p>
+                    <button
+                        type="button"
+                        class="bank-button mt-5 w-full rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950"
+                        @click="router.visit('/teller/float/receive')"
+                    >
+                        {{ t('teller.openReceiveFloat', 'Open Receive Float') }}
+                    </button>
+                </aside>
+            </div>
+
+            <div
+                v-else-if="status === 'ACTIVE'"
+                class="grid gap-6 lg:grid-cols-[1fr_20rem]"
+            >
+                <div class="space-y-4">
+                    <div
+                        v-if="pendingAdditionalIssues.length"
+                        class="rounded-counter border border-held/30 bg-held/5 px-4 py-3 text-sm font-semibold text-held"
+                    >
+                        {{ pendingAdditionalIssues.length }}
+                        {{
+                            t(
+                                'teller.pendingAdditionalFloatNotice',
+                                'additional float issue(s) are waiting for your review.',
+                            )
+                        }}
+                        <button
+                            type="button"
+                            class="ml-2 underline underline-offset-2"
+                            @click="router.visit('/teller/float/receive')"
+                        >
+                            {{ t('teller.reviewNow', 'Review now') }}
+                        </button>
+                    </div>
+                    <DenominationDrawer
+                        :model-value="onHand"
+                        :notes="notes"
+                        :target="expectedReturn"
+                        :readonly="true"
+                        :label="t('teller.onHandBreakdown', 'Current note breakdown')"
+                    />
+                </div>
+
+                <aside
+                    class="h-fit rounded-counter border border-ink-800 bg-ink-900 p-5 text-ink-100 lg:sticky lg:top-24"
+                >
+                    <h2
+                        class="font-display text-sm font-semibold tracking-[0.14em] text-ink-300 uppercase"
+                    >
+                        {{ t('teller.floatOnHand') }}
+                    </h2>
+                    <dl class="mt-4 space-y-3 text-sm">
+                        <div class="flex justify-between gap-4">
+                            <dt class="text-ink-300">
+                                {{ t('teller.onHandNow') }}
+                            </dt>
+                            <dd class="font-semibold">
+                                <MoneyText :value="expectedReturn" />
+                            </dd>
+                        </div>
+                        <div class="flex justify-between gap-4">
+                            <dt class="text-ink-300">
+                                {{ t('teller.status') }}
+                            </dt>
+                            <dd>{{ statusText(status) }}</dd>
+                        </div>
+                    </dl>
+                    <p class="mt-4 text-xs leading-relaxed text-ink-300">
+                        {{
+                            t(
+                                'teller.myFloatReadOnlyHint',
+                                'This page is read-only. Use Return Cash when you hand money back to the cashier.',
+                            )
+                        }}
+                    </p>
+                </aside>
+            </div>
+
+            <div
+                v-else
+                class="rounded-counter border border-paper-edge bg-white px-6 py-16 text-center"
+            >
+                <p class="font-display text-lg font-semibold">
+                    {{ t('teller.waitingCashier') }}
+                </p>
+                <p class="mx-auto mt-1.5 max-w-md text-sm text-ink-700/70">
+                    {{ t('teller.pendingReconciliation') }}
+                </p>
+            </div>
+        </template>
+
+        <!-- Receive Float: receiver reviews sender-entered denominations and confirms with PIN. -->
+        <template v-else-if="receiveOnly">
+            <div
+                v-if="status === 'PENDING_RECEIPT'"
                 class="grid gap-6 lg:grid-cols-[1fr_20rem]"
             >
                 <div class="space-y-4">
@@ -507,7 +660,7 @@ onBeforeUnmount(() => {
                         :notes="notes"
                         :target="issuedTotal"
                         :readonly="true"
-                        label="Cashier issued notes"
+                        :label="t('teller.cashierIssuedNotes', 'Cashier issued notes')"
                     />
                 </div>
 
@@ -521,9 +674,7 @@ onBeforeUnmount(() => {
                     </h2>
                     <dl class="mt-4 space-y-3 text-sm">
                         <div class="flex justify-between">
-                            <dt class="text-ink-300">
-                                {{ t('teller.issued') }}
-                            </dt>
+                            <dt class="text-ink-300">{{ t('teller.issued') }}</dt>
                             <dd><MoneyText :value="issuedTotal" /></dd>
                         </div>
                     </dl>
@@ -550,26 +701,137 @@ onBeforeUnmount(() => {
             </div>
 
             <div
-                v-else-if="status === 'ACTIVE'"
+                v-else-if="pendingAdditionalIssues.length === 0"
+                class="rounded-counter border border-dashed border-paper-edge bg-white px-6 py-14 text-center"
+            >
+                <p class="font-display text-lg font-semibold">
+                    {{ t('teller.noPendingFloat', 'No float is waiting for receipt') }}
+                </p>
+                <p class="mx-auto mt-1.5 max-w-md text-sm text-ink-700/70">
+                    {{
+                        t(
+                            'teller.noPendingFloatDescription',
+                            'When the cashier issues an initial or additional float, it will appear here for review and PIN confirmation.',
+                        )
+                    }}
+                </p>
+            </div>
+
+            <section
+                v-if="pendingAdditionalIssues.length"
+                class="mt-6 overflow-hidden rounded-counter border border-paper-edge bg-white"
+            >
+                <header
+                    class="flex flex-wrap items-center justify-between gap-3 border-b border-paper-edge px-4 py-3"
+                >
+                    <div>
+                        <h2 class="font-display text-base font-semibold">
+                            {{ t('teller.additionalFloatIssues', 'Additional float issues') }}
+                        </h2>
+                        <p class="mt-0.5 text-xs text-ink-700/60">
+                            {{
+                                t(
+                                    'teller.additionalReceiveHint',
+                                    'Review the cashier-entered breakdown. Do not re-enter note quantities.',
+                                )
+                            }}
+                        </p>
+                    </div>
+                    <span
+                        class="rounded-full bg-held/10 px-3 py-1 text-xs font-bold text-held"
+                    >
+                        {{ pendingAdditionalIssues.length }} pending
+                    </span>
+                </header>
+                <div class="overflow-x-auto">
+                    <table class="w-full min-w-[44rem] text-left text-sm">
+                        <thead class="bg-paper text-xs text-ink-700/60">
+                            <tr>
+                                <th class="px-4 py-2 font-semibold">Issue</th>
+                                <th class="px-4 py-2 font-semibold">Float</th>
+                                <th class="px-4 py-2 text-right font-semibold">Amount</th>
+                                <th class="px-4 py-2 font-semibold">Cashier</th>
+                                <th class="px-4 py-2 font-semibold">Time</th>
+                                <th class="px-4 py-2 text-right font-semibold">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-paper-edge">
+                            <tr
+                                v-for="issue in pendingAdditionalIssues"
+                                :key="issue.id"
+                                class="bg-held/5"
+                            >
+                                <td class="px-4 py-3 font-semibold">#{{ issue.id }}</td>
+                                <td class="px-4 py-3">#{{ issue.float_id }}</td>
+                                <td class="px-4 py-3 text-right font-semibold">
+                                    <MoneyText :value="issue.amount" />
+                                </td>
+                                <td class="px-4 py-3 text-ink-700/70">
+                                    {{ issue.issued_by_name ?? '-' }}
+                                </td>
+                                <td class="px-4 py-3 text-ink-700/70">
+                                    {{ issueDate(issue) }}
+                                </td>
+                                <td class="px-4 py-3">
+                                    <div class="flex justify-end gap-2">
+                                        <button
+                                            type="button"
+                                            class="bank-button rounded-counter bg-seal px-3 py-1.5 text-xs font-semibold text-ink-950"
+                                            @click="reviewAdditionalIssue(issue)"
+                                        >
+                                            {{ t('teller.reviewReceive', 'Review & receive') }}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="bank-button bank-button-danger rounded-counter px-3 py-1.5 text-xs"
+                                            @click="rejectAdditionalIssue(issue)"
+                                        >
+                                            {{ t('common.reject', 'Reject') }}
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </template>
+
+        <!-- Return Cash: teller enters the hand-back count once; cashier later reviews it read-only. -->
+        <template v-else-if="returnOnly">
+            <div
+                v-if="status === 'ACTIVE'"
                 class="grid gap-6 lg:grid-cols-[1fr_20rem]"
             >
-                <div
-                    v-if="pendingAdditionalIssues.length"
-                    class="rounded-counter border border-held/30 bg-held/5 px-4 py-3 text-sm font-semibold text-held lg:col-span-2"
-                >
-                    {{ pendingAdditionalIssues.length }} additional float
-                    issue(s) are waiting for your review and PIN confirmation.
-                    Your on-hand balance will increase only after you receive
-                    them below.
+                <div class="space-y-4">
+                    <div
+                        v-if="pendingAdditionalIssues.length"
+                        class="rounded-counter border border-held/30 bg-held/5 px-4 py-3 text-sm font-semibold text-held"
+                    >
+                        {{
+                            t(
+                                'teller.receiveBeforeReturn',
+                                'Receive or reject all pending additional float issues before returning cash.',
+                            )
+                        }}
+                        <button
+                            type="button"
+                            class="ml-2 underline underline-offset-2"
+                            @click="router.visit('/teller/float/receive')"
+                        >
+                            {{ t('teller.openReceiveFloat', 'Open Receive Float') }}
+                        </button>
+                    </div>
+                    <DenominationDrawer
+                        v-model="returning"
+                        :notes="notes"
+                        :target="expectedReturn"
+                        :stock="onHand"
+                        :expected="onHand"
+                        :label="t('component.notesCounted')"
+                    />
                 </div>
-                <DenominationDrawer
-                    v-model="returning"
-                    :notes="notes"
-                    :target="expectedReturn"
-                    :stock="onHand"
-                    :expected="onHand"
-                    :label="t('component.notesCounted')"
-                />
+
                 <aside
                     class="h-fit rounded-counter border border-ink-800 bg-ink-900 p-5 text-ink-100 lg:sticky lg:top-24"
                 >
@@ -580,15 +842,11 @@ onBeforeUnmount(() => {
                     </h2>
                     <dl class="mt-4 space-y-3 text-sm">
                         <div class="flex justify-between">
-                            <dt class="text-ink-300">
-                                {{ t('teller.systemOnHand') }}
-                            </dt>
+                            <dt class="text-ink-300">{{ t('teller.systemOnHand') }}</dt>
                             <dd><MoneyText :value="expectedReturn" /></dd>
                         </div>
                         <div class="flex justify-between">
-                            <dt class="text-ink-300">
-                                {{ t('teller.youCounted') }}
-                            </dt>
+                            <dt class="text-ink-300">{{ t('teller.youCounted') }}</dt>
                             <dd><MoneyText :value="returnTotal" /></dd>
                         </div>
                     </dl>
@@ -605,332 +863,236 @@ onBeforeUnmount(() => {
                     </p>
                     <button
                         type="button"
-                        :disabled="
-                            !returnStockMatches ||
-                            pendingAdditionalIssues.length > 0
-                        "
+                        :disabled="!returnStockMatches || pendingAdditionalIssues.length > 0"
                         @click="open('return')"
                         class="mt-5 w-full rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110 disabled:opacity-35"
                     >
-                        {{
-                            t(
-                                'teller.confirmHandBackPin',
-                                'Confirm hand back with PIN',
-                            )
-                        }}
+                        {{ t('teller.confirmHandBackPin', 'Confirm hand back with PIN') }}
                     </button>
                 </aside>
             </div>
 
             <div
-                v-else
+                v-else-if="status === 'PENDING_RECEIPT'"
+                class="rounded-counter border border-held/30 bg-held/5 px-6 py-14 text-center"
+            >
+                <p class="font-display text-lg font-semibold">
+                    {{ t('teller.receiveBeforeReturnTitle', 'Receive your float first') }}
+                </p>
+                <p class="mx-auto mt-1.5 max-w-md text-sm text-ink-700/70">
+                    {{ t('teller.pendingReceipt') }}
+                </p>
+                <button
+                    type="button"
+                    class="bank-button mt-5 rounded-counter bg-seal px-5 py-2.5 text-sm font-semibold text-ink-950"
+                    @click="router.visit('/teller/float/receive')"
+                >
+                    {{ t('teller.openReceiveFloat', 'Open Receive Float') }}
+                </button>
+            </div>
+
+            <div
+                v-else-if="status === 'PENDING_RECONCILIATION'"
                 class="rounded-counter border border-paper-edge bg-white px-6 py-16 text-center"
             >
                 <p class="font-display text-lg font-semibold">
                     {{ t('teller.waitingCashier') }}
                 </p>
-                <p class="mx-auto mt-1.5 max-w-sm text-sm text-ink-700/70">
-                    {{ t('teller.waitingCashier') }}
+                <p class="mx-auto mt-1.5 max-w-md text-sm text-ink-700/70">
+                    {{ t('teller.pendingReconciliation') }}
+                </p>
+            </div>
+
+            <div
+                v-else
+                class="rounded-counter border border-dashed border-paper-edge bg-white px-6 py-16 text-center"
+            >
+                <p class="font-display text-lg font-semibold">
+                    {{ t('teller.noActiveFloat') }}
+                </p>
+                <p class="mx-auto mt-1.5 max-w-md text-sm text-ink-700/70">
+                    {{ t('teller.askCashier') }}
                 </p>
             </div>
         </template>
 
-        <section
-            v-if="floatIssues.length"
-            class="mt-6 overflow-hidden rounded-counter border border-paper-edge bg-white"
-        >
-            <header
-                class="flex flex-wrap items-center justify-between gap-3 border-b border-paper-edge px-4 py-3"
+        <!-- Float History: read-only records only; no operational actions. -->
+        <template v-else-if="historyOnly">
+            <section
+                v-if="floatIssues.length"
+                class="mb-6 overflow-hidden rounded-counter border border-paper-edge bg-white"
             >
-                <div>
+                <header class="border-b border-paper-edge px-4 py-3">
                     <h2 class="font-display text-base font-semibold">
-                        Additional float issues
+                        {{ t('teller.additionalIssueHistory', 'Additional issue history') }}
                     </h2>
                     <p class="mt-0.5 text-xs text-ink-700/60">
-                        Cashier can issue more cash to your ACTIVE float more
-                        than once during the day. Count each pending issue
-                        separately.
-                    </p>
-                </div>
-                <span
-                    v-if="pendingAdditionalIssues.length"
-                    class="rounded-full bg-held/10 px-3 py-1 text-xs font-bold text-held"
-                >
-                    {{ pendingAdditionalIssues.length }} pending
-                </span>
-            </header>
-            <div class="overflow-x-auto">
-                <table class="w-full min-w-[44rem] text-left text-sm">
-                    <thead class="bg-paper text-xs text-ink-700/60">
-                        <tr>
-                            <th class="px-4 py-2 font-semibold">Issue</th>
-                            <th class="px-4 py-2 font-semibold">Float</th>
-                            <th class="px-4 py-2 font-semibold">Status</th>
-                            <th class="px-4 py-2 text-right font-semibold">
-                                Amount
-                            </th>
-                            <th class="px-4 py-2 font-semibold">Cashier</th>
-                            <th class="px-4 py-2 font-semibold">Time</th>
-                            <th class="px-4 py-2 text-right font-semibold">
-                                Action
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-paper-edge">
-                        <tr
-                            v-for="issue in floatIssues"
-                            :key="issue.id"
-                            :class="
-                                issue.status === 'PENDING_RECEIPT'
-                                    ? 'bg-held/5'
-                                    : ''
-                            "
-                        >
-                            <td class="px-4 py-3 font-semibold">
-                                #{{ issue.id }}
-                            </td>
-                            <td class="px-4 py-3">#{{ issue.float_id }}</td>
-                            <td class="px-4 py-3">
-                                {{ statusText(issue.status) }}
-                            </td>
-                            <td class="px-4 py-3 text-right font-semibold">
-                                <MoneyText :value="issue.amount" />
-                            </td>
-                            <td class="px-4 py-3 text-ink-700/70">
-                                {{ issue.issued_by_name ?? '-' }}
-                            </td>
-                            <td class="px-4 py-3 text-ink-700/70">
-                                {{ issueDate(issue) }}
-                            </td>
-                            <td class="px-4 py-3">
-                                <div
-                                    v-if="issue.status === 'PENDING_RECEIPT'"
-                                    class="flex justify-end gap-2"
-                                >
-                                    <button
-                                        type="button"
-                                        class="bank-button rounded-counter bg-seal px-3 py-1.5 text-xs font-semibold text-ink-950"
-                                        @click="reviewAdditionalIssue(issue)"
-                                    >
-                                        Count & receive
-                                    </button>
-                                    <button
-                                        type="button"
-                                        class="bank-button bank-button-danger rounded-counter px-3 py-1.5 text-xs"
-                                        @click="rejectAdditionalIssue(issue)"
-                                    >
-                                        Reject
-                                    </button>
-                                </div>
-                                <span
-                                    v-else
-                                    class="block text-right text-xs font-semibold text-ink-700/55"
-                                >
-                                    {{ statusText(issue.status) }}
-                                </span>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <section
-            class="mt-6 overflow-hidden rounded-counter border border-paper-edge bg-white"
-        >
-            <header
-                class="flex flex-wrap items-center justify-between gap-3 border-b border-paper-edge px-4 py-3"
-            >
-                <div>
-                    <h2 class="font-display text-base font-semibold">
                         {{
                             t(
-                                'teller.floatTransactions',
-                                'My float vault transactions',
+                                'teller.additionalIssueHistoryHint',
+                                'Read-only record of additional float issues and their final status.',
                             )
                         }}
-                    </h2>
-                    <p class="mt-0.5 text-xs text-ink-700/60">
-                        {{
-                            pendingRows.length || pendingAdditionalIssues.length
-                                ? t(
-                                      'teller.incomingFloatCount',
-                                      'Incoming float requests are waiting for your PIN.',
-                                  )
-                                : t(
-                                      'teller.noIncomingFloat',
-                                      'No incoming float request is waiting.',
-                                  )
-                        }}
                     </p>
+                </header>
+                <div class="overflow-x-auto">
+                    <table class="w-full min-w-[42rem] text-left text-sm">
+                        <thead class="bg-paper text-xs text-ink-700/60">
+                            <tr>
+                                <th class="px-4 py-2 font-semibold">Issue</th>
+                                <th class="px-4 py-2 font-semibold">Float</th>
+                                <th class="px-4 py-2 font-semibold">Status</th>
+                                <th class="px-4 py-2 text-right font-semibold">Amount</th>
+                                <th class="px-4 py-2 font-semibold">Cashier</th>
+                                <th class="px-4 py-2 font-semibold">Time</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-paper-edge">
+                            <tr v-for="issue in floatIssues" :key="issue.id">
+                                <td class="px-4 py-3 font-semibold">#{{ issue.id }}</td>
+                                <td class="px-4 py-3">#{{ issue.float_id }}</td>
+                                <td class="px-4 py-3">{{ statusText(issue.status) }}</td>
+                                <td class="px-4 py-3 text-right font-semibold">
+                                    <MoneyText :value="issue.amount" />
+                                </td>
+                                <td class="px-4 py-3 text-ink-700/70">
+                                    {{ issue.issued_by_name ?? '-' }}
+                                </td>
+                                <td class="px-4 py-3 text-ink-700/70">
+                                    {{ issueDate(issue) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
-                <button
-                    type="button"
-                    @click="refreshFloatPage"
-                    class="bank-button bank-button-secondary min-h-9 rounded-counter px-3 py-1.5 text-xs"
+            </section>
+
+            <section
+                class="overflow-hidden rounded-counter border border-paper-edge bg-white"
+            >
+                <header
+                    class="flex flex-wrap items-center justify-between gap-3 border-b border-paper-edge px-4 py-3"
                 >
-                    {{ t('common.refresh', 'Refresh') }}
-                </button>
-            </header>
-
-            <div
-                v-if="rows.length === 0"
-                class="px-4 py-8 text-sm text-ink-700/65"
-            >
-                {{
-                    t('teller.noFloatTransactions', 'No float transaction yet.')
-                }}
-            </div>
-
-            <div v-else class="overflow-x-auto">
-                <table class="w-full min-w-[46rem] text-left text-sm">
-                    <thead class="bg-paper text-xs text-ink-700/60">
-                        <tr>
-                            <th class="px-4 py-2 font-semibold">
-                                {{ t('teller.floatNumber') }}
-                            </th>
-                            <th class="px-4 py-2 font-semibold">
-                                {{ t('teller.status') }}
-                            </th>
-                            <th class="px-4 py-2 text-right font-semibold">
-                                {{ t('teller.issued') }}
-                            </th>
-                            <th class="px-4 py-2 text-right font-semibold">
-                                {{ t('teller.onHandNow') }}
-                            </th>
-                            <th class="px-4 py-2 font-semibold">
-                                {{ t('role.cashier') }}
-                            </th>
-                            <th class="px-4 py-2 font-semibold">
-                                {{ t('component.time') }}
-                            </th>
-                            <th class="px-4 py-2 text-right font-semibold">
-                                {{ t('common.action', 'Action') }}
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-paper-edge">
-                        <tr
-                            v-for="floatRow in paginatedRows"
-                            :key="floatRow.id"
-                            class="align-middle"
-                            :class="
-                                floatRow.status === 'PENDING_RECEIPT'
-                                    ? 'bg-held/5'
-                                    : ''
-                            "
-                        >
-                            <td class="px-4 py-3 font-semibold">
-                                #{{ floatRow.id }}
-                            </td>
-                            <td class="px-4 py-3">
-                                <div class="flex items-center gap-2">
-                                    <StateChip :status="floatRow.status" />
-                                    <span class="text-xs text-ink-700/60">{{
-                                        statusText(floatRow.status)
-                                    }}</span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3 text-right font-semibold">
-                                <MoneyText :value="floatRow.total_amount" />
-                            </td>
-                            <td class="px-4 py-3 text-right">
-                                <MoneyText :value="rowBalance(floatRow)" />
-                            </td>
-                            <td class="px-4 py-3 text-ink-700/70">
-                                {{ floatRow.issued_by_name ?? '-' }}
-                            </td>
-                            <td class="px-4 py-3 text-ink-700/70">
-                                {{ rowDate(floatRow) }}
-                            </td>
-                            <td class="px-4 py-3">
-                                <div class="flex justify-end gap-2">
-                                    <template
-                                        v-if="
-                                            floatRow.status ===
-                                            'PENDING_RECEIPT'
-                                        "
-                                    >
-                                        <button
-                                            type="button"
-                                            @click="reviewIncoming(floatRow)"
-                                            class="bank-button rounded-counter bg-seal px-3 py-1.5 text-xs font-semibold text-ink-950"
-                                        >
-                                            {{
-                                                t(
-                                                    'teller.receiveFloat',
-                                                    'Receive float',
-                                                )
-                                            }}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            @click="rejectIncoming(floatRow)"
-                                            class="bank-button bank-button-danger rounded-counter px-3 py-1.5 text-xs"
-                                        >
-                                            {{ t('common.reject', 'Reject') }}
-                                        </button>
-                                    </template>
-                                    <span
-                                        v-else
-                                        class="text-xs font-semibold text-ink-700/55"
-                                    >
-                                        {{ statusText(floatRow.status) }}
-                                    </span>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <footer
-                v-if="rows.length"
-                class="mt-4 grid items-center gap-3 px-4 pb-4 text-sm font-semibold text-slate md:grid-cols-3"
-            >
-                <span>
-                    Showing {{ historyFirstRecord }} to
-                    {{ historyLastRecord }} of {{ rows.length }} entries
-                </span>
-                <label class="bank-page-size justify-self-center">
-                    {{ t('common.show', 'Show') }}
-                    <select
-                        v-model.number="historyPerPage"
-                        class="bank-page-size-select"
-                        @change="historyPage = 1"
-                    >
-                        <option :value="10">10</option>
-                        <option :value="25">25</option>
-                        <option :value="50">50</option>
-                        <option :value="100">100</option>
-                    </select>
-                    {{ t('common.entries', 'entries') }}
-                </label>
-                <div class="flex justify-end gap-2">
+                    <div>
+                        <h2 class="font-display text-base font-semibold">
+                            {{ t('teller.floatTransactions', 'Float sessions') }}
+                        </h2>
+                        <p class="mt-0.5 text-xs text-ink-700/60">
+                            {{
+                                t(
+                                    'teller.floatHistoryReadOnly',
+                                    'Historical float sessions are read-only. Receive and return actions live in their own menus.',
+                                )
+                            }}
+                        </p>
+                    </div>
                     <button
                         type="button"
-                        class="bank-button bank-button-secondary px-3 py-2"
-                        :disabled="historyPage === 1"
-                        @click="historyPage--"
+                        @click="refreshFloatPage"
+                        class="bank-button bank-button-secondary min-h-9 rounded-counter px-3 py-1.5 text-xs"
                     >
-                        {{ t('common.previous', 'Previous') }}
+                        {{ t('common.refresh', 'Refresh') }}
                     </button>
-                    <span class="self-center">
-                        {{ historyPage }} / {{ historyPageCount }}
-                    </span>
-                    <button
-                        type="button"
-                        class="bank-button bank-button-secondary px-3 py-2"
-                        :disabled="historyPage === historyPageCount"
-                        @click="historyPage++"
-                    >
-                        {{ t('common.next', 'Next') }}
-                    </button>
+                </header>
+
+                <div
+                    v-if="rows.length === 0"
+                    class="px-4 py-8 text-sm text-ink-700/65"
+                >
+                    {{ t('teller.noFloatTransactions', 'No float transaction yet.') }}
                 </div>
-            </footer>
-        </section>
+
+                <div v-else class="overflow-x-auto">
+                    <table class="w-full min-w-[42rem] text-left text-sm">
+                        <thead class="bg-paper text-xs text-ink-700/60">
+                            <tr>
+                                <th class="px-4 py-2 font-semibold">{{ t('teller.floatNumber') }}</th>
+                                <th class="px-4 py-2 font-semibold">{{ t('teller.status') }}</th>
+                                <th class="px-4 py-2 text-right font-semibold">{{ t('teller.issued') }}</th>
+                                <th class="px-4 py-2 text-right font-semibold">{{ t('teller.onHandNow') }}</th>
+                                <th class="px-4 py-2 font-semibold">{{ t('role.cashier') }}</th>
+                                <th class="px-4 py-2 font-semibold">{{ t('component.time') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-paper-edge">
+                            <tr
+                                v-for="floatRow in paginatedRows"
+                                :key="floatRow.id"
+                                class="align-middle"
+                            >
+                                <td class="px-4 py-3 font-semibold">#{{ floatRow.id }}</td>
+                                <td class="px-4 py-3">
+                                    <div class="flex items-center gap-2">
+                                        <StateChip :status="floatRow.status" />
+                                        <span class="text-xs text-ink-700/60">
+                                            {{ statusText(floatRow.status) }}
+                                        </span>
+                                    </div>
+                                </td>
+                                <td class="px-4 py-3 text-right font-semibold">
+                                    <MoneyText :value="floatRow.total_amount" />
+                                </td>
+                                <td class="px-4 py-3 text-right">
+                                    <MoneyText :value="rowBalance(floatRow)" />
+                                </td>
+                                <td class="px-4 py-3 text-ink-700/70">
+                                    {{ floatRow.issued_by_name ?? '-' }}
+                                </td>
+                                <td class="px-4 py-3 text-ink-700/70">
+                                    {{ rowDate(floatRow) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <footer
+                    v-if="rows.length"
+                    class="mt-4 grid items-center gap-3 px-4 pb-4 text-sm font-semibold text-slate md:grid-cols-3"
+                >
+                    <span>
+                        Showing {{ historyFirstRecord }} to {{ historyLastRecord }} of
+                        {{ rows.length }} entries
+                    </span>
+                    <label class="bank-page-size justify-self-center">
+                        {{ t('common.show', 'Show') }}
+                        <select
+                            v-model.number="historyPerPage"
+                            class="bank-page-size-select"
+                            @change="historyPage = 1"
+                        >
+                            <option :value="10">10</option>
+                            <option :value="25">25</option>
+                            <option :value="50">50</option>
+                            <option :value="100">100</option>
+                        </select>
+                        {{ t('common.entries', 'entries') }}
+                    </label>
+                    <div class="flex justify-end gap-2">
+                        <button
+                            type="button"
+                            class="bank-button bank-button-secondary px-3 py-2"
+                            :disabled="historyPage === 1"
+                            @click="historyPage--"
+                        >
+                            {{ t('common.previous', 'Previous') }}
+                        </button>
+                        <span class="self-center">{{ historyPage }} / {{ historyPageCount }}</span>
+                        <button
+                            type="button"
+                            class="bank-button bank-button-secondary px-3 py-2"
+                            :disabled="historyPage === historyPageCount"
+                            @click="historyPage++"
+                        >
+                            {{ t('common.next', 'Next') }}
+                        </button>
+                    </div>
+                </footer>
+            </section>
+        </template>
 
         <div
-            v-if="reviewFloat || reviewIssue"
+            v-if="receiveOnly && (reviewFloat || reviewIssue)"
             class="fixed inset-0 z-40 grid place-items-center bg-ink-950/55 p-4"
             @keydown.esc="closeReview"
         >
@@ -944,11 +1106,7 @@ onBeforeUnmount(() => {
                 >
                     <div>
                         <p class="field-label">
-                            {{
-                                reviewIssue
-                                    ? 'Additional issue'
-                                    : t('teller.floatNumber')
-                            }}
+                            {{ reviewIssue ? 'Additional issue' : t('teller.floatNumber') }}
                             #{{ reviewIssue?.id ?? reviewFloat?.id }}
                         </p>
                         <h2 class="font-display text-lg font-semibold">
@@ -977,7 +1135,7 @@ onBeforeUnmount(() => {
                         :notes="notes"
                         :target="reviewIssuedTotal"
                         :readonly="true"
-                        label="Cashier issued notes"
+                        :label="t('teller.cashierIssuedNotes', 'Cashier issued notes')"
                     />
 
                     <aside
@@ -990,12 +1148,8 @@ onBeforeUnmount(() => {
                         </h3>
                         <dl class="mt-4 space-y-3 text-sm">
                             <div class="flex justify-between">
-                                <dt class="text-ink-300">
-                                    {{ t('teller.issued') }}
-                                </dt>
-                                <dd>
-                                    <MoneyText :value="reviewIssuedTotal" />
-                                </dd>
+                                <dt class="text-ink-300">{{ t('teller.issued') }}</dt>
+                                <dd><MoneyText :value="reviewIssuedTotal" /></dd>
                             </div>
                         </dl>
                         <p class="mt-3 text-xs leading-relaxed text-ink-300">
@@ -1011,12 +1165,7 @@ onBeforeUnmount(() => {
                             </button>
                             <button
                                 type="button"
-                                @click="
-                                    reviewIssue
-                                        ? rejectAdditionalIssue(reviewIssue)
-                                        : reviewFloat &&
-                                          rejectIncoming(reviewFloat)
-                                "
+                                @click="reviewIssue && rejectAdditionalIssue(reviewIssue)"
                                 class="bank-button bank-button-danger rounded-counter py-3 text-sm font-semibold"
                             >
                                 {{ t('common.reject', 'Reject') }}
