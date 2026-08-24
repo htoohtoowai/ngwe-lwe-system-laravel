@@ -3,6 +3,7 @@ import { Link, router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import AccountTile from '@/components/bank/AccountTile.vue';
 import BigAmountInput from '@/components/bank/BigAmountInput.vue';
+import CashOutSettlementDrawer from '@/components/bank/CashOutSettlementDrawer.vue';
 import DenomDrawer from '@/components/bank/DenomDrawer.vue';
 import FeePaymentSelector from '@/components/bank/FeePaymentSelector.vue';
 import type { FeePaymentMethod } from '@/components/bank/FeePaymentSelector.vue';
@@ -65,12 +66,12 @@ const amount = ref(0);
 const description = ref('');
 const denoms = ref<Record<number, number>>({});
 const feeDenoms = ref<Record<number, number>>({});
+const changeDenoms = ref<Record<number, number>>({});
 const submitting = ref(false);
 const errors = ref<Record<string, string>>({});
 const feePaymentMethod = ref<FeePaymentMethod>('cash');
 const feeAccountId = ref<number | null>(null);
 const showCashDenoms = ref(true);
-const showFeeDenoms = ref(true);
 const historySearch = ref('');
 const historyStatus = ref('all');
 const historyDateFrom = ref('');
@@ -160,12 +161,38 @@ const feeDenomTotal = computed(() =>
         0,
     ),
 );
+const changeDenomTotal = computed(() =>
+    props.notes.reduce(
+        (sum, note) => sum + note * (changeDenoms.value[note] ?? 0),
+        0,
+    ),
+);
 const needsCashDenoms = computed(() => props.cashOutRequiresDenominations);
 const needsCashFeeDenoms = computed(
     () =>
         props.role === 'teller' &&
         feePaymentMethod.value === 'cash' &&
         feeNum.value > 0,
+);
+const cashFeeChangeDue = computed(() =>
+    needsCashFeeDenoms.value
+        ? Math.max(0, feeDenomTotal.value - feeNum.value)
+        : 0,
+);
+const cashStock = computed(() =>
+    props.role === 'admin' ? (props.cashOutStock ?? {}) : props.floatStock,
+);
+const projectedStockValid = computed(() =>
+    props.notes.every(
+        (note) =>
+            Number(cashStock.value[note] ?? 0) -
+                Number(denoms.value[note] ?? 0) +
+                (needsCashFeeDenoms.value
+                    ? Number(feeDenoms.value[note] ?? 0) -
+                      Number(changeDenoms.value[note] ?? 0)
+                    : 0) >=
+            0,
+    ),
 );
 const accountCreditAmount = computed(() =>
     feePaymentMethod.value === 'account'
@@ -174,8 +201,8 @@ const accountCreditAmount = computed(() =>
 );
 const customerCashPayout = computed(() => amount.value);
 const customerFeeDue = computed(() => feeNum.value);
-const cashStock = computed(() =>
-    props.role === 'admin' ? (props.cashOutStock ?? {}) : props.floatStock,
+const tellerCashNetMovement = computed(
+    () => -amount.value + (needsCashFeeDenoms.value ? feeNum.value : 0),
 );
 const floatLocked = computed(
     () => props.role === 'teller' && props.float?.status !== 'ACTIVE',
@@ -191,7 +218,10 @@ const ready = computed(
         accountId.value !== null &&
         amount.value > 0 &&
         (!needsCashDenoms.value || denomTotal.value === amount.value) &&
-        (!needsCashFeeDenoms.value || feeDenomTotal.value === feeNum.value) &&
+        (!needsCashFeeDenoms.value ||
+            (feeDenomTotal.value >= feeNum.value &&
+                changeDenomTotal.value === cashFeeChangeDue.value)) &&
+        projectedStockValid.value &&
         feePaymentValid.value &&
         !floatLocked.value &&
         !cashierLocked.value,
@@ -223,8 +253,28 @@ const readyIssue = computed(() => {
         );
     }
 
-    if (needsCashFeeDenoms.value && feeDenomTotal.value !== feeNum.value) {
-        return t('transaction.cashFeeReceivedHint');
+    if (needsCashFeeDenoms.value && feeDenomTotal.value < feeNum.value) {
+        return t(
+            'transaction.cashFeeReceivedMinimumHint',
+            'Count at least the fee amount received from the customer.',
+        );
+    }
+
+    if (
+        needsCashFeeDenoms.value &&
+        changeDenomTotal.value !== cashFeeChangeDue.value
+    ) {
+        return t(
+            'transaction.cashOutChangeHint',
+            'Count the exact change to return to the customer.',
+        );
+    }
+
+    if (!projectedStockValid.value) {
+        return t(
+            'transaction.projectedStockError',
+            'A denomination would go below zero. Adjust payout or change notes.',
+        );
     }
 
     return t(
@@ -324,7 +374,10 @@ function submit() {
                     : null,
             ...(needsCashDenoms.value ? { denominations: denoms.value } : {}),
             ...(needsCashFeeDenoms.value
-                ? { fee_denominations: feeDenoms.value }
+                ? {
+                      fee_denominations: feeDenoms.value,
+                      change_denominations: changeDenoms.value,
+                  }
                 : {}),
         },
         {
@@ -654,7 +707,85 @@ function submit() {
                 </div>
 
                 <section
-                    v-if="needsCashDenoms"
+                    v-if="needsCashDenoms && role === 'teller'"
+                    class="overflow-hidden rounded-field border border-brand/20 bg-card"
+                    aria-labelledby="cash-out-settlement-title"
+                >
+                    <button
+                        type="button"
+                        class="flex w-full items-center justify-between gap-3 border-b border-line bg-brand-soft/55 px-3 py-2.5 text-left transition hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/35 sm:px-4"
+                        :aria-expanded="showCashDenoms"
+                        aria-controls="cash-out-settlement"
+                        @click="showCashDenoms = !showCashDenoms"
+                    >
+                        <div class="flex min-w-0 items-center gap-2">
+                            <span
+                                class="grid size-6 shrink-0 place-items-center rounded-lg bg-brand text-[10px] font-black text-white"
+                                >01</span
+                            >
+                            <h3
+                                id="cash-out-settlement-title"
+                                class="truncate text-sm font-bold text-ink"
+                            >
+                                {{
+                                    t(
+                                        'transaction.cashSettlement',
+                                        'Cash settlement',
+                                    )
+                                }}
+                            </h3>
+                        </div>
+                        <div class="ml-auto shrink-0 text-right">
+                            <p
+                                class="text-[10px] font-bold tracking-wide text-slate uppercase"
+                            >
+                                {{
+                                    t(
+                                        'transaction.netTellerCash',
+                                        'Net teller cash',
+                                    )
+                                }}
+                            </p>
+                            <p class="money text-base font-black text-brand">
+                                −{{
+                                    mmk(
+                                        amount -
+                                            (needsCashFeeDenoms ? feeNum : 0),
+                                    )
+                                }}
+                                <span class="text-[10px] text-slate">MMK</span>
+                            </p>
+                        </div>
+                        <span
+                            class="grid size-7 shrink-0 place-items-center rounded-full bg-card text-sm font-black text-slate shadow-sm"
+                            aria-hidden="true"
+                        >
+                            {{ showCashDenoms ? '⌃' : '⌄' }}
+                        </span>
+                    </button>
+                    <div
+                        v-show="showCashDenoms"
+                        id="cash-out-settlement"
+                        class="p-2.5 sm:p-3"
+                    >
+                        <CashOutSettlementDrawer
+                            :notes="notes"
+                            :stock="cashStock"
+                            :payout="denoms"
+                            :fee-received="feeDenoms"
+                            :change="changeDenoms"
+                            :payout-target="amount || 0"
+                            :fee-due="feeNum"
+                            :cash-fee="needsCashFeeDenoms"
+                            @update:payout="denoms = $event"
+                            @update:fee-received="feeDenoms = $event"
+                            @update:change="changeDenoms = $event"
+                        />
+                    </div>
+                </section>
+
+                <section
+                    v-else-if="needsCashDenoms"
                     class="overflow-hidden rounded-field border border-brand/20 bg-card"
                     aria-labelledby="cash-out-denomination-title"
                 >
@@ -665,35 +796,20 @@ function submit() {
                         aria-controls="cash-out-denominations"
                         @click="showCashDenoms = !showCashDenoms"
                     >
-                        <div class="flex min-w-0 items-center gap-2">
-                            <span
-                                class="grid size-6 shrink-0 place-items-center rounded-lg bg-brand text-[10px] font-black text-white"
-                                >01</span
-                            >
-                            <h3
-                                id="cash-out-denomination-title"
-                                class="truncate text-sm font-bold text-ink"
-                            >
-                                {{
-                                    role === 'admin'
-                                        ? t('transaction.notesMainVault')
-                                        : t('transaction.notesMyVault')
-                                }}
-                            </h3>
-                        </div>
-                        <div class="ml-auto shrink-0 text-right">
-                            <p
-                                class="text-[10px] font-bold tracking-wide text-slate uppercase"
-                            >
-                                {{ t('component.counted') }}
-                            </p>
-                            <p class="money text-base font-black text-brand">
-                                {{ mmk(denomTotal) }}
-                                <span class="text-[10px] text-slate">MMK</span>
-                            </p>
-                        </div>
+                        <h3
+                            id="cash-out-denomination-title"
+                            class="text-sm font-bold text-ink"
+                        >
+                            {{ t('transaction.notesMainVault') }}
+                        </h3>
+                        <p
+                            class="money ml-auto text-base font-black text-brand"
+                        >
+                            {{ mmk(denomTotal) }}
+                            <span class="text-[10px] text-slate">MMK</span>
+                        </p>
                         <span
-                            class="grid size-7 shrink-0 place-items-center rounded-full bg-card text-sm font-black text-slate shadow-sm"
+                            class="grid size-7 place-items-center rounded-full bg-card text-sm font-black text-slate shadow-sm"
                             aria-hidden="true"
                         >
                             {{ showCashDenoms ? '⌃' : '⌄' }}
@@ -709,78 +825,11 @@ function submit() {
                             :notes="notes"
                             :target="amount || 0"
                             :stock="cashStock"
-                            :label="
-                                role === 'admin'
-                                    ? t('transaction.notesMainVault')
-                                    : t('transaction.notesMyVault')
-                            "
+                            :label="t('transaction.notesMainVault')"
                             id-prefix="cash-out-denomination"
                             :show-title="false"
                             compact
                         />
-                    </div>
-                </section>
-
-                <section
-                    v-if="needsCashFeeDenoms"
-                    class="overflow-hidden rounded-field border border-held/20 bg-card"
-                    aria-labelledby="cash-out-fee-denomination-title"
-                >
-                    <button
-                        type="button"
-                        class="flex w-full items-center justify-between gap-3 border-b border-line bg-held/5 px-3 py-2.5 text-left transition hover:bg-held/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-held/35 sm:px-4"
-                        :aria-expanded="showFeeDenoms"
-                        aria-controls="cash-out-fee-denominations"
-                        @click="showFeeDenoms = !showFeeDenoms"
-                    >
-                        <div class="flex min-w-0 items-center gap-2">
-                            <span
-                                class="grid size-6 shrink-0 place-items-center rounded-lg bg-held text-[10px] font-black text-white"
-                                >02</span
-                            >
-                            <h3
-                                id="cash-out-fee-denomination-title"
-                                class="truncate text-sm font-bold text-ink"
-                            >
-                                {{ t('transaction.cashFeeReceivedNotes') }}
-                            </h3>
-                        </div>
-                        <div class="ml-auto shrink-0 text-right">
-                            <p
-                                class="text-[10px] font-bold tracking-wide text-slate uppercase"
-                            >
-                                {{ t('component.counted') }}
-                            </p>
-                            <p class="money text-base font-black text-held">
-                                {{ mmk(feeDenomTotal) }}
-                                <span class="text-[10px] text-slate">MMK</span>
-                            </p>
-                        </div>
-                        <span
-                            class="grid size-7 shrink-0 place-items-center rounded-full bg-card text-sm font-black text-slate shadow-sm"
-                            aria-hidden="true"
-                        >
-                            {{ showFeeDenoms ? '⌃' : '⌄' }}
-                        </span>
-                    </button>
-                    <div
-                        v-show="showFeeDenoms"
-                        id="cash-out-fee-denominations"
-                        class="p-2.5 sm:p-3"
-                    >
-                        <DenomDrawer
-                            v-model="feeDenoms"
-                            :notes="notes"
-                            :target="feeNum"
-                            :enforce-stock="false"
-                            :label="t('transaction.cashFeeReceivedNotes')"
-                            id-prefix="cash-out-fee-denomination"
-                            :show-title="false"
-                            compact
-                        />
-                        <p class="mt-2 text-xs font-semibold text-slate">
-                            {{ t('transaction.cashFeeReceivedHint') }}
-                        </p>
                     </div>
                 </section>
             </div>
@@ -920,10 +969,26 @@ function submit() {
                     class="flex justify-between py-3 text-sm"
                 >
                     <dt class="font-bold">
-                        {{ t('transaction.cashFeeReceivedNotes') }}
+                        {{ t('transaction.feeReceived', 'Fee cash received') }}
                     </dt>
                     <dd class="money font-bold text-balance">
                         +{{ mmk(feeDenomTotal) }} MMK
+                    </dd>
+                </div>
+                <div
+                    v-if="needsCashFeeDenoms && cashFeeChangeDue > 0"
+                    class="flex justify-between py-3 text-sm"
+                >
+                    <dt class="font-bold">
+                        {{
+                            t(
+                                'transaction.changeToCustomer',
+                                'Change to customer',
+                            )
+                        }}
+                    </dt>
+                    <dd class="money font-bold text-brand">
+                        −{{ mmk(changeDenomTotal) }} MMK
                     </dd>
                 </div>
                 <div class="flex justify-between py-3 text-sm">
@@ -945,10 +1010,19 @@ function submit() {
                     class="flex justify-between py-3 text-sm"
                 >
                     <dt class="font-bold">
-                        {{ t('transaction.notesMyVault') }}
+                        {{ t('transaction.netTellerCash', 'Net teller cash') }}
                     </dt>
-                    <dd class="money font-bold text-brand">
-                        −{{ mmk(amount) }} MMK
+                    <dd
+                        class="money font-bold"
+                        :class="
+                            tellerCashNetMovement < 0
+                                ? 'text-brand'
+                                : 'text-balance'
+                        "
+                    >
+                        {{ tellerCashNetMovement > 0 ? '+' : ''
+                        }}{{ mmk(tellerCashNetMovement) }}
+                        MMK
                     </dd>
                 </div>
                 <div

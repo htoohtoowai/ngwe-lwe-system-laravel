@@ -31,6 +31,8 @@ class CashOutRequest extends FormRequest
             'denominations.*' => ['integer', 'min:0'],
             'fee_denominations' => ['sometimes', 'nullable', 'array'],
             'fee_denominations.*' => ['integer', 'min:0'],
+            'change_denominations' => ['sometimes', 'nullable', 'array'],
+            'change_denominations.*' => ['integer', 'min:0'],
         ];
     }
 
@@ -39,7 +41,11 @@ class CashOutRequest extends FormRequest
         $validator->after(function ($validator): void {
             $supported = Money::supportedDenominations();
 
-            foreach (['denominations', 'fee_denominations'] as $field) {
+            foreach ([
+                'denominations',
+                'fee_denominations',
+                'change_denominations',
+            ] as $field) {
                 $denoms = $this->input($field);
                 if (! is_array($denoms) || $denoms === []) {
                     continue;

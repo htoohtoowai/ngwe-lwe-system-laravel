@@ -205,6 +205,26 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.cashFeeReceivedNotes': 'Cash fee received notes',
         'transaction.cashFeeReceivedHint':
             'Count the service fee cash from the customer. These notes are added to your teller vault.',
+        'transaction.cashSettlement': 'Cash settlement',
+        'transaction.cashSettlementHint':
+            'Use one sheet for payout, cash fee received and any change returned.',
+        'transaction.customerPayout': 'Customer payout',
+        'transaction.customerPayoutShort': 'Payout −',
+        'transaction.feeReceived': 'Fee cash received',
+        'transaction.feeReceivedShort': 'Fee +',
+        'transaction.changeToCustomer': 'Change to customer',
+        'transaction.changeShort': 'Change −',
+        'transaction.projected': 'Projected',
+        'transaction.netTellerCash': 'Net teller cash',
+        'transaction.fillPayout': 'Fill payout',
+        'transaction.fillChange': 'Fill change',
+        'transaction.cashSettlementMatched': 'Cash settlement matched',
+        'transaction.cashFeeReceivedMinimumHint':
+            'Count at least the fee amount received from the customer.',
+        'transaction.cashOutChangeHint':
+            'Count the exact change to return to the customer.',
+        'transaction.projectedStockError':
+            'A denomination would go below zero. Adjust payout or change notes.',
         'transaction.feePaymentAccount': 'Account',
         'transaction.feePaymentAccountHint':
             'Debit the source account and credit a fee account.',
@@ -620,6 +640,26 @@ const messages: Record<Locale, Record<string, string>> = {
             'ဝန်ဆောင်ခကို ငွေသားလှုပ်ရှားမှုထဲ ထည့်မည်။',
         'transaction.cashOutFeeCashOutcome':
             'Customer က fee ကို ငွေသားပေးမည်။ Fee notes ကို Teller ငွေခွဲထဲ တိုးမည်။',
+        'transaction.cashSettlement': 'ငွေသားရှင်းတမ်း',
+        'transaction.cashSettlementHint':
+            'Customer ကိုပေးငွေ၊ လက်ခံ fee နှင့် ပြန်အမ်းငွေကို တစ်နေရာတည်းတွင် ရေတွက်ပါ။',
+        'transaction.customerPayout': 'Customer ကိုပေးငွေ',
+        'transaction.customerPayoutShort': 'ပေးငွေ −',
+        'transaction.feeReceived': 'Fee ငွေသားလက်ခံ',
+        'transaction.feeReceivedShort': 'Fee +',
+        'transaction.changeToCustomer': 'Customer ကိုပြန်အမ်းငွေ',
+        'transaction.changeShort': 'ပြန်အမ်း −',
+        'transaction.projected': 'ပြီးလျှင်ကျန်',
+        'transaction.netTellerCash': 'Teller ငွေသားအသားတင်',
+        'transaction.fillPayout': 'ပေးငွေ အလိုအလျောက်ဖြည့်',
+        'transaction.fillChange': 'ပြန်အမ်းငွေ အလိုအလျောက်ဖြည့်',
+        'transaction.cashSettlementMatched': 'ငွေသားရှင်းတမ်း ကိုက်ညီပါသည်',
+        'transaction.cashFeeReceivedMinimumHint':
+            'Customer ဆီမှ လက်ခံသော fee ငွေသားကို သတ်မှတ် fee ထက် မနည်းအောင် ရေတွက်ပါ။',
+        'transaction.cashOutChangeHint':
+            'Customer ကိုပြန်အမ်းရမည့် ငွေပမာဏအတိအကျကို ရေတွက်ပါ။',
+        'transaction.projectedStockError':
+            'ငွေစက္ကူအမျိုးအစားတစ်ခု၏ လက်ကျန်သည် သုညအောက်ကျနေသည်။ ပေးငွေ သို့မဟုတ် ပြန်အမ်းငွေကို ပြင်ပါ။',
         'transaction.feePaymentAccount': 'အကောင့်ဖြင့်',
         'transaction.feePaymentAccountHint':
             'မူလအကောင့်မှ နုတ်ပြီး ဝန်ဆောင်ခအကောင့်ထဲ တိုးမည်။',

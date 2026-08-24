@@ -3,12 +3,13 @@
 namespace App\Services;
 
 use App\Enums\AccountFeature;
+use App\Enums\AgentCommissionDirection;
 use App\Exceptions\InsufficientBalanceException;
 use App\Exceptions\InsufficientVaultDenominationException;
 use App\Models\Account;
+use App\Models\ActivityLog;
 use App\Models\AgentCommissionEntry;
 use App\Models\AgentCommissionTier;
-use App\Models\ActivityLog;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Repositories\AccountRepository;
@@ -308,6 +309,7 @@ class TransactionService
      *   note?: string|null,
      *   denominations?: array<int|string, int|string>|null,
      *   fee_denominations?: array<int|string, int|string>|null,
+     *   change_denominations?: array<int|string, int|string>|null,
      * }  $data
      */
     public function createCashOut(array $data, User $creator): Transaction
@@ -363,13 +365,25 @@ class TransactionService
             }
         }
 
-        $rawFeeDenominations = is_array($data['fee_denominations'] ?? null) ? $data['fee_denominations'] : [];
+        $rawFeeDenominations = is_array($data['fee_denominations'] ?? null)
+            ? $data['fee_denominations']
+            : [];
+        $rawChangeDenominations = is_array($data['change_denominations'] ?? null)
+            ? $data['change_denominations']
+            : [];
         $cashFeeDenominationsExpected = $creator->role === 'teller'
             && $feePayment['method'] === 'cash'
             && (float) $fees['customer_fee'] > 0
-            && (array_key_exists('fee_payment_method', $data) || $rawFeeDenominations !== []);
+            && (
+                array_key_exists('fee_payment_method', $data)
+                || $rawFeeDenominations !== []
+                || $rawChangeDenominations !== []
+            );
 
         $normalizedFeeDenominations = null;
+        $normalizedChangeDenominations = null;
+        $cashFeeReceivedTotal = 0;
+        $cashFeeChangeDue = 0;
         if ($cashFeeDenominationsExpected) {
             $normalizedFeeDenominations = $this->floatValidator->normalizeReceivedDenominations(
                 $rawFeeDenominations,
@@ -379,17 +393,53 @@ class TransactionService
                 throw new InvalidArgumentException('Fee denomination breakdown is required when Cash Out fee is received in cash.');
             }
 
-            $feeDenominationTotal = Money::denominationTotal($normalizedFeeDenominations);
-            if ($feeDenominationTotal !== (int) Money::normalize($fees['customer_fee'])) {
+            $cashFeeReceivedTotal = Money::denominationTotal($normalizedFeeDenominations);
+            $cashFeeDue = (int) Money::normalize($fees['customer_fee']);
+            if ($cashFeeReceivedTotal < $cashFeeDue) {
                 throw new InvalidArgumentException(
-                    "Fee denomination total {$feeDenominationTotal} does not match Cash Out fee {$fees['customer_fee']}."
+                    "Cash fee received {$cashFeeReceivedTotal} is less than Cash Out fee {$cashFeeDue}."
                 );
             }
-        } elseif ($rawFeeDenominations !== []) {
-            throw new InvalidArgumentException('fee_denominations are only allowed for Teller Cash Out fees paid in cash.');
+
+            $cashFeeChangeDue = $cashFeeReceivedTotal - $cashFeeDue;
+            $normalizedChangeDenominations = $this->floatValidator->normalizeReceivedDenominations(
+                $rawChangeDenominations,
+            );
+            $changeTotal = Money::denominationTotal($normalizedChangeDenominations);
+
+            if ($cashFeeChangeDue > 0 && $normalizedChangeDenominations === []) {
+                throw new InvalidArgumentException(
+                    "Change denomination breakdown is required for Cash Out change {$cashFeeChangeDue}."
+                );
+            }
+
+            if ($changeTotal !== $cashFeeChangeDue) {
+                throw new InvalidArgumentException(
+                    "Change denomination total {$changeTotal} does not match Cash Out change {$cashFeeChangeDue}."
+                );
+            }
+        } elseif ($rawFeeDenominations !== [] || $rawChangeDenominations !== []) {
+            throw new InvalidArgumentException(
+                'fee_denominations and change_denominations are only allowed for Teller Cash Out fees paid in cash.'
+            );
         }
 
-        $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $fees, $feePayment, $commission, $commissionResult, $fromCompanyId, $normalizedDenominations, $normalizedFeeDenominations): Transaction {
+        $transaction = DB::transaction(function () use (
+            $data,
+            $creator,
+            $account,
+            $amount,
+            $fees,
+            $feePayment,
+            $commission,
+            $commissionResult,
+            $fromCompanyId,
+            $normalizedDenominations,
+            $normalizedFeeDenominations,
+            $normalizedChangeDenominations,
+            $cashFeeReceivedTotal,
+            $cashFeeChangeDue,
+        ): Transaction {
             $balanceCreditAccountId = $feePayment['method'] === 'account'
                 ? (int) $feePayment['fee_account_id']
                 : $account->id;
@@ -421,6 +471,8 @@ class TransactionService
                 'from_company_id' => $fromCompanyId,
                 'status' => 'COMPLETED',
                 'received_denominations' => $normalizedFeeDenominations,
+                'change_given' => Money::normalize($cashFeeChangeDue),
+                'change_denominations' => $normalizedChangeDenominations,
             ]);
 
             $this->recordAgentCommission($txn, $account, $amount, $commissionResult);
@@ -475,7 +527,7 @@ class TransactionService
                 }
 
                 $this->floats->addDenominations($activeFloat->id, $normalizedFeeDenominations);
-                $this->floats->incrementBalance($creator->id, $fees['customer_fee']);
+                $this->floats->incrementBalance($creator->id, $cashFeeReceivedTotal);
 
                 $this->recordPhysicalCashMovement(
                     entryType: 'vault_in',
@@ -492,6 +544,30 @@ class TransactionService
                     affectsMainVault: false,
                     note: "Cash Out cash fee received txn #{$txn->id}",
                 );
+
+                if ($cashFeeChangeDue > 0 && $normalizedChangeDenominations !== null) {
+                    $this->floats->deductDenominations(
+                        $activeFloat->id,
+                        $normalizedChangeDenominations,
+                    );
+                    $this->floats->deductBalance($creator->id, $cashFeeChangeDue);
+
+                    $this->recordPhysicalCashMovement(
+                        entryType: 'vault_out',
+                        txnType: 'cash_out_change',
+                        denominations: $normalizedChangeDenominations,
+                        performedBy: $creator->id,
+                        floatId: $activeFloat->id,
+                        transactionId: $txn->id,
+                        movementType: 'teller_to_customer_change',
+                        sourceType: 'teller_float',
+                        sourceId: $activeFloat->id,
+                        destinationType: 'customer',
+                        destinationId: null,
+                        affectsMainVault: false,
+                        note: "Cash Out change returned txn #{$txn->id}",
+                    );
+                }
             }
 
             $this->log($creator->id, 'transaction_created', $txn->id, [
@@ -502,6 +578,9 @@ class TransactionService
                 'balance_delta' => $cashOutBalanceChange,
                 'denominations' => $normalizedDenominations,
                 'fee_denominations' => $normalizedFeeDenominations,
+                'fee_cash_received_total' => Money::normalize($cashFeeReceivedTotal),
+                'change_given' => Money::normalize($cashFeeChangeDue),
+                'change_denominations' => $normalizedChangeDenominations,
             ]);
 
             return $txn;
@@ -1321,9 +1400,8 @@ class TransactionService
         $this->accounts->incrementBalance($feeAccountId, $fee);
     }
 
-
     /**
-     * @param  array{amount:string,tier:?AgentCommissionTier,direction:?\App\Enums\AgentCommissionDirection,configured_value:string}  $result
+     * @param  array{amount:string,tier:?AgentCommissionTier,direction:?AgentCommissionDirection,configured_value:string}  $result
      */
     private function recordAgentCommission(
         Transaction $transaction,

@@ -6,9 +6,11 @@ use App\Models\Account;
 use App\Models\AccountFeatureAssignment;
 use App\Models\CashDenominationLog;
 use App\Models\Company;
+use App\Models\ProviderFeeTier;
 use App\Models\User;
 use App\Models\VaultTransaction;
 use App\Repositories\CashDenominationRepository;
+use App\Repositories\CashFloatRepository;
 use App\Services\CashFloatService;
 use App\Services\TransactionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -111,5 +113,85 @@ class VaultTransactionAuditTest extends TestCase
             'affects_main_vault' => false,
         ]);
         $this->assertSame(8, $vault->getVaultBalance()[10000]);
+    }
+
+    public function test_cash_out_cash_fee_can_receive_larger_note_and_return_change_with_mirrored_ledgers(): void
+    {
+        $cashier = User::factory()->create(['role' => 'cashier', 'pin_hash' => Hash::make('2222')]);
+        $teller = User::factory()->create(['role' => 'teller', 'pin_hash' => Hash::make('3333')]);
+        $company = Company::query()->create([
+            'name' => 'Cash Fee Change Provider',
+            'category' => 'Pay',
+            'is_active' => true,
+        ]);
+        $account = Account::query()->create([
+            'company_id' => $company->id,
+            'account_name' => 'Cash Fee Change Main',
+            'account_type' => 'PAY',
+            'account_identifier' => 'cash-fee-change-main',
+            'balance' => 0,
+            'is_active' => true,
+            'is_fee_account' => false,
+            'is_agent' => false,
+        ]);
+        AccountFeatureAssignment::query()->create([
+            'account_id' => $account->id,
+            'feature' => 'cash_out',
+        ]);
+        ProviderFeeTier::query()->create([
+            'company_id' => $company->id,
+            'feature' => 'cash_out',
+            'amount_from' => 0,
+            'amount_to' => 1000000,
+            'fee_type' => 'FIXED',
+            'fee_value' => 200,
+            'additional_fee_type' => 'FIXED',
+            'additional_fee_value' => 0,
+            'is_active' => true,
+        ]);
+
+        $vault = app(CashDenominationRepository::class);
+        $vault->recordBulk('vault_in', [20000 => 10, 500 => 5, 200 => 5, 100 => 5], $cashier->id);
+
+        $floatService = app(CashFloatService::class);
+        $float = $floatService->issue($cashier, $teller->id, [20000 => 5, 200 => 1, 100 => 1]);
+        $floatService->activate($teller, $float->fresh(), '3333');
+
+        $transaction = app(TransactionService::class)->createCashOut([
+            'account_id' => $account->id,
+            'amount' => 100000,
+            'customer_name' => 'Client Change',
+            'customer_phone' => '0911111111',
+            'fee_payment_method' => 'cash',
+            'denominations' => [20000 => 5],
+            'fee_denominations' => [500 => 1],
+            'change_denominations' => [200 => 1, 100 => 1],
+        ], $teller);
+
+        $this->assertSame('200.00', $transaction->customer_fee);
+        $this->assertSame('300.00', $transaction->change_given);
+        $this->assertSame([500 => 1], $transaction->received_denominations);
+        $this->assertSame([200 => 1, 100 => 1], $transaction->change_denominations);
+
+        $float = $float->fresh();
+        $this->assertSame('500.00', $float->current_balance);
+        $stock = app(CashFloatRepository::class)->getDenominationBalance($float->id);
+        $this->assertSame(0, $stock[20000] ?? 0);
+        $this->assertSame(1, $stock[500] ?? 0);
+        $this->assertSame(0, $stock[200] ?? 0);
+        $this->assertSame(0, $stock[100] ?? 0);
+
+        foreach (['cash_out', 'cash_out_fee_received', 'cash_out_change'] as $type) {
+            $batchId = VaultTransaction::query()
+                ->where('transaction_id', $transaction->id)
+                ->where('txn_type', $type)
+                ->value('batch_id');
+
+            $this->assertNotNull($batchId, "Missing {$type} vault transaction batch.");
+            $this->assertTrue(
+                CashDenominationLog::query()->where('batch_id', $batchId)->exists(),
+                "Missing {$type} cash denomination mirror.",
+            );
+        }
     }
 }
