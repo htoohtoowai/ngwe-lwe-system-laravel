@@ -150,26 +150,24 @@ class CashFloatService
 
     /**
      * Employee accepts a PENDING_RECEIPT float and marks it ACTIVE.
-     * Requires the employee's PIN.
-     *
-     * @param  array<int|string, int|string>  $verifiedDenominations
+     * The cashier-entered denomination breakdown is authoritative; the Teller
+     * reviews it and confirms receipt with their PIN instead of re-entering it.
      */
     public function activate(
         User $employee,
         CashFloatAssignment $float,
         ?string $pin,
-        array $verifiedDenominations,
     ): CashFloatAssignment {
         if ($float->employee_id !== $employee->id) {
             throw new InvalidArgumentException("Float #{$float->id} does not belong to this employee.");
         }
 
         $this->pinVerifier->verify($employee, $pin);
-        $this->assertVerifiedDenominationsMatch($float, $verifiedDenominations);
+        $denominations = $this->denominationsFromFloat($float->loadMissing('denominations'));
+        $this->guardNonEmptyDenominations($denominations);
 
-        $activated = DB::transaction(function () use ($employee, $float): CashFloatAssignment {
+        $activated = DB::transaction(function () use ($employee, $float, $denominations): CashFloatAssignment {
             $activated = $this->floats->activate($float);
-            $denominations = $this->denominationsFromFloat($activated);
 
             $this->vaultTransactions->recordBulk(
                 txnType: 'float_receipt',
@@ -255,24 +253,22 @@ class CashFloatService
     /**
      * Teller confirms an additional same-session float issue.
      * Balance and denomination stock are merged only after this receipt step.
-     *
-     * @param  array<int|string, int|string>  $verifiedDenominations
+     * The cashier-entered denomination breakdown is reviewed, not re-entered.
      */
     public function receiveAdditionalIssue(
         User $employee,
         CashFloatIssue $issue,
         ?string $pin,
-        array $verifiedDenominations,
     ): CashFloatAssignment {
         if ($issue->employee_id !== $employee->id) {
             throw new InvalidArgumentException("Float issue #{$issue->id} does not belong to this employee.");
         }
 
         $this->pinVerifier->verify($employee, $pin);
-        $this->assertVerifiedIssueDenominationsMatch($issue, $verifiedDenominations);
+        $denominations = $this->denominationsFromIssue($issue);
+        $this->guardNonEmptyDenominations($denominations);
 
-        $updated = DB::transaction(function () use ($employee, $issue): CashFloatAssignment {
-            $denominations = $this->denominationsFromIssue($issue);
+        $updated = DB::transaction(function () use ($employee, $issue, $denominations): CashFloatAssignment {
             $updated = $this->floats->receiveAdditionalIssue($issue);
 
             $this->vaultTransactions->recordBulk(
@@ -359,27 +355,6 @@ class CashFloatService
         return $rejected;
     }
 
-    /**
-     * @param  array<int|string, int|string>  $verifiedDenominations
-     */
-    private function assertVerifiedDenominationsMatch(CashFloatAssignment $float, array $verifiedDenominations): void
-    {
-        $issued = $this->denominationsFromFloat($float->loadMissing('denominations'));
-        $verified = $this->normalizeReturnDenominations($verifiedDenominations);
-
-        Money::denominationTotal($verified);
-
-        foreach (Money::supportedDenominations() as $denomination) {
-            $issuedQuantity = $issued[$denomination] ?? 0;
-            $verifiedQuantity = $verified[$denomination] ?? 0;
-
-            if ($issuedQuantity !== $verifiedQuantity) {
-                throw new InvalidArgumentException(
-                    "Denomination {$denomination} MMK — Issued: {$issuedQuantity}, You counted: {$verifiedQuantity}"
-                );
-            }
-        }
-    }
 
     /**
      * Employee reports the denominations they are returning to the cashier.
@@ -436,38 +411,23 @@ class CashFloatService
 
     /**
      * Cashier confirms receipt of the returned float and closes it.
+     * The Teller-entered handback denominations are authoritative; the Cashier
+     * reviews that breakdown and confirms physical receipt with their PIN.
      */
     public function confirmReturn(
         User $cashier,
         CashFloatAssignment $float,
-        float|string $closingTotal,
         ?string $pin = null,
-        ?array $cashierReturnDenominations = null,
     ): CashFloatAssignment {
         $this->pinVerifier->verify($cashier, $pin);
 
-        $closed = DB::transaction(function () use ($cashier, $float, $closingTotal, $cashierReturnDenominations): CashFloatAssignment {
+        $closed = DB::transaction(function () use ($cashier, $float): CashFloatAssignment {
             $returnDenominations = $this->normalizeReturnDenominations(
                 $float->return_denominations_json ?? []
             );
             $this->assertReturnDenominationsMatchFloat($float, $returnDenominations, 'PENDING_RECONCILIATION');
 
-            if ($cashierReturnDenominations !== null) {
-                $cashierReturnDenominations = $this->normalizeReturnDenominations($cashierReturnDenominations);
-                $this->assertCashierReturnDenominationsMatchTellerReturn(
-                    $returnDenominations,
-                    $cashierReturnDenominations,
-                );
-            }
-
             $returnTotal = Money::denominationTotal($returnDenominations);
-            $closingTotal = Money::normalize($closingTotal);
-            if (abs($returnTotal - (float) $closingTotal) > 1) {
-                throw new InvalidArgumentException(
-                    "closing_total {$closingTotal} does not match return denomination total {$returnTotal}."
-                );
-            }
-
             $closed = $this->floats->confirmReturn($float, $returnTotal);
 
             if ($returnDenominations !== []) {
@@ -578,27 +538,6 @@ class CashFloatService
         return $this->normalizeReturnDenominations($issue->denominations_json ?? []);
     }
 
-    /**
-     * @param  array<int|string, int|string>  $verifiedDenominations
-     */
-    private function assertVerifiedIssueDenominationsMatch(CashFloatIssue $issue, array $verifiedDenominations): void
-    {
-        $issued = $this->denominationsFromIssue($issue);
-        $verified = $this->normalizeReturnDenominations($verifiedDenominations);
-
-        Money::denominationTotal($verified);
-
-        foreach (Money::supportedDenominations() as $denomination) {
-            $issuedQuantity = $issued[$denomination] ?? 0;
-            $verifiedQuantity = $verified[$denomination] ?? 0;
-
-            if ($issuedQuantity !== $verifiedQuantity) {
-                throw new InvalidArgumentException(
-                    "Denomination {$denomination} MMK — Issued: {$issuedQuantity}, You counted: {$verifiedQuantity}"
-                );
-            }
-        }
-    }
 
     /**
      * @param  array<int|string, int|string>  $raw
@@ -658,25 +597,6 @@ class CashFloatService
         }
     }
 
-    /**
-     * @param  array<int, int>  $tellerReturnDenominations
-     * @param  array<int, int>  $cashierReturnDenominations
-     */
-    private function assertCashierReturnDenominationsMatchTellerReturn(
-        array $tellerReturnDenominations,
-        array $cashierReturnDenominations,
-    ): void {
-        foreach (Money::supportedDenominations() as $denomination) {
-            $tellerQuantity = (int) ($tellerReturnDenominations[$denomination] ?? 0);
-            $cashierQuantity = (int) ($cashierReturnDenominations[$denomination] ?? 0);
-
-            if ($cashierQuantity !== $tellerQuantity) {
-                throw new InvalidArgumentException(
-                    "Cashier counted return denomination {$denomination} MMK must match Teller handback. Teller reported: {$tellerQuantity}, Cashier counted: {$cashierQuantity}."
-                );
-            }
-        }
-    }
 
     /**
      * @param  array<int, int>  $denominations

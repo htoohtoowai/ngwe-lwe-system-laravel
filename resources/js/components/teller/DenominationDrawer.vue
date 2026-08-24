@@ -170,38 +170,51 @@ const mismatch = (n: number) =>
                 </span>
 
                 <div class="ml-auto flex items-center gap-1" @click.stop>
-                    <button
-                        type="button"
-                        :disabled="readonly || qty(n) === 0"
-                        @click="set(n, qty(n) - 1)"
-                        class="bank-button bank-button-secondary grid size-10 min-h-10 place-items-center rounded-counter p-0 disabled:opacity-30"
-                        :aria-label="`လျော့ရန် ${n.toLocaleString()}`"
+                    <span
+                        v-if="readonly"
+                        class="money min-w-20 rounded-counter border border-paper-edge bg-paper px-3 py-2 text-center text-sm font-semibold text-ink-900"
                     >
-                        -
-                    </button>
-                    <input
-                        :id="`teller-denomination-${n}`"
-                        :value="qty(n)"
-                        :readonly="readonly"
-                        :max="Number.isFinite(capFor(n)) ? capFor(n) : undefined"
-                        min="0"
-                        inputmode="numeric"
-                        autocomplete="off"
-                        :aria-label="`${n.toLocaleString()} denomination count`"
-                        :aria-invalid="mismatch(n)"
-                        @input="setFromInput(n, $event)"
-                        class="field-input money h-10 w-14 rounded-counter px-1 py-1 text-center text-sm"
-                        :class="mismatch(n) ? 'border-debit text-debit' : ''"
-                    />
-                    <button
-                        type="button"
-                        :disabled="readonly || qty(n) >= capFor(n)"
-                        @click="set(n, qty(n) + 1)"
-                        class="bank-button bank-button-secondary grid size-10 min-h-10 place-items-center rounded-counter p-0 disabled:opacity-30"
-                        :aria-label="`တိုးရန် ${n.toLocaleString()}`"
-                    >
-                        +
-                    </button>
+                        {{ qty(n).toLocaleString() }} notes
+                    </span>
+                    <template v-else>
+                        <button
+                            type="button"
+                            :disabled="qty(n) === 0"
+                            @click="set(n, qty(n) - 1)"
+                            class="bank-button bank-button-secondary grid size-10 min-h-10 place-items-center rounded-counter p-0 disabled:opacity-30"
+                            :aria-label="`လျော့ရန် ${n.toLocaleString()}`"
+                        >
+                            -
+                        </button>
+                        <input
+                            :id="`teller-denomination-${n}`"
+                            :value="qty(n)"
+                            :max="
+                                Number.isFinite(capFor(n))
+                                    ? capFor(n)
+                                    : undefined
+                            "
+                            min="0"
+                            inputmode="numeric"
+                            autocomplete="off"
+                            :aria-label="`${n.toLocaleString()} denomination count`"
+                            :aria-invalid="mismatch(n)"
+                            @input="setFromInput(n, $event)"
+                            class="field-input money h-10 w-14 rounded-counter px-1 py-1 text-center text-sm"
+                            :class="
+                                mismatch(n) ? 'border-debit text-debit' : ''
+                            "
+                        />
+                        <button
+                            type="button"
+                            :disabled="qty(n) >= capFor(n)"
+                            @click="set(n, qty(n) + 1)"
+                            class="bank-button bank-button-secondary grid size-10 min-h-10 place-items-center rounded-counter p-0 disabled:opacity-30"
+                            :aria-label="`တိုးရန် ${n.toLocaleString()}`"
+                        >
+                            +
+                        </button>
+                    </template>
                 </div>
 
                 <MoneyText
@@ -223,7 +236,11 @@ const mismatch = (n: number) =>
             "
         >
             <div>
-                <p class="field-label">{{ t('component.counted') }}</p>
+                <p class="field-label">
+                    {{
+                        readonly ? t('component.total') : t('component.counted')
+                    }}
+                </p>
                 <MoneyText :value="total" class="text-lg font-semibold" />
             </div>
 

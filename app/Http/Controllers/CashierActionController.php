@@ -60,9 +60,7 @@ class CashierActionController extends Controller
             $this->floats->confirmReturn(
                 $request->user(),
                 $float,
-                $data['closing_total'],
                 $data['pin'],
-                $data['return_denominations'] ?? null,
             );
         } catch (InvalidArgumentException|RuntimeException $exception) {
             $this->fail($exception, 'pin');

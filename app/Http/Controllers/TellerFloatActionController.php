@@ -27,7 +27,6 @@ class TellerFloatActionController extends Controller
                 $request->user(),
                 $float,
                 $request->validated()['pin'],
-                $request->validated()['verified_denominations'],
             );
         } catch (InvalidArgumentException|RuntimeException $exception) {
             $this->fail($exception);
@@ -65,7 +64,6 @@ class TellerFloatActionController extends Controller
                 $request->user(),
                 $issue,
                 $data['pin'],
-                $data['verified_denominations'],
             );
         } catch (InvalidArgumentException|RuntimeException $exception) {
             $this->fail($exception);

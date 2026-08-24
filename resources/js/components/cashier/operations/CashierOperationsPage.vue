@@ -158,7 +158,6 @@ const busy = ref(false);
 const error = ref('');
 const notice = ref('');
 const returnFloat = ref<FloatRow | null>(null);
-const returnCountedDenoms = ref<Denoms>({});
 const returnPinOpen = ref(false);
 const returnPinBusy = ref(false);
 const returnPinError = ref<string | null>(null);
@@ -248,19 +247,6 @@ const returnDenoms = computed(
     () => returnFloat.value?.return_denominations_json ?? {},
 );
 const returnTotal = computed(() => denominationTotal(returnDenoms.value));
-const returnCountedTotal = computed(() =>
-    denominationTotal(returnCountedDenoms.value),
-);
-const returnCountedMatches = computed(
-    () =>
-        returnFloat.value !== null &&
-        props.notes.every(
-            (note) =>
-                Number(returnCountedDenoms.value[note] ?? 0) ===
-                Number(returnDenoms.value[note] ?? 0),
-        ) &&
-        returnCountedTotal.value === returnTotal.value,
-);
 const pendingReviewRows = computed(() => ({
     received: denominationRows(pendingReview.value?.received_denominations),
     handoff: denominationRows(pendingReview.value?.handoff_denominations),
@@ -670,8 +656,8 @@ function issueFloat() {
                 issueDenoms.value = {};
                 issueNote.value = '';
                 notice.value = issuingAdditionalFloat.value
-                    ? 'Additional float issued. Teller must count and receive it before the balance increases.'
-                    : 'Teller float issued. Teller must count and receive it before use.';
+                    ? 'Additional float issued. Teller must review the note breakdown and receive it with PIN before the balance increases.'
+                    : 'Teller float issued. Teller must review the note breakdown and receive it with PIN before use.';
             },
             onError: (errors) => (error.value = firstInertiaError(errors)),
             onFinish: () => (busy.value = false),
@@ -681,7 +667,6 @@ function issueFloat() {
 
 function openReturn(float: FloatRow) {
     returnFloat.value = float;
-    returnCountedDenoms.value = {};
     returnPinOpen.value = false;
     returnPinError.value = null;
 }
@@ -690,18 +675,10 @@ function closeReturnReview() {
     if (!returnPinBusy.value) {
         returnPinOpen.value = false;
         returnFloat.value = null;
-        returnCountedDenoms.value = {};
     }
 }
 
 function requestReturnConfirmation() {
-    if (!returnCountedMatches.value) {
-        returnPinError.value =
-            'Count the returned notes exactly before confirming.';
-
-        return;
-    }
-
     returnPinError.value = null;
     returnPinOpen.value = true;
 }
@@ -723,18 +700,13 @@ function confirmReturn(pin: string) {
     const floatId = returnFloat.value.id;
     router.post(
         `/cashier/cash-floats/${floatId}/confirm-return`,
-        {
-            closing_total: returnCountedTotal.value,
-            pin,
-            return_denominations: returnCountedDenoms.value,
-        },
+        { pin },
         {
             headers: authHeaders(),
             preserveScroll: true,
             onSuccess: () => {
                 returnPinOpen.value = false;
                 returnFloat.value = null;
-                returnCountedDenoms.value = {};
                 notice.value =
                     'Teller float return confirmed and added back to the main vault.';
             },
@@ -1824,8 +1796,9 @@ function statusLabel(status: string): string {
                             Verify Float #{{ returnFloat.id }}
                         </h2>
                         <p class="mt-1 text-xs text-slate">
-                            Count the cash handed back by the Teller, then
-                            confirm with your Cashier PIN.
+                            Review the Teller-entered note breakdown against the
+                            physical cash, then confirm receipt with your
+                            Cashier PIN.
                         </p>
                     </div>
                     <button
@@ -1871,43 +1844,28 @@ function statusLabel(status: string): string {
                         <p
                             class="text-[10px] font-bold tracking-wide text-slate uppercase"
                         >
-                            Cashier counted
+                            Review mode
                         </p>
-                        <p class="money mt-1 font-black">
-                            {{ formatMoney(returnCountedTotal) }} MMK
-                        </p>
+                        <p class="mt-1 font-bold">PIN confirmation</p>
                     </div>
                 </div>
 
                 <div class="grid gap-4 p-4 sm:p-6">
                     <DenomDrawer
-                        v-model="returnCountedDenoms"
+                        :model-value="returnDenoms"
                         :notes="notes"
                         :target="returnTotal"
-                        :expected="returnDenoms"
-                        label="Cashier counted return"
+                        :readonly="true"
+                        label="Teller reported handback"
                         id-prefix="return-confirm-denomination"
                     />
 
                     <div
-                        class="flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-xs"
-                        :class="
-                            returnCountedMatches
-                                ? 'border-balance/25 bg-balance/5 text-balance'
-                                : 'border-brand/25 bg-brand-soft text-brand'
-                        "
+                        class="rounded-xl border border-balance/25 bg-balance/5 px-4 py-3 text-xs text-balance"
                     >
-                        <strong>
-                            {{
-                                returnCountedMatches
-                                    ? 'Return count matched'
-                                    : 'Return count mismatch'
-                            }}
-                        </strong>
-                        <span class="money">
-                            {{ formatMoney(returnCountedTotal) }} /
-                            {{ formatMoney(returnTotal) }} MMK
-                        </span>
+                        <strong>Receiver check:</strong> verify the physical
+                        notes match the Teller-entered breakdown above. If they
+                        match, confirm with your PIN.
                     </div>
                 </div>
 
@@ -1925,7 +1883,7 @@ function statusLabel(status: string): string {
                     <button
                         type="button"
                         class="rounded-pill bg-ink px-4 py-2 text-xs font-bold text-white transition hover:bg-brand disabled:cursor-not-allowed disabled:opacity-40"
-                        :disabled="returnPinBusy || !returnCountedMatches"
+                        :disabled="returnPinBusy"
                         @click="requestReturnConfirmation"
                     >
                         Confirm with PIN

@@ -208,47 +208,62 @@ function autoFill() {
                     class="ml-auto flex shrink-0 items-center gap-1"
                     @click.stop
                 >
-                    <button
-                        type="button"
-                        :aria-label="`− ${n.toLocaleString()}`"
-                        :disabled="readonly || qty(n) === 0"
-                        @click="set(n, qty(n) - 1)"
-                        class="bank-button grid place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
-                        :class="compact ? 'size-9 min-h-9' : 'size-10 min-h-10'"
+                    <span
+                        v-if="readonly"
+                        class="money min-w-20 rounded-field border border-line bg-mist px-3 py-2 text-center text-sm font-bold text-ink"
                     >
-                        −
-                    </button>
-                    <input
-                        :id="`${props.idPrefix}-${n}`"
-                        :value="qty(n)"
-                        :readonly="readonly"
-                        :max="
-                            Number.isFinite(capFor(n)) ? capFor(n) : undefined
-                        "
-                        min="0"
-                        inputmode="numeric"
-                        autocomplete="off"
-                        :aria-label="`${n.toLocaleString()} ${t('component.notesCounted')}`"
-                        :aria-invalid="mismatch(n)"
-                        @input="setFromInput(n, $event)"
-                        class="money rounded-field border border-line bg-mist px-1 text-center text-sm font-bold text-ink outline-none focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/25"
-                        :class="[
-                            compact
-                                ? 'h-9 w-12 max-w-12 min-w-12 shrink-0'
-                                : 'h-10 w-12 max-w-14 min-w-12 shrink-0 sm:w-14',
-                            mismatch(n) ? 'text-brand ring-2 ring-brand' : '',
-                        ]"
-                    />
-                    <button
-                        type="button"
-                        :aria-label="`+ ${n.toLocaleString()}`"
-                        :disabled="readonly || qty(n) >= capFor(n)"
-                        @click="set(n, qty(n) + 1)"
-                        class="bank-button grid place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
-                        :class="compact ? 'size-9 min-h-9' : 'size-10 min-h-10'"
-                    >
-                        +
-                    </button>
+                        {{ qty(n).toLocaleString() }} notes
+                    </span>
+                    <template v-else>
+                        <button
+                            type="button"
+                            :aria-label="`− ${n.toLocaleString()}`"
+                            :disabled="qty(n) === 0"
+                            @click="set(n, qty(n) - 1)"
+                            class="bank-button grid place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
+                            :class="
+                                compact ? 'size-9 min-h-9' : 'size-10 min-h-10'
+                            "
+                        >
+                            −
+                        </button>
+                        <input
+                            :id="`${props.idPrefix}-${n}`"
+                            :value="qty(n)"
+                            :max="
+                                Number.isFinite(capFor(n))
+                                    ? capFor(n)
+                                    : undefined
+                            "
+                            min="0"
+                            inputmode="numeric"
+                            autocomplete="off"
+                            :aria-label="`${n.toLocaleString()} ${t('component.notesCounted')}`"
+                            :aria-invalid="mismatch(n)"
+                            @input="setFromInput(n, $event)"
+                            class="money rounded-field border border-line bg-mist px-1 text-center text-sm font-bold text-ink outline-none focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/25"
+                            :class="[
+                                compact
+                                    ? 'h-9 w-12 max-w-12 min-w-12 shrink-0'
+                                    : 'h-10 w-12 max-w-14 min-w-12 shrink-0 sm:w-14',
+                                mismatch(n)
+                                    ? 'text-brand ring-2 ring-brand'
+                                    : '',
+                            ]"
+                        />
+                        <button
+                            type="button"
+                            :aria-label="`+ ${n.toLocaleString()}`"
+                            :disabled="qty(n) >= capFor(n)"
+                            @click="set(n, qty(n) + 1)"
+                            class="bank-button grid place-items-center rounded-full bg-mist p-0 text-slate hover:text-ink disabled:opacity-30"
+                            :class="
+                                compact ? 'size-9 min-h-9' : 'size-10 min-h-10'
+                            "
+                        >
+                            +
+                        </button>
+                    </template>
                 </div>
 
                 <span
@@ -274,7 +289,9 @@ function autoFill() {
                 <p
                     class="text-[11px] font-bold tracking-wide text-slate uppercase"
                 >
-                    {{ t('component.counted') }}
+                    {{
+                        readonly ? t('component.total') : t('component.counted')
+                    }}
                 </p>
                 <p class="money text-lg font-bold">
                     {{ total.toLocaleString() }}

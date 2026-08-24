@@ -31,13 +31,13 @@ class CashFloatLifecycleTest extends TestCase
         $float = $service->issue($cashier, $teller->id, [10000 => 5]);
         $this->assertSame('PENDING_RECEIPT', $float->status);
 
-        $service->activate($teller, $float->fresh(), '3333', [10000 => 5]);
+        $service->activate($teller, $float->fresh(), '3333');
         $this->assertSame('ACTIVE', $float->fresh()->status);
 
         $service->initiateReturn($teller, $float->fresh(), [10000 => 5], '3333');
         $this->assertSame('PENDING_RECONCILIATION', $float->fresh()->status);
 
-        $service->confirmReturn($cashier, $float->fresh(), 50000, '2222');
+        $service->confirmReturn($cashier, $float->fresh(), '2222');
         $this->assertSame('CLOSED', CashFloatAssignment::query()->findOrFail($float->id)->status);
         $this->assertSame(10, $vault->getVaultBalance()[10000]);
     }

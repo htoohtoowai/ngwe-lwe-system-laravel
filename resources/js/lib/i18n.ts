@@ -392,16 +392,16 @@ const messages: Record<Locale, Record<string, string>> = {
             'Cash you are personally accountable for until the cashier signs it back in.',
         'teller.noFloat': 'No float issued',
         'teller.askCashier':
-            'Ask the cashier to issue one. It will appear here to be counted, and the counter opens as soon as you receive it.',
+            'Ask the cashier to issue one. Review the cashier-entered note breakdown, then receive it with your PIN to open the counter.',
         'teller.countIssued':
-            'The cashier issued the float. Count every note yourself.',
+            'The cashier entered the issued note breakdown. Check the physical notes against it before confirming.',
         'teller.countMatch':
-            "Quantities must match the cashier's note-for-note, not just in total.",
+            'Verify the physical notes match this denomination breakdown. If anything differs, reject the receipt instead of confirming.',
         'teller.systemOnHand': 'System says on hand',
         'teller.youCounted': 'You counted',
         'teller.returnCloses':
             'Once returned, the counter closes until a new float is issued.',
-        'teller.confirmCount': 'Confirm you counted the float',
+        'teller.confirmCount': 'Confirm incoming float',
         'teller.confirmReturn': 'Confirm the cash you are returning',
         'teller.pinCount': 'Your PIN records that the notes match.',
         'teller.pinReturn': 'Your PIN records the return count.',
@@ -411,7 +411,7 @@ const messages: Record<Locale, Record<string, string>> = {
         'teller.noActiveFloat':
             'No active float. Ask the cashier to issue one.',
         'teller.pendingReceipt':
-            'A float is waiting for you. Count the notes and receive it with your PIN before serving customers.',
+            'A float is waiting for you. Review the issued note breakdown and receive it with your PIN before serving customers.',
         'teller.pendingReconciliation':
             'Your float is with the cashier for confirmation. The counter reopens once it is closed and a new float is issued.',
         'teller.current': 'Current',
@@ -436,6 +436,7 @@ const messages: Record<Locale, Record<string, string>> = {
         'component.notesCounted': 'Notes counted',
         'component.fillLargest': 'Fill from largest',
         'component.counted': 'Counted',
+        'component.total': 'Total',
         'component.required': 'Required',
         'component.balanced': 'Balanced',
         'component.overBy': 'Over by',
@@ -746,7 +747,7 @@ const messages: Record<Locale, Record<string, string>> = {
         'teller.noActiveFloat':
             'အသုံးပြုနိုင်သော ငွေခွဲမရှိပါ။ Cashier ထံမှ ငွေခွဲတောင်းပါ။',
         'teller.pendingReceipt':
-            'သင့်အတွက် ငွေခွဲစောင့်နေပါတယ်။ ဖောက်သည်များကို မဝန်ဆောင်မီ ငွေစက္ကူများကို ရေတွက်ပြီး PIN ဖြင့် လက်ခံပါ။',
+            'သင့်အတွက် ငွေခွဲစောင့်နေပါတယ်။ Cashier ထည့်ထားသော ငွေစက္ကူစာရင်းကို လက်တွေ့ငွေနှင့်စစ်ပြီး PIN ဖြင့် လက်ခံပါ။',
         'teller.pendingReconciliation':
             'သင့်ငွေခွဲကို Cashier ထံ စာရင်းစစ်ရန် အပ်ထားပါတယ်။ စာရင်းပိတ်ပြီး ငွေခွဲအသစ်ထုတ်ပေးမှ ကောင်တာပြန်ဖွင့်ပါမယ်။',
         'teller.issued': 'ထုတ်ပေးထားငွေ',
@@ -773,16 +774,16 @@ const messages: Record<Locale, Record<string, string>> = {
             'Cashier ထံ ပြန်အပ်ပြီး စာရင်းပိတ်သည်အထိ သင့်တာဝန်ယူထားရမည့် ငွေသားဖြစ်ပါတယ်။',
         'teller.noFloat': 'ငွေခွဲ မထုတ်ပေးရသေးပါ',
         'teller.askCashier':
-            'Cashier ထံမှ ငွေခွဲထုတ်ခိုင်းပါ။ ထုတ်ပေးပြီးနောက် ဒီနေရာမှာ ရေတွက်လက်ခံနိုင်ပြီး ကောင်တာဖွင့်ပါမယ်။',
+            'Cashier ထံမှ ငွေခွဲထုတ်ခိုင်းပါ။ Cashier ထည့်ထားသော ငွေစက္ကူအမျိုးအစားနှင့် အရေအတွက်ကို စစ်ပြီး PIN ဖြင့်လက်ခံပါက ကောင်တာဖွင့်ပါမယ်။',
         'teller.countIssued':
-            'Cashier က ငွေခွဲထုတ်ပေးထားပါတယ်။ ငွေစက္ကူတစ်ရွက်ချင်း ရေတွက်ပါ။',
+            'Cashier က ထုတ်ပေးထားသော ငွေစက္ကူအမျိုးအစားနှင့် အရေအတွက်ကို ထည့်ထားပါတယ်။ လက်တွေ့ရရှိသောငွေနှင့် ကိုက်ညီကြောင်း စစ်ပါ။',
         'teller.countMatch':
-            'စုစုပေါင်းပမာဏတင်မဟုတ်ဘဲ ငွေစက္ကူအမျိုးအစားနဲ့ အရေအတွက်ပါ ကိုက်ညီရပါမယ်။',
+            'လက်တွေ့ရရှိသော ငွေစက္ကူများသည် ပြထားသော အမျိုးအစားနှင့် အရေအတွက်အတိုင်း ကိုက်ညီကြောင်း စစ်ပါ။ မကိုက်ပါက လက်မခံဘဲ Reject လုပ်ပါ။',
         'teller.systemOnHand': 'စနစ်အရ လက်ကျန်',
         'teller.youCounted': 'သင်ရေတွက်ထားသည်',
         'teller.returnCloses':
             'ပြန်အပ်ပြီးပါက ငွေခွဲအသစ် မထုတ်ပေးမချင်း ကောင်တာပိတ်ထားပါမယ်။',
-        'teller.confirmCount': 'ငွေခွဲရေတွက်ပြီးကြောင်း အတည်ပြုပါ',
+        'teller.confirmCount': 'ဝင်လာသော ငွေခွဲကို အတည်ပြုပါ',
         'teller.confirmReturn': 'ပြန်အပ်မည့်ငွေကို အတည်ပြုပါ',
         'teller.pinCount':
             'ငွေစက္ကူများ ကိုက်ညီကြောင်း သင့် PIN ဖြင့် မှတ်တမ်းတင်ပါမယ်။',
@@ -819,6 +820,7 @@ const messages: Record<Locale, Record<string, string>> = {
         'component.notesCounted': 'ရေတွက်ထားသော ငွေစက္ကူ',
         'component.fillLargest': 'တန်ဖိုးကြီးမှ ဖြည့်မည်',
         'component.counted': 'ရေတွက်ပြီး',
+        'component.total': 'စုစုပေါင်း',
         'component.required': 'လိုအပ်သည်',
         'component.balanced': 'ကိုက်ညီပါတယ်',
         'component.overBy': 'ပိုနေသည်',

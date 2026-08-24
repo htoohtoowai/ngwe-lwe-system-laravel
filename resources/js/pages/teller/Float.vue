@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { RequestPayload } from '@inertiajs/core';
 import { router, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import DenominationDrawer from '@/components/teller/DenominationDrawer.vue';
@@ -76,11 +77,9 @@ const props = withDefaults(
     },
 );
 
-const counted = ref<Record<number, number>>({});
 const returning = ref<Record<number, number>>({});
 const reviewFloat = ref<FloatRow | null>(null);
 const reviewIssue = ref<FloatIssueRow | null>(null);
-const reviewCounted = ref<Record<number, number>>({});
 const actionFloat = ref<FloatRow | null>(null);
 const actionIssue = ref<FloatIssueRow | null>(null);
 const pinOpen = ref(false);
@@ -134,11 +133,6 @@ const pendingAdditionalIssues = computed(() =>
 const issuedTotal = computed(() =>
     props.notes.reduce((s, n) => s + n * (props.issued[n] ?? 0), 0),
 );
-const countMatches = computed(() =>
-    props.notes.every(
-        (n) => (counted.value[n] ?? 0) === (props.issued[n] ?? 0),
-    ),
-);
 const returnTotal = computed(() =>
     props.notes.reduce((s, n) => s + n * (returning.value[n] ?? 0), 0),
 );
@@ -158,14 +152,6 @@ const reviewIssued = computed(() =>
     ),
 );
 const reviewIssuedTotal = computed(() => denominationTotal(reviewIssued.value));
-const reviewCountedTotal = computed(() =>
-    denominationTotal(reviewCounted.value),
-);
-const reviewCountMatches = computed(() =>
-    props.notes.every(
-        (n) => (reviewCounted.value[n] ?? 0) === (reviewIssued.value[n] ?? 0),
-    ),
-);
 const { t } = useLocale();
 
 const pinTitle = computed(() => {
@@ -224,14 +210,12 @@ function closePin() {
 function reviewIncoming(float: FloatRow) {
     reviewIssue.value = null;
     reviewFloat.value = float;
-    reviewCounted.value = {};
     pinError.value = null;
 }
 
 function closeReview() {
     reviewFloat.value = null;
     reviewIssue.value = null;
-    reviewCounted.value = {};
 }
 
 function receiveReviewed() {
@@ -263,10 +247,17 @@ function rejectIncoming(float: FloatRow) {
     pinOpen.value = true;
 }
 
+function rejectCurrentIncoming() {
+    intent.value = 'reject';
+    actionFloat.value = null;
+    actionIssue.value = null;
+    pinError.value = null;
+    pinOpen.value = true;
+}
+
 function reviewAdditionalIssue(issue: FloatIssueRow) {
     reviewFloat.value = null;
     reviewIssue.value = issue;
-    reviewCounted.value = {};
     pinError.value = null;
 }
 
@@ -389,14 +380,11 @@ async function confirm(pin: string) {
     pinError.value = null;
 
     let url: string;
-    let data: Record<string, unknown>;
+    let data: RequestPayload;
 
     if (intent.value === 'receive-issue') {
         url = `/teller/floats/issues/${resourceId}/receive`;
-        data = {
-            pin,
-            verified_denominations: reviewCounted.value,
-        };
+        data = { pin };
     } else if (intent.value === 'reject-issue') {
         url = `/teller/floats/issues/${resourceId}/reject`;
         data = {
@@ -405,12 +393,7 @@ async function confirm(pin: string) {
         };
     } else if (intent.value === 'receive') {
         url = `/teller/floats/${resourceId}/activate`;
-        data = {
-            pin,
-            verified_denominations: actionFloat.value
-                ? reviewCounted.value
-                : counted.value,
-        };
+        data = { pin };
     } else if (intent.value === 'return') {
         url = `/teller/floats/${resourceId}/initiate-return`;
         data = { pin, return_denominations: returning.value };
@@ -520,11 +503,11 @@ onBeforeUnmount(() => {
                         {{ t('teller.countIssued') }}
                     </div>
                     <DenominationDrawer
-                        v-model="counted"
+                        :model-value="issued"
                         :notes="notes"
                         :target="issuedTotal"
-                        :expected="issued"
-                        :label="t('component.notesCounted')"
+                        :readonly="true"
+                        label="Cashier issued notes"
                     />
                 </div>
 
@@ -543,36 +526,26 @@ onBeforeUnmount(() => {
                             </dt>
                             <dd><MoneyText :value="issuedTotal" /></dd>
                         </div>
-                        <div class="flex justify-between">
-                            <dt class="text-ink-300">
-                                {{ t('teller.youCounted') }}
-                            </dt>
-                            <dd>
-                                <MoneyText
-                                    :value="
-                                        notes.reduce(
-                                            (s, n) => s + n * (counted[n] ?? 0),
-                                            0,
-                                        )
-                                    "
-                                />
-                            </dd>
-                        </div>
                     </dl>
-                    <p
-                        v-if="!countMatches"
-                        class="mt-3 text-xs leading-relaxed text-held"
-                    >
+                    <p class="mt-3 text-xs leading-relaxed text-ink-300">
                         {{ t('teller.countMatch') }}
                     </p>
-                    <button
-                        type="button"
-                        :disabled="!countMatches"
-                        @click="open('receive')"
-                        class="mt-5 w-full rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110 disabled:opacity-35"
-                    >
-                        {{ t('teller.receiveFloatPin') }}
-                    </button>
+                    <div class="mt-5 grid gap-2">
+                        <button
+                            type="button"
+                            @click="open('receive')"
+                            class="w-full rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110"
+                        >
+                            {{ t('teller.receiveFloatPin') }}
+                        </button>
+                        <button
+                            type="button"
+                            @click="rejectCurrentIncoming"
+                            class="bank-button bank-button-danger w-full rounded-counter py-3 text-sm font-semibold"
+                        >
+                            {{ t('common.reject', 'Reject / mismatch') }}
+                        </button>
+                    </div>
                 </aside>
             </div>
 
@@ -585,7 +558,7 @@ onBeforeUnmount(() => {
                     class="rounded-counter border border-held/30 bg-held/5 px-4 py-3 text-sm font-semibold text-held lg:col-span-2"
                 >
                     {{ pendingAdditionalIssues.length }} additional float
-                    issue(s) are waiting for your count and PIN confirmation.
+                    issue(s) are waiting for your review and PIN confirmation.
                     Your on-hand balance will increase only after you receive
                     them below.
                 </div>
@@ -983,8 +956,8 @@ onBeforeUnmount(() => {
                                 t(
                                     'teller.countIncomingFloat',
                                     reviewIssue
-                                        ? 'Count additional float issue'
-                                        : 'Count incoming float',
+                                        ? 'Review additional float issue'
+                                        : 'Review incoming float',
                                 )
                             }}
                         </h2>
@@ -1000,11 +973,11 @@ onBeforeUnmount(() => {
 
                 <div class="grid gap-5 p-5 lg:grid-cols-[1fr_19rem]">
                     <DenominationDrawer
-                        v-model="reviewCounted"
+                        :model-value="reviewIssued"
                         :notes="notes"
                         :target="reviewIssuedTotal"
-                        :expected="reviewIssued"
-                        :label="t('component.notesCounted')"
+                        :readonly="true"
+                        label="Cashier issued notes"
                     />
 
                     <aside
@@ -1024,27 +997,15 @@ onBeforeUnmount(() => {
                                     <MoneyText :value="reviewIssuedTotal" />
                                 </dd>
                             </div>
-                            <div class="flex justify-between">
-                                <dt class="text-ink-300">
-                                    {{ t('teller.youCounted') }}
-                                </dt>
-                                <dd>
-                                    <MoneyText :value="reviewCountedTotal" />
-                                </dd>
-                            </div>
                         </dl>
-                        <p
-                            v-if="!reviewCountMatches"
-                            class="mt-3 text-xs leading-relaxed text-held"
-                        >
+                        <p class="mt-3 text-xs leading-relaxed text-ink-300">
                             {{ t('teller.countMatch') }}
                         </p>
                         <div class="mt-5 grid gap-2">
                             <button
                                 type="button"
-                                :disabled="!reviewCountMatches"
                                 @click="receiveReviewed"
-                                class="bank-button rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110 disabled:opacity-35"
+                                class="bank-button rounded-counter bg-seal py-3 text-sm font-semibold text-ink-950 transition hover:brightness-110"
                             >
                                 {{ t('teller.receiveFloatPin') }}
                             </button>

@@ -33,7 +33,7 @@ class CashFloatAdditionalIssueTest extends TestCase
         $vault->recordBulk('vault_in', [10000 => 20, 5000 => 20], $cashier->id);
 
         $float = $service->issue($cashier, $teller->id, [10000 => 5]);
-        $service->activate($teller, $float->fresh(), '3333', [10000 => 5]);
+        $service->activate($teller, $float->fresh(), '3333');
 
         $this->assertSame('50000.00', $float->fresh()->current_balance);
         $this->assertSame('RECEIVED', CashFloatIssue::query()->where('issue_type', 'INITIAL')->firstOrFail()->status);
@@ -52,7 +52,6 @@ class CashFloatAdditionalIssueTest extends TestCase
             $teller,
             $firstAdditional,
             '3333',
-            [10000 => 2, 5000 => 2],
         );
 
         $received = $float->fresh();
@@ -88,7 +87,7 @@ class CashFloatAdditionalIssueTest extends TestCase
         $vault->recordBulk('vault_in', [10000 => 10], $cashier->id);
 
         $float = $service->issue($cashier, $teller->id, [10000 => 5]);
-        $service->activate($teller, $float->fresh(), '3333', [10000 => 5]);
+        $service->activate($teller, $float->fresh(), '3333');
         $service->issue($cashier, $teller->id, [10000 => 1]);
 
         $this->expectException(RuntimeException::class);

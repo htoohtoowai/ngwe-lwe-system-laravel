@@ -83,7 +83,7 @@ class VaultTransactionAuditTest extends TestCase
 
         $floatService = app(CashFloatService::class);
         $float = $floatService->issue($cashier, $teller->id, [10000 => 2]);
-        $floatService->activate($teller, $float->fresh(), '3333', [10000 => 2]);
+        $floatService->activate($teller, $float->fresh(), '3333');
         $this->assertSame(8, $vault->getVaultBalance()[10000]);
 
         $transaction = app(TransactionService::class)->createCashOut([
