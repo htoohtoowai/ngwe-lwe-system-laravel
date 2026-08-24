@@ -139,7 +139,13 @@ export type VaultInventory = {
 
 export type VaultTransaction = {
     id: number;
+    batch_id?: string | null;
     txn_type: string;
+    movement_type?: string | null;
+    source_type?: string | null;
+    source_id?: number | null;
+    destination_type?: string | null;
+    destination_id?: number | null;
     float_id: number | null;
     denomination: number;
     quantity: number;

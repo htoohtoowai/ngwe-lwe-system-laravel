@@ -50,6 +50,40 @@ class AdminCashierVaultManagementTest extends TestCase
             'performed_by' => $admin->id,
         ]);
 
+        $batchIds = \App\Models\VaultTransaction::query()
+            ->where('txn_type', 'adjustment')
+            ->where('performed_by', $admin->id)
+            ->pluck('batch_id')
+            ->unique();
+        $this->assertCount(1, $batchIds);
+        $this->assertNotNull($batchIds->first());
+        $this->assertDatabaseHas('cash_denomination_logs', [
+            'batch_id' => $batchIds->first(),
+            'movement_type' => 'admin_to_cashier',
+            'source_type' => 'admin',
+            'destination_type' => 'cashier_vault',
+            'affects_main_vault' => true,
+        ]);
+        $this->assertDatabaseHas('vault_transactions', [
+            'batch_id' => $batchIds->first(),
+            'movement_type' => 'admin_to_cashier',
+            'source_type' => 'admin',
+            'destination_type' => 'cashier_vault',
+        ]);
+
+        $this->actingAs($admin)->get('/admin/vault/log')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('admin/vault/Log')
+                ->has('rows', 1)
+                ->where('rows.0.denomination_count', 2)
+                ->where('rows.0.total_amount', 60000)
+                ->has('rows.0.details', 2)
+                ->where('rows.0.reconciliation_status', 'matched')
+                ->where('rows.0.cash_total_amount', 60000)
+                ->has('rows.0.cash_details', 2)
+            );
+
         $this->actingAs($admin)->post('/admin/actions/vault/entries', [
             'entry_type' => 'vault_out',
             'denominations' => [10000 => 2],

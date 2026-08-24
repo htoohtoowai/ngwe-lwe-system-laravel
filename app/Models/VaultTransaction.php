@@ -7,7 +7,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
+    'batch_id',
     'txn_type',
+    'movement_type',
+    'source_type',
+    'source_id',
+    'destination_type',
+    'destination_id',
     'float_id',
     'denomination',
     'quantity',
@@ -25,6 +31,8 @@ class VaultTransaction extends Model
         return [
             'denomination' => 'integer',
             'quantity' => 'integer',
+            'source_id' => 'integer',
+            'destination_id' => 'integer',
             'created_at' => 'datetime',
         ];
     }

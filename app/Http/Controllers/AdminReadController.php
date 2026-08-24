@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\DailyReconciliationResource;
 use App\Http\Resources\TransactionResource;
-use App\Http\Resources\VaultTransactionResource;
 use App\Models\Transaction;
 use App\Repositories\TransactionRepository;
 use App\Repositories\VaultTransactionRepository;
@@ -38,9 +37,7 @@ class AdminReadController extends Controller
         return Inertia::render('admin/vault/Log', [
             'role' => $request->user()?->role,
             'notificationCount' => $this->notificationCount(),
-            'rows' => VaultTransactionResource::collection(
-                $this->vaultTransactions->paginateLog(perPage: 200)
-            )->resolve($request),
+            'rows' => $this->vaultTransactions->groupedLog(limit: 200),
         ]);
     }
 

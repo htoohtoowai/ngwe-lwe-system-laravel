@@ -12,8 +12,10 @@ use App\Models\ExchangeRate;
 use App\Models\TransferFeeTier;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
+use App\Repositories\VaultTransactionRepository;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class DatabaseSeeder extends Seeder
 {
@@ -505,11 +507,41 @@ class DatabaseSeeder extends Seeder
             return;
         }
 
-        app(CashDenominationRepository::class)->recordBulk(
-            entryType: 'vault_in',
-            denominations: self::DEMO_VAULT_DENOMINATIONS,
-            createdBy: $admin->id,
-            note: 'Demo vault opening balance',
-        );
+        $cashier = User::query()
+            ->where('role', 'cashier')
+            ->where('is_active', true)
+            ->first();
+
+        DB::transaction(function () use ($admin, $cashier): void {
+            $batchId = (string) Str::uuid();
+            $note = 'Demo vault opening balance';
+
+            app(CashDenominationRepository::class)->recordBulk(
+                entryType: 'vault_in',
+                denominations: self::DEMO_VAULT_DENOMINATIONS,
+                createdBy: $admin->id,
+                note: $note,
+                batchId: $batchId,
+                movementType: 'admin_to_cashier',
+                sourceType: 'admin',
+                sourceId: $admin->id,
+                destinationType: 'cashier_vault',
+                destinationId: $cashier?->id,
+                affectsMainVault: true,
+            );
+
+            app(VaultTransactionRepository::class)->recordBulk(
+                txnType: 'adjustment',
+                denominations: self::DEMO_VAULT_DENOMINATIONS,
+                performedBy: $admin->id,
+                note: $note,
+                batchId: $batchId,
+                movementType: 'admin_to_cashier',
+                sourceType: 'admin',
+                sourceId: $admin->id,
+                destinationType: 'cashier_vault',
+                destinationId: $cashier?->id,
+            );
+        });
     }
 }

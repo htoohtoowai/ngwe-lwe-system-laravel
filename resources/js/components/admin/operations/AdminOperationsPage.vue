@@ -937,7 +937,10 @@ function syncFormsFromRoute(): void {
     }
 }
 
-function inertiaVisit<T>(path: string, options: InertiaVisitOptions = {}): Promise<T> {
+function inertiaVisit<T>(
+    path: string,
+    options: InertiaVisitOptions = {},
+): Promise<T> {
     return new Promise((resolve, reject) => {
         router.visit(path, {
             method: (options.method ?? 'GET').toLowerCase() as
@@ -1476,14 +1479,7 @@ async function closeDay(): Promise<void> {
 
 async function createBackup(): Promise<void> {
     await runAction('Backup created.', async () => {
-        const payload = await request<{ message?: string; path?: string }>(
-            '/admin/actions/backup',
-            { method: 'POST' },
-        );
-
-        notice.value = payload.path
-            ? `Backup created: ${payload.path}`
-            : (payload.message ?? 'Backup created.');
+        await inertiaVisit('/admin/actions/backup', { method: 'POST' });
     });
 }
 

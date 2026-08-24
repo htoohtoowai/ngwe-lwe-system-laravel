@@ -32,6 +32,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AdminOperationsActionController extends Controller
@@ -207,20 +208,42 @@ class AdminOperationsActionController extends Controller
                 $direction,
                 $auditNote,
             ): void {
+                $batchId = (string) Str::uuid();
+                $movementType = $direction === 'deposit'
+                    ? 'admin_to_cashier'
+                    : 'cashier_to_admin';
+                $sourceType = $direction === 'deposit' ? 'admin' : 'cashier_vault';
+                $sourceId = $direction === 'deposit' ? $request->user()->id : $cashier->id;
+                $destinationType = $direction === 'deposit' ? 'cashier_vault' : 'admin';
+                $destinationId = $direction === 'deposit' ? $cashier->id : $request->user()->id;
+
                 $this->vault->recordBulk(
                     entryType: $data['entry_type'],
                     denominations: $denominations,
                     createdBy: $request->user()->id,
                     note: $auditNote,
+                    batchId: $batchId,
+                    movementType: $movementType,
+                    sourceType: $sourceType,
+                    sourceId: $sourceId,
+                    destinationType: $destinationType,
+                    destinationId: $destinationId,
+                    affectsMainVault: true,
                 );
 
-                // Keep the existing vault_transactions enum stable and use the
-                // immutable note plus ActivityLog to distinguish deposit/withdraw.
+                // Keep the existing txn_type enum stable; movement_type carries
+                // the exact Owner/Cashier direction for reconciliation.
                 $this->vaultTransactions->recordBulk(
                     txnType: 'adjustment',
                     denominations: $denominations,
                     performedBy: $request->user()->id,
                     note: $auditNote,
+                    batchId: $batchId,
+                    movementType: $movementType,
+                    sourceType: $sourceType,
+                    sourceId: $sourceId,
+                    destinationType: $destinationType,
+                    destinationId: $destinationId,
                 );
 
                 ActivityLog::query()->create([
@@ -232,6 +255,7 @@ class AdminOperationsActionController extends Controller
                         'cashier_id' => $cashier->id,
                         'cashier_name' => $cashier->full_name,
                         'direction' => $direction,
+                        'batch_id' => $batchId,
                         'amount' => $total,
                         'denominations' => $denominations,
                         'note' => $auditNote,

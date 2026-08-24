@@ -8,13 +8,15 @@ use App\Models\VaultDenominationBalance;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
- * Ports Python repositories/cash_denomination_repository.py.
+ * Physical cash denomination ledger.
  *
- * `entry_type` values:
- *   - vault_in / float_returned / adjustment: increment the main vault
- *   - vault_out: decrement the main vault
+ * `entry_type` remains the legacy in/out classification used by the main-vault
+ * balance engine. `movement_type` + source/destination identify the actual
+ * custody movement. Rows with `affects_main_vault = false` are reconciliation
+ * mirrors for Teller/customer movements and never change main-vault stock.
  */
 class CashDenominationRepository
 {
@@ -23,8 +25,11 @@ class CashDenominationRepository
     private const DEBIT_ENTRIES = ['vault_out'];
 
     /**
-     * Insert one log row per denomination (skip qty=0) and atomically apply
+     * Insert one log row per denomination and, when requested, atomically apply
      * the delta to `vault_denomination_balances`.
+     *
+     * The returned batch id can be shared with `vault_transactions` so both
+     * immutable ledgers can be reconciled denomination-for-denomination.
      *
      * @param  array<int, int>  $denominations
      */
@@ -35,11 +40,19 @@ class CashDenominationRepository
         ?int $floatId = null,
         ?int $transactionId = null,
         ?string $note = null,
-    ): void {
+        ?string $batchId = null,
+        ?string $movementType = null,
+        ?string $sourceType = null,
+        ?int $sourceId = null,
+        ?string $destinationType = null,
+        ?int $destinationId = null,
+        bool $affectsMainVault = true,
+    ): string {
         if (! in_array($entryType, array_merge(self::CREDIT_ENTRIES, self::DEBIT_ENTRIES), true)) {
             throw new \InvalidArgumentException("Invalid entry_type: {$entryType}");
         }
 
+        $batchId ??= (string) Str::uuid();
         $rows = [];
         foreach ($denominations as $denom => $qty) {
             $denom = (int) $denom;
@@ -51,15 +64,36 @@ class CashDenominationRepository
         }
 
         if ($rows === []) {
-            return;
+            return $batchId;
         }
 
-        DB::transaction(function () use ($entryType, $rows, $createdBy, $floatId, $transactionId, $note): void {
+        DB::transaction(function () use (
+            $entryType,
+            $rows,
+            $createdBy,
+            $floatId,
+            $transactionId,
+            $note,
+            $batchId,
+            $movementType,
+            $sourceType,
+            $sourceId,
+            $destinationType,
+            $destinationId,
+            $affectsMainVault,
+        ): void {
             $isCredit = in_array($entryType, self::CREDIT_ENTRIES, true);
 
             foreach ($rows as [$denom, $qty]) {
                 CashDenominationLog::query()->create([
+                    'batch_id' => $batchId,
                     'entry_type' => $entryType,
+                    'movement_type' => $movementType,
+                    'source_type' => $sourceType,
+                    'source_id' => $sourceId,
+                    'destination_type' => $destinationType,
+                    'destination_id' => $destinationId,
+                    'affects_main_vault' => $affectsMainVault,
                     'denomination' => $denom,
                     'quantity' => $qty,
                     'float_id' => $floatId,
@@ -67,6 +101,10 @@ class CashDenominationRepository
                     'created_by' => $createdBy,
                     'note' => $note,
                 ]);
+
+                if (! $affectsMainVault) {
+                    continue;
+                }
 
                 $balance = VaultDenominationBalance::query()->find($denom);
                 if ($balance === null) {
@@ -94,16 +132,20 @@ class CashDenominationRepository
                 $balance->save();
             }
         });
+
+        return $batchId;
     }
 
     /**
-     * Vault net balance from the log ledger, keyed by denomination.
+     * Vault net balance from rows that actually affect main-vault stock.
+     * Reconciliation-only Teller/customer mirror rows are intentionally ignored.
      *
      * @return array<int, int>
      */
     public function getVaultBalance(): array
     {
         $rows = DB::table('cash_denomination_logs')
+            ->where('affects_main_vault', true)
             ->selectRaw(
                 'denomination, '
                 ."SUM(CASE WHEN entry_type IN ('vault_in','float_returned','adjustment') THEN quantity "
@@ -144,17 +186,13 @@ class CashDenominationRepository
         return $result;
     }
 
-    /**
-     * @return array<int, int>
-     */
+    /** @return array<int, int> */
     public function getAvailableBalance(): array
     {
         return $this->getVaultBalance();
     }
 
-    /**
-     * @return Collection<int, CashDenominationLog>
-     */
+    /** @return Collection<int, CashDenominationLog> */
     public function recentLogs(int $limit = 100): Collection
     {
         return CashDenominationLog::query()

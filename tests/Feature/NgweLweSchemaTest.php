@@ -52,6 +52,23 @@ class NgweLweSchemaTest extends TestCase
         $this->assertFalse(Schema::hasColumn('provider_fee_tiers', 'service_type_id'));
     }
 
+    public function test_cash_ledgers_have_shared_reconciliation_metadata(): void
+    {
+        foreach ([
+            'batch_id',
+            'movement_type',
+            'source_type',
+            'source_id',
+            'destination_type',
+            'destination_id',
+        ] as $column) {
+            $this->assertTrue(Schema::hasColumn('vault_transactions', $column), "Missing vault_transactions.{$column}");
+            $this->assertTrue(Schema::hasColumn('cash_denomination_logs', $column), "Missing cash_denomination_logs.{$column}");
+        }
+
+        $this->assertTrue(Schema::hasColumn('cash_denomination_logs', 'affects_main_vault'));
+    }
+
     public function test_users_table_has_ngwe_lwe_auth_and_role_columns(): void
     {
         foreach (['username', 'pin_hash', 'full_name', 'role', 'is_active', 'auth_version'] as $column) {

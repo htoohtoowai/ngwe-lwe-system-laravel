@@ -11,6 +11,7 @@ use App\Repositories\CashFloatRepository;
 use App\Repositories\VaultTransactionRepository;
 use App\Support\Money;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -87,19 +88,17 @@ class CashFloatService
             if ($active !== null) {
                 $issue = $this->floats->createAdditionalIssue($active, $cashier->id, $denominations, $note);
 
-                $this->vault->recordBulk(
+                $this->recordPhysicalMovement(
                     entryType: 'vault_out',
-                    denominations: $denominations,
-                    createdBy: $cashier->id,
-                    floatId: $active->id,
-                    note: $note ?? "Additional float issue #{$issue->id} for float #{$active->id}",
-                );
-
-                $this->vaultTransactions->recordBulk(
                     txnType: 'float_issue',
                     denominations: $denominations,
                     performedBy: $cashier->id,
                     floatId: $active->id,
+                    movementType: 'cashier_to_teller',
+                    sourceType: 'cashier_vault',
+                    sourceId: $cashier->id,
+                    destinationType: 'teller_float',
+                    destinationId: $active->id,
                     note: "Additional issue #{$issue->id}. ".($note ?? ''),
                 );
 
@@ -117,22 +116,20 @@ class CashFloatService
             $float = $this->floats->issue($employeeId, $cashier->id, $denominations, $note);
             $initialIssue = $float->issues->firstWhere('status', 'PENDING_RECEIPT');
 
-            $this->vault->recordBulk(
+            $this->recordPhysicalMovement(
                 entryType: 'vault_out',
-                denominations: $denominations,
-                createdBy: $cashier->id,
-                floatId: $float->id,
-                note: $note ?? "Float #{$float->id} issued to employee #{$employeeId}",
-            );
-
-            $this->vaultTransactions->recordBulk(
                 txnType: 'float_issue',
                 denominations: $denominations,
                 performedBy: $cashier->id,
                 floatId: $float->id,
+                movementType: 'cashier_to_teller',
+                sourceType: 'cashier_vault',
+                sourceId: $cashier->id,
+                destinationType: 'teller_float',
+                destinationId: $float->id,
                 note: $initialIssue
                     ? "Initial issue #{$initialIssue->id}. ".($note ?? '')
-                    : $note,
+                    : ($note ?? "Float #{$float->id} issued to employee #{$employeeId}"),
             );
 
             $this->log($cashier->id, 'float_issued', $float->id, [
@@ -180,6 +177,11 @@ class CashFloatService
                 performedBy: $employee->id,
                 floatId: $activated->id,
                 note: "Float #{$activated->id} receipt completed",
+                movementType: 'verification_float_receipt',
+                sourceType: 'cashier_vault',
+                sourceId: $activated->issued_by,
+                destinationType: 'teller_float',
+                destinationId: $activated->id,
             );
 
             $this->log($employee->id, 'float_activated', $activated->id, [
@@ -221,20 +223,18 @@ class CashFloatService
         $rejected = DB::transaction(function () use ($employee, $float, $denominations, $auditNote): CashFloatAssignment {
             $rejected = $this->floats->rejectPendingReceipt($float, $denominations, $auditNote);
 
-            $this->vault->recordBulk(
+            $this->recordPhysicalMovement(
                 entryType: 'float_returned',
-                denominations: $denominations,
-                createdBy: $employee->id,
-                floatId: $rejected->id,
-                note: $auditNote,
-            );
-
-            $this->vaultTransactions->recordBulk(
                 txnType: 'float_reject',
                 denominations: $denominations,
                 performedBy: $employee->id,
                 floatId: $rejected->id,
                 verifiedBy: $employee->id,
+                movementType: 'teller_to_cashier',
+                sourceType: 'teller_float',
+                sourceId: $rejected->id,
+                destinationType: 'cashier_vault',
+                destinationId: $rejected->issued_by,
                 note: $auditNote,
             );
 
@@ -281,6 +281,11 @@ class CashFloatService
                 performedBy: $employee->id,
                 floatId: $updated->id,
                 note: "Additional float issue #{$issue->id} receipt completed",
+                movementType: 'verification_float_receipt',
+                sourceType: 'cashier_vault',
+                sourceId: $issue->issued_by,
+                destinationType: 'teller_float',
+                destinationId: $updated->id,
             );
 
             $this->log($employee->id, 'float_additional_received', $updated->id, [
@@ -321,20 +326,18 @@ class CashFloatService
         $rejected = DB::transaction(function () use ($employee, $issue, $denominations, $auditNote): CashFloatIssue {
             $rejected = $this->floats->rejectAdditionalIssue($issue);
 
-            $this->vault->recordBulk(
+            $this->recordPhysicalMovement(
                 entryType: 'float_returned',
-                denominations: $denominations,
-                createdBy: $employee->id,
-                floatId: $issue->float_id,
-                note: $auditNote,
-            );
-
-            $this->vaultTransactions->recordBulk(
                 txnType: 'float_reject',
                 denominations: $denominations,
                 performedBy: $employee->id,
                 floatId: $issue->float_id,
                 verifiedBy: $employee->id,
+                movementType: 'teller_to_cashier',
+                sourceType: 'teller_float',
+                sourceId: $issue->float_id,
+                destinationType: 'cashier_vault',
+                destinationId: $issue->issued_by,
                 note: "Additional issue #{$issue->id}. {$auditNote}",
             );
 
@@ -411,6 +414,11 @@ class CashFloatService
                 performedBy: $employee->id,
                 floatId: $updated->id,
                 note: "Return initiated for float #{$updated->id}",
+                movementType: 'verification_return_initiate',
+                sourceType: 'teller_float',
+                sourceId: $updated->id,
+                destinationType: 'cashier_vault',
+                destinationId: $updated->issued_by,
             );
 
             $this->log($employee->id, 'float_return_initiated', $updated->id, [
@@ -463,23 +471,21 @@ class CashFloatService
             $closed = $this->floats->confirmReturn($float, $returnTotal);
 
             if ($returnDenominations !== []) {
-                $this->vault->recordBulk(
+                $this->recordPhysicalMovement(
                     entryType: 'float_returned',
+                    txnType: 'return_confirm',
                     denominations: $returnDenominations,
-                    createdBy: $cashier->id,
+                    performedBy: $cashier->id,
                     floatId: $closed->id,
-                    note: "Float #{$closed->id} return completed by cashier",
+                    verifiedBy: $cashier->id,
+                    movementType: 'teller_to_cashier',
+                    sourceType: 'teller_float',
+                    sourceId: $closed->id,
+                    destinationType: 'cashier_vault',
+                    destinationId: $cashier->id,
+                    note: "Float #{$closed->id} return completed",
                 );
             }
-
-            $this->vaultTransactions->recordBulk(
-                txnType: 'return_confirm',
-                denominations: $returnDenominations,
-                performedBy: $cashier->id,
-                floatId: $closed->id,
-                verifiedBy: $cashier->id,
-                note: "Float #{$closed->id} return completed",
-            );
 
             $this->log($cashier->id, 'float_return_confirmed', $closed->id, [
                 'closing_total' => Money::normalize($closed->closing_total ?? 0),
@@ -493,6 +499,62 @@ class CashFloatService
         $this->broadcasts->floatStatusChanged($closed);
 
         return $closed;
+    }
+
+    /**
+     * Write the same physical cash movement to both denomination ledgers with a
+     * single immutable reference. Main-vault stock changes only through the
+     * cash denomination repository.
+     *
+     * @param  array<int, int>  $denominations
+     */
+    private function recordPhysicalMovement(
+        string $entryType,
+        string $txnType,
+        array $denominations,
+        int $performedBy,
+        ?int $floatId,
+        string $movementType,
+        string $sourceType,
+        ?int $sourceId,
+        string $destinationType,
+        ?int $destinationId,
+        ?string $note = null,
+        ?int $verifiedBy = null,
+    ): string {
+        $batchId = (string) Str::uuid();
+
+        $this->vault->recordBulk(
+            entryType: $entryType,
+            denominations: $denominations,
+            createdBy: $performedBy,
+            floatId: $floatId,
+            note: $note,
+            batchId: $batchId,
+            movementType: $movementType,
+            sourceType: $sourceType,
+            sourceId: $sourceId,
+            destinationType: $destinationType,
+            destinationId: $destinationId,
+            affectsMainVault: true,
+        );
+
+        $this->vaultTransactions->recordBulk(
+            txnType: $txnType,
+            denominations: $denominations,
+            performedBy: $performedBy,
+            floatId: $floatId,
+            verifiedBy: $verifiedBy,
+            note: $note,
+            batchId: $batchId,
+            movementType: $movementType,
+            sourceType: $sourceType,
+            sourceId: $sourceId,
+            destinationType: $destinationType,
+            destinationId: $destinationId,
+        );
+
+        return $batchId;
     }
 
     /**

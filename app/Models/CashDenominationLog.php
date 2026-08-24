@@ -7,7 +7,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
+    'batch_id',
     'entry_type',
+    'movement_type',
+    'source_type',
+    'source_id',
+    'destination_type',
+    'destination_id',
+    'affects_main_vault',
     'denomination',
     'quantity',
     'float_id',
@@ -26,6 +33,9 @@ class CashDenominationLog extends Model
         return [
             'denomination' => 'integer',
             'quantity' => 'integer',
+            'source_id' => 'integer',
+            'destination_id' => 'integer',
+            'affects_main_vault' => 'boolean',
             'created_at' => 'datetime',
         ];
     }

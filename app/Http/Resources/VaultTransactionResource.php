@@ -11,7 +11,13 @@ class VaultTransactionResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'batch_id' => $this->batch_id,
             'txn_type' => $this->txn_type,
+            'movement_type' => $this->movement_type,
+            'source_type' => $this->source_type,
+            'source_id' => $this->source_id,
+            'destination_type' => $this->destination_type,
+            'destination_id' => $this->destination_id,
             'float_id' => $this->float_id,
             'denomination' => $this->denomination,
             'quantity' => $this->quantity,

@@ -19,6 +19,7 @@ use App\Repositories\TransactionRepository;
 use App\Repositories\VaultTransactionRepository;
 use App\Support\Money;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use RuntimeException;
 
@@ -200,12 +201,19 @@ class TransactionService
                 $this->floats->addDenominations($activeFloat->id, $normalizedReceivedDenominations);
                 $this->floats->incrementBalance($creator->id, $amountReceived);
 
-                $this->vaultTransactions->recordBulk(
+                $this->recordPhysicalCashMovement(
+                    entryType: 'vault_in',
                     txnType: 'cash_in_received',
                     denominations: $normalizedReceivedDenominations,
                     performedBy: $creator->id,
                     floatId: $activeFloat->id,
                     transactionId: $txn->id,
+                    movementType: 'customer_to_teller',
+                    sourceType: 'customer',
+                    sourceId: null,
+                    destinationType: 'teller_float',
+                    destinationId: $activeFloat->id,
+                    affectsMainVault: false,
                     note: "Cash In received txn #{$txn->id}",
                 );
 
@@ -213,12 +221,19 @@ class TransactionService
                     $this->floats->deductDenominations($activeFloat->id, $normalizedChangeDenominations);
                     $this->floats->deductBalance($creator->id, $changeDue);
 
-                    $this->vaultTransactions->recordBulk(
+                    $this->recordPhysicalCashMovement(
+                        entryType: 'vault_out',
                         txnType: 'cash_in_change',
                         denominations: $normalizedChangeDenominations,
                         performedBy: $creator->id,
                         floatId: $activeFloat->id,
                         transactionId: $txn->id,
+                        movementType: 'teller_to_customer',
+                        sourceType: 'teller_float',
+                        sourceId: $activeFloat->id,
+                        destinationType: 'customer',
+                        destinationId: null,
+                        affectsMainVault: false,
                         note: "Cash In overpayment change txn #{$txn->id}",
                     );
 
@@ -242,12 +257,19 @@ class TransactionService
                 $this->floats->deductDenominations($activeFloat->id, $normalizedHandoffDenominations);
                 $this->floats->deductBalance($creator->id, $cashSettlementAmount);
 
-                $this->vaultTransactions->recordBulk(
+                $this->recordPhysicalCashMovement(
+                    entryType: 'vault_out',
                     txnType: 'cash_in_handoff',
                     denominations: $normalizedHandoffDenominations,
                     performedBy: $creator->id,
                     floatId: $activeFloat->id,
                     transactionId: $txn->id,
+                    movementType: 'teller_to_cashier',
+                    sourceType: 'teller_float',
+                    sourceId: $activeFloat->id,
+                    destinationType: 'cashier_handoff',
+                    destinationId: null,
+                    affectsMainVault: false,
                     note: "Cash In cashier handoff txn #{$txn->id}",
                 );
             }
@@ -412,20 +434,35 @@ class TransactionService
                     $this->floats->deductDenominations($activeFloat->id, $normalizedDenominations);
                     $this->floats->deductBalance($creator->id, $amount);
 
-                    $this->vaultTransactions->recordBulk(
+                    $this->recordPhysicalCashMovement(
+                        entryType: 'vault_out',
                         txnType: 'cash_out',
                         denominations: $normalizedDenominations,
                         performedBy: $creator->id,
                         floatId: $activeFloat->id,
                         transactionId: $txn->id,
+                        movementType: 'teller_to_customer',
+                        sourceType: 'teller_float',
+                        sourceId: $activeFloat->id,
+                        destinationType: 'customer',
+                        destinationId: null,
+                        affectsMainVault: false,
                         note: "Cash Out txn #{$txn->id}",
                     );
                 } else {
-                    $this->cashDenominations->recordBulk(
+                    $this->recordPhysicalCashMovement(
                         entryType: 'vault_out',
+                        txnType: 'cash_out',
                         denominations: $normalizedDenominations,
-                        createdBy: $creator->id,
+                        performedBy: $creator->id,
+                        floatId: null,
                         transactionId: $txn->id,
+                        movementType: 'cashier_to_customer',
+                        sourceType: 'cashier_vault',
+                        sourceId: null,
+                        destinationType: 'customer',
+                        destinationId: null,
+                        affectsMainVault: true,
                         note: "Owner Cash Out from main vault txn #{$txn->id}",
                     );
                 }
@@ -440,12 +477,19 @@ class TransactionService
                 $this->floats->addDenominations($activeFloat->id, $normalizedFeeDenominations);
                 $this->floats->incrementBalance($creator->id, $fees['customer_fee']);
 
-                $this->vaultTransactions->recordBulk(
+                $this->recordPhysicalCashMovement(
+                    entryType: 'vault_in',
                     txnType: 'cash_out_fee_received',
                     denominations: $normalizedFeeDenominations,
                     performedBy: $creator->id,
                     floatId: $activeFloat->id,
                     transactionId: $txn->id,
+                    movementType: 'customer_to_teller',
+                    sourceType: 'customer',
+                    sourceId: null,
+                    destinationType: 'teller_float',
+                    destinationId: $activeFloat->id,
+                    affectsMainVault: false,
                     note: "Cash Out cash fee received txn #{$txn->id}",
                 );
             }
@@ -613,12 +657,19 @@ class TransactionService
                 $this->floats->addDenominations($activeFloat->id, $normalizedFeeDenominations);
                 $this->floats->incrementBalance($creator->id, $fees['customer_fee']);
 
-                $this->vaultTransactions->recordBulk(
+                $this->recordPhysicalCashMovement(
+                    entryType: 'vault_in',
                     txnType: 'transfer_fee_received',
                     denominations: $normalizedFeeDenominations,
                     performedBy: $creator->id,
                     floatId: $activeFloat->id,
                     transactionId: $txn->id,
+                    movementType: 'customer_to_teller',
+                    sourceType: 'customer',
+                    sourceId: null,
+                    destinationType: 'teller_float',
+                    destinationId: $activeFloat->id,
+                    affectsMainVault: false,
                     note: "Transfer cash fee received txn #{$txn->id}",
                 );
             }
@@ -798,12 +849,19 @@ class TransactionService
                 $this->floats->addDenominations($activeFloat->id, $normalizedReceivedDenominations);
                 $this->floats->incrementBalance($creator->id, $mmkSettlementAmount);
 
-                $this->vaultTransactions->recordBulk(
+                $this->recordPhysicalCashMovement(
+                    entryType: 'vault_in',
                     txnType: 'cash_in_received',
                     denominations: $normalizedReceivedDenominations,
                     performedBy: $creator->id,
                     floatId: $activeFloat->id,
                     transactionId: $txn->id,
+                    movementType: 'customer_to_teller',
+                    sourceType: 'customer',
+                    sourceId: null,
+                    destinationType: 'teller_float',
+                    destinationId: $activeFloat->id,
+                    affectsMainVault: false,
                     note: "Exchange MMK cash received txn #{$txn->id}",
                 );
             }
@@ -816,12 +874,19 @@ class TransactionService
                 $this->floats->deductDenominations($activeFloat->id, $normalizedDenominations);
                 $this->floats->deductBalance($creator->id, $mmkSettlementAmount);
 
-                $this->vaultTransactions->recordBulk(
+                $this->recordPhysicalCashMovement(
+                    entryType: 'vault_out',
                     txnType: 'cash_out',
                     denominations: $normalizedDenominations,
                     performedBy: $creator->id,
                     floatId: $activeFloat->id,
                     transactionId: $txn->id,
+                    movementType: 'teller_to_customer',
+                    sourceType: 'teller_float',
+                    sourceId: $activeFloat->id,
+                    destinationType: 'customer',
+                    destinationId: null,
+                    affectsMainVault: false,
                     note: "Exchange txn #{$txn->id}",
                 );
             }
@@ -874,12 +939,23 @@ class TransactionService
                 ? $handoffDenominations
                 : $receivedDenominations;
             if ($mainVaultDenominations !== []) {
-                $this->cashDenominations->recordBulk(
+                $this->recordPhysicalCashMovement(
                     entryType: 'vault_in',
+                    txnType: 'cash_in',
                     denominations: $mainVaultDenominations,
-                    createdBy: $cashier->id,
+                    performedBy: $cashier->id,
+                    floatId: null,
                     transactionId: $updated->id,
+                    movementType: $creator?->role === 'teller'
+                        ? 'cashier_accept_teller_handoff'
+                        : 'customer_to_cashier',
+                    sourceType: $creator?->role === 'teller' ? 'cashier_handoff' : 'customer',
+                    sourceId: null,
+                    destinationType: 'cashier_vault',
+                    destinationId: $cashier->id,
+                    affectsMainVault: true,
                     note: "Cash In confirmed txn #{$updated->id}",
+                    verifiedBy: $cashier->id,
                 );
             }
 
@@ -934,14 +1010,62 @@ class TransactionService
                 if ($handoffDenominations !== []) {
                     $this->floats->addDenominations($activeFloat->id, $handoffDenominations);
                     $this->floats->incrementBalance($creator->id, Money::denominationTotal($handoffDenominations));
+                    $this->recordPhysicalCashMovement(
+                        entryType: 'vault_in',
+                        txnType: 'cash_in_handoff',
+                        denominations: $handoffDenominations,
+                        performedBy: $cashier->id,
+                        floatId: $activeFloat->id,
+                        transactionId: $transaction->id,
+                        movementType: 'cashier_to_teller_reversal',
+                        sourceType: 'cashier_handoff',
+                        sourceId: null,
+                        destinationType: 'teller_float',
+                        destinationId: $activeFloat->id,
+                        affectsMainVault: false,
+                        note: "Cancelled Cash In handoff restored txn #{$transaction->id}",
+                        verifiedBy: $cashier->id,
+                    );
                 }
                 if ($changeDenominations !== []) {
                     $this->floats->addDenominations($activeFloat->id, $changeDenominations);
                     $this->floats->incrementBalance($creator->id, Money::denominationTotal($changeDenominations));
+                    $this->recordPhysicalCashMovement(
+                        entryType: 'vault_in',
+                        txnType: 'cash_in_change',
+                        denominations: $changeDenominations,
+                        performedBy: $cashier->id,
+                        floatId: $activeFloat->id,
+                        transactionId: $transaction->id,
+                        movementType: 'customer_to_teller_reversal',
+                        sourceType: 'customer',
+                        sourceId: null,
+                        destinationType: 'teller_float',
+                        destinationId: $activeFloat->id,
+                        affectsMainVault: false,
+                        note: "Cancelled Cash In change restored txn #{$transaction->id}",
+                        verifiedBy: $cashier->id,
+                    );
                 }
                 if ($receivedDenominations !== []) {
                     $this->floats->deductDenominations($activeFloat->id, $receivedDenominations);
                     $this->floats->deductBalance($creator->id, Money::denominationTotal($receivedDenominations));
+                    $this->recordPhysicalCashMovement(
+                        entryType: 'vault_out',
+                        txnType: 'cash_in_received',
+                        denominations: $receivedDenominations,
+                        performedBy: $cashier->id,
+                        floatId: $activeFloat->id,
+                        transactionId: $transaction->id,
+                        movementType: 'teller_to_customer_reversal',
+                        sourceType: 'teller_float',
+                        sourceId: $activeFloat->id,
+                        destinationType: 'customer',
+                        destinationId: null,
+                        affectsMainVault: false,
+                        note: "Cancelled Cash In customer cash returned txn #{$transaction->id}",
+                        verifiedBy: $cashier->id,
+                    );
                 }
             }
 
@@ -988,6 +1112,66 @@ class TransactionService
         $this->broadcasts->balanceUpdated();
 
         return $updated;
+    }
+
+    /**
+     * Mirror one physical denomination movement into both cash ledgers under the
+     * same batch id. For Teller/customer custody changes, `affectsMainVault` is
+     * false so the reconciliation row cannot change Cashier vault stock.
+     *
+     * @param  array<int, int>  $denominations
+     */
+    private function recordPhysicalCashMovement(
+        string $entryType,
+        string $txnType,
+        array $denominations,
+        int $performedBy,
+        ?int $floatId,
+        ?int $transactionId,
+        string $movementType,
+        string $sourceType,
+        ?int $sourceId,
+        string $destinationType,
+        ?int $destinationId,
+        bool $affectsMainVault,
+        ?string $note = null,
+        ?int $verifiedBy = null,
+    ): string {
+        $batchId = (string) Str::uuid();
+
+        $this->cashDenominations->recordBulk(
+            entryType: $entryType,
+            denominations: $denominations,
+            createdBy: $performedBy,
+            floatId: $floatId,
+            transactionId: $transactionId,
+            note: $note,
+            batchId: $batchId,
+            movementType: $movementType,
+            sourceType: $sourceType,
+            sourceId: $sourceId,
+            destinationType: $destinationType,
+            destinationId: $destinationId,
+            affectsMainVault: $affectsMainVault,
+        );
+
+        $this->vaultTransactions->recordBulk(
+            txnType: $txnType,
+            denominations: $denominations,
+            performedBy: $performedBy,
+            floatId: $floatId,
+            verifiedBy: $verifiedBy,
+            transactionId: $transactionId,
+            note: $note,
+            batchId: $batchId,
+            movementType: $movementType,
+            sourceType: $sourceType,
+            sourceId: $sourceId,
+            destinationType: $destinationType,
+            destinationId: $destinationId,
+        );
+
+        return $batchId;
     }
 
     private function guardAccountFeature(Account $account, AccountFeature $feature, string $operation): void
