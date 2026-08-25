@@ -10,7 +10,6 @@ use App\Models\ProviderFeeTier;
 use App\Models\User;
 use App\Models\VaultTransaction;
 use App\Repositories\CashDenominationRepository;
-use App\Repositories\CashFloatRepository;
 use App\Services\CashFloatService;
 use App\Services\TransactionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -114,7 +113,6 @@ class VaultTransactionAuditTest extends TestCase
         ]);
         $this->assertSame(8, $vault->getVaultBalance()[10000]);
     }
-
     public function test_cash_out_cash_fee_can_receive_larger_note_and_return_change_with_mirrored_ledgers(): void
     {
         $cashier = User::factory()->create(['role' => 'cashier', 'pin_hash' => Hash::make('2222')]);
@@ -175,7 +173,7 @@ class VaultTransactionAuditTest extends TestCase
 
         $float = $float->fresh();
         $this->assertSame('500.00', $float->current_balance);
-        $stock = app(CashFloatRepository::class)->getDenominationBalance($float->id);
+        $stock = app(\App\Repositories\CashFloatRepository::class)->getDenominationBalance($float->id);
         $this->assertSame(0, $stock[20000] ?? 0);
         $this->assertSame(1, $stock[500] ?? 0);
         $this->assertSame(0, $stock[200] ?? 0);
@@ -194,4 +192,5 @@ class VaultTransactionAuditTest extends TestCase
             );
         }
     }
+
 }

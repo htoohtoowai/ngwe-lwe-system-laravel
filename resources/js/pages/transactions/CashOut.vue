@@ -63,6 +63,8 @@ const step = ref<'form' | 'review'>('form');
 const accountId = ref<number | null>(null);
 const selectedCreditCompany = ref('');
 const amount = ref(0);
+const customerName = ref('');
+const customerPhone = ref('');
 const description = ref('');
 const denoms = ref<Record<number, number>>({});
 const feeDenoms = ref<Record<number, number>>({});
@@ -216,6 +218,8 @@ const feePaymentValid = computed(
 const ready = computed(
     () =>
         accountId.value !== null &&
+        customerName.value.trim().length > 0 &&
+        customerPhone.value.trim().length > 0 &&
         amount.value > 0 &&
         (!needsCashDenoms.value || denomTotal.value === amount.value) &&
         (!needsCashFeeDenoms.value ||
@@ -244,6 +248,14 @@ const readyIssue = computed(() => {
 
     if (amount.value <= 0) {
         return t('transaction.enterAmountBeforeContinue', 'Enter an amount.');
+    }
+
+    if (customerName.value.trim().length === 0) {
+        return t('transaction.customerNameRequired', 'Enter customer name.');
+    }
+
+    if (customerPhone.value.trim().length === 0) {
+        return t('transaction.customerPhoneRequired', 'Enter customer phone.');
     }
 
     if (needsCashDenoms.value && denomTotal.value !== amount.value) {
@@ -364,8 +376,8 @@ function submit() {
         {
             account_id: accountId.value,
             amount: amount.value,
-            customer_name: 'Counter Customer',
-            customer_phone: '-',
+            customer_name: customerName.value.trim(),
+            customer_phone: customerPhone.value.trim(),
             note: description.value,
             fee_payment_method: feePaymentMethod.value,
             fee_account_id:
@@ -671,6 +683,53 @@ function submit() {
                         </div>
                     </div>
 
+                    <div>
+                        <label
+                            class="bank-label bank-required"
+                            for="cash-out-customer-name"
+                        >
+                            {{ t('transaction.customerName') }}
+                        </label>
+                        <input
+                            id="cash-out-customer-name"
+                            v-model="customerName"
+                            type="text"
+                            autocomplete="name"
+                            placeholder=" "
+                            :aria-invalid="Boolean(errors.customer_name)"
+                            class="bank-input min-h-12 border border-line bg-mist px-3 py-2 transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                            :class="
+                                errors.customer_name
+                                    ? 'border-brand text-brand focus:border-brand focus:ring-brand/20'
+                                    : ''
+                            "
+                        />
+                    </div>
+
+                    <div>
+                        <label
+                            class="bank-label bank-required"
+                            for="cash-out-customer-phone"
+                        >
+                            {{ t('transaction.customerPhone') }}
+                        </label>
+                        <input
+                            id="cash-out-customer-phone"
+                            v-model="customerPhone"
+                            type="tel"
+                            autocomplete="tel"
+                            inputmode="tel"
+                            placeholder=" "
+                            :aria-invalid="Boolean(errors.customer_phone)"
+                            class="bank-input min-h-12 border border-line bg-mist px-3 py-2 transition focus:border-brand focus:ring-2 focus:ring-brand/20"
+                            :class="
+                                errors.customer_phone
+                                    ? 'border-brand text-brand focus:border-brand focus:ring-brand/20'
+                                    : ''
+                            "
+                        />
+                    </div>
+
                     <FeePaymentSelector
                         class="md:col-span-2 xl:col-span-3"
                         v-model="feePaymentMethod"
@@ -915,6 +974,20 @@ function submit() {
             </div>
 
             <dl class="mt-5 divide-y divide-line border-y border-line">
+                <div class="flex justify-between gap-6 py-3 text-sm">
+                    <dt class="shrink-0 text-slate">
+                        {{ t('transaction.customerName') }}
+                    </dt>
+                    <dd class="text-right font-bold">{{ customerName }}</dd>
+                </div>
+                <div class="flex justify-between gap-6 py-3 text-sm">
+                    <dt class="shrink-0 text-slate">
+                        {{ t('transaction.customerPhone') }}
+                    </dt>
+                    <dd class="money text-right font-bold">
+                        {{ customerPhone }}
+                    </dd>
+                </div>
                 <div class="flex justify-between py-3 text-sm">
                     <dt class="text-slate">
                         {{ t('transaction.cashOutAccountCredit') }}

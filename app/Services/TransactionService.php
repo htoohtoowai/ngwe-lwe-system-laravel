@@ -3,13 +3,12 @@
 namespace App\Services;
 
 use App\Enums\AccountFeature;
-use App\Enums\AgentCommissionDirection;
 use App\Exceptions\InsufficientBalanceException;
 use App\Exceptions\InsufficientVaultDenominationException;
 use App\Models\Account;
-use App\Models\ActivityLog;
 use App\Models\AgentCommissionEntry;
 use App\Models\AgentCommissionTier;
+use App\Models\ActivityLog;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Repositories\AccountRepository;
@@ -1400,8 +1399,9 @@ class TransactionService
         $this->accounts->incrementBalance($feeAccountId, $fee);
     }
 
+
     /**
-     * @param  array{amount:string,tier:?AgentCommissionTier,direction:?AgentCommissionDirection,configured_value:string}  $result
+     * @param  array{amount:string,tier:?AgentCommissionTier,direction:?\App\Enums\AgentCommissionDirection,configured_value:string}  $result
      */
     private function recordAgentCommission(
         Transaction $transaction,
