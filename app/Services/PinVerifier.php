@@ -7,29 +7,43 @@ use Illuminate\Support\Facades\Hash;
 use InvalidArgumentException;
 
 /**
- * Ports Python VaultService._verify_pin (bcrypt PIN check).
- *
- * Failure surface:
- *   - InvalidArgumentException with "No PIN set" when the user has
- *     never configured a PIN from the web profile/admin flow.
- *   - InvalidArgumentException with "Incorrect PIN" on mismatch.
- * Both map to HTTP 422 at the controller so callers get clear
- * validation-style feedback without leaking whether a PIN exists.
+ * Central PIN verification. Failed attempts are recorded without persisting
+ * the submitted PIN itself.
  */
 class PinVerifier
 {
+    public function __construct(private readonly AuditLogService $audit) {}
+
     public function verify(User $user, ?string $pin): void
     {
         if ($pin === null || $pin === '') {
+            $this->failed($user, 'PIN is required.');
             throw new InvalidArgumentException('PIN is required.');
         }
 
         if (empty($user->pin_hash)) {
+            $this->failed($user, 'No PIN is configured.');
             throw new InvalidArgumentException('No PIN set. Please set your PIN first.');
         }
 
         if (! Hash::check($pin, (string) $user->pin_hash)) {
+            $this->failed($user, 'Incorrect PIN.');
             throw new InvalidArgumentException('Incorrect PIN.');
         }
+    }
+
+    private function failed(User $user, string $reason): void
+    {
+        $this->audit->record(
+            action: 'pin_verification_failed',
+            category: 'authentication',
+            module: 'authorization',
+            entityType: 'user',
+            entityId: $user->id,
+            description: 'PIN verification failed',
+            status: 'failed',
+            failureReason: $reason,
+            actor: $user,
+        );
     }
 }

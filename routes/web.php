@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AdminAuditLogController;
 use App\Http\Controllers\AdminFeeController;
 use App\Http\Controllers\AdminOperationsActionController;
 use App\Http\Controllers\AdminReadController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\TellerFloatActionController;
 use App\Http\Controllers\TransactionEntryController;
 use App\Models\Transaction;
 use App\Services\AdminOperationsDataService;
+use App\Services\AuditLogService;
 use App\Services\DailyReportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -23,7 +25,7 @@ Route::get('/login', LoginController::class)->name('login');
 Route::post('/login', [LoginController::class, 'store'])->middleware('throttle:5,1')->name('login.store');
 Route::middleware('auth')->post('/logout', [LoginController::class, 'logout'])->name('logout');
 Route::middleware('auth')->get('/', [LoginController::class, 'home'])->name('home');
-Route::middleware(['auth', 'role:admin'])->get('/reports/daily/pdf', function (Request $request, DailyReportService $reports) {
+Route::middleware(['auth', 'role:admin'])->get('/reports/daily/pdf', function (Request $request, DailyReportService $reports, AuditLogService $audit) {
     $date = $request->query('date', now()->toDateString());
     $summary = $reports->summary((string) $date);
     $lines = [
@@ -43,6 +45,15 @@ Route::middleware(['auth', 'role:admin'])->get('/reports/daily/pdf', function (R
         'Total Digital: '.$summary['total_digital'],
         'Grand Total: '.$summary['grand_total'],
     ];
+
+    $audit->record(
+        action: 'report_export',
+        category: 'system',
+        module: 'reports',
+        entityType: 'daily_report',
+        description: 'Exported daily report PDF',
+        details: ['report_date' => $summary['summary_date']],
+    );
 
     return response(minimal_pdf($lines), 200, [
         'Content-Type' => 'application/pdf',
@@ -178,14 +189,15 @@ Route::middleware(['auth', 'role:admin'])
         Route::get('/transactions/cash-out', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'cash_out'))->name('.transactions.cash-out');
         Route::get('/transactions/transfer', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'transfer'))->name('.transactions.transfer');
         Route::get('/transactions/exchange', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'exchange'))->name('.transactions.exchange');
+        Route::get('/audit-logs', AdminAuditLogController::class)->name('.audit-logs');
+        Route::get('/audit-logs/export', [AdminAuditLogController::class, 'export'])->name('.audit-logs.export');
+        Route::redirect('/transactions/activity-logs', '/admin/audit-logs')->name('.transactions.activity-logs');
         Route::get('/{section}', fn (Request $request, string $section) => $renderAdminOperations($request, $section))
             ->whereIn('section', array_keys($adminSections))
             ->name('.section');
         Route::get('/{section}/create', fn (Request $request, string $section) => $renderAdminOperations($request, $section, 'create'))
             ->whereIn('section', $adminCrudSections)
             ->name('.create');
-        Route::get('/transactions/activity-logs', fn (Request $request) => $renderAdminOperations($request, 'transactions', 'list', null, 'activity-logs'))
-            ->name('.transactions.activity-logs');
         Route::get('/vault/log', [AdminReadController::class, 'vaultLog'])->name('.vault.log');
         Route::get('/reports/reconciliations', [AdminReadController::class, 'reconciliations'])->name('.reports.reconciliations');
         Route::get('/{section}/{resourceId}/edit', fn (Request $request, string $section, int $resourceId) => $renderAdminOperations($request, $section, 'edit', $resourceId))

@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Http\Resources\AccountResource;
-use App\Http\Resources\ActivityLogResource;
 use App\Http\Resources\CashFloatResource;
 use App\Http\Resources\AgentCommissionTierResource;
 use App\Http\Resources\ProviderFeeTierResource;
@@ -12,7 +11,6 @@ use App\Http\Resources\ExchangeRateResource;
 use App\Http\Resources\TransactionResource;
 use App\Http\Resources\UserResource;
 use App\Models\Account;
-use App\Models\ActivityLog;
 use App\Models\AgentCommissionTier;
 use App\Models\ProviderFeeTier;
 use App\Models\Company;
@@ -39,7 +37,9 @@ class AdminOperationsDataService
             'accounts' => AccountResource::collection(Account::query()->with(['company', 'featureAssignments'])->orderBy('account_name')->get())->resolve($request),
             'users' => UserResource::collection(User::query()->orderBy('full_name')->get())->resolve($request),
             'transactions' => TransactionResource::collection(Transaction::query()->with(['agentCommissionEntries.account', 'agentCommissionEntries.company'])->latest()->limit(200)->get())->resolve($request),
-            'activityLogs' => ActivityLogResource::collection(ActivityLog::query()->with('user')->latest()->limit(200)->get())->resolve($request),
+            // System activity audit is paginated on /admin/audit-logs.
+            // Do not hydrate hundreds of immutable log rows on every admin page.
+            'activityLogs' => [],
             'cashFloats' => CashFloatResource::collection($this->floats->list())->resolve($request),
             'vaultInventory' => $this->vaultInventory->inventory(),
             'exchangeRates' => ExchangeRateResource::collection(ExchangeRate::query()->with('company')->latest('id')->limit(50)->get())->resolve($request),

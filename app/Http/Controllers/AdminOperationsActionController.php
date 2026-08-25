@@ -22,6 +22,7 @@ use App\Repositories\ExchangeRateRepository;
 use App\Repositories\UserRepository;
 use App\Repositories\VaultTransactionRepository;
 use App\Services\DailyReportService;
+use App\Services\AuditLogService;
 use App\Services\DatabaseBackupService;
 use App\Services\RealtimeBroadcastService;
 use App\Support\Money;
@@ -47,6 +48,7 @@ class AdminOperationsActionController extends Controller
         private readonly DatabaseBackupService $backups,
         private readonly CashDenominationRepository $vault,
         private readonly VaultTransactionRepository $vaultTransactions,
+        private readonly AuditLogService $audit,
     ) {}
 
     public function storeCompany(CompanyRequest $request): RedirectResponse
@@ -366,6 +368,17 @@ class AdminOperationsActionController extends Controller
         ]);
 
         if (! Hash::check($data['old_password'], (string) $request->user()->password)) {
+            $this->audit->record(
+                action: 'password_verification_failed',
+                category: 'authentication',
+                module: 'authentication',
+                entityType: 'user',
+                entityId: $request->user()->id,
+                description: 'Password verification failed',
+                status: 'failed',
+                failureReason: 'Old password incorrect',
+            );
+
             throw ValidationException::withMessages(['old_password' => 'Old password incorrect.']);
         }
 
@@ -381,10 +394,20 @@ class AdminOperationsActionController extends Controller
             'notes' => ['sometimes', 'nullable', 'string', 'max:2000'],
         ]);
 
+        $date = $data['date'] ?? now()->toDateString();
         $this->reports->close(
             $request->user(),
-            $data['date'] ?? now()->toDateString(),
+            $date,
             $data['notes'] ?? null,
+        );
+
+        $this->audit->record(
+            action: 'close_day',
+            category: 'system',
+            module: 'daily_closing',
+            entityType: 'daily_summary',
+            description: 'Closed business day',
+            details: ['date' => $date, 'notes' => $data['notes'] ?? null],
         );
 
         return back()->with('success', 'Day closed.');
@@ -395,12 +418,29 @@ class AdminOperationsActionController extends Controller
         abort_unless($request->user()?->role === 'admin', 403, 'Admin only.');
         $path = $this->backups->create();
 
+        $this->audit->record(
+            action: 'backup_created',
+            category: 'system',
+            module: 'backup',
+            entityType: 'database_backup',
+            description: 'Created database backup',
+            details: ['path' => $path],
+        );
+
         return back()->with('success', "Backup created: {$path}");
     }
 
     public function broadcastTest(Request $request): RedirectResponse
     {
         $this->broadcasts->ping($request->user());
+
+        $this->audit->record(
+            action: 'broadcast_test',
+            category: 'system',
+            module: 'realtime',
+            entityType: 'broadcast',
+            description: 'Sent realtime broadcast test',
+        );
 
         return back()->with('success', 'Broadcast test sent.');
     }

@@ -11,6 +11,7 @@ use App\Models\CashFloatAssignment;
 use App\Models\Transaction;
 use App\Models\TransactionNotificationRead;
 use App\Repositories\UserRepository;
+use App\Services\AuditLogService;
 use App\Services\CashFloatService;
 use App\Services\PinVerifier;
 use App\Services\TransactionService;
@@ -30,6 +31,7 @@ class CashierActionController extends Controller
         private readonly TransactionService $transactions,
         private readonly PinVerifier $pinVerifier,
         private readonly UserRepository $users,
+        private readonly AuditLogService $audit,
     ) {}
 
     public function issueFloat(IssueCashFloatRequest $request): RedirectResponse
@@ -123,12 +125,35 @@ class CashierActionController extends Controller
     {
         $data = $request->validated();
         if (! Hash::check($data['current_password'], (string) $request->user()->password)) {
+            $this->audit->record(
+                action: 'password_verification_failed',
+                category: 'authentication',
+                module: 'authentication',
+                entityType: 'user',
+                entityId: $request->user()->id,
+                description: 'Password verification failed',
+                status: 'failed',
+                failureReason: 'Current password is incorrect',
+            );
+
             throw ValidationException::withMessages([
                 'current_password' => 'Current password is incorrect.',
             ]);
         }
 
-        $this->users->update($request->user(), ['password' => $data['password']]);
+        $user = $request->user();
+        $this->users->update($user, ['password' => $data['password']]);
+
+        $this->audit->record(
+            action: 'logout',
+            category: 'authentication',
+            module: 'authentication',
+            entityType: 'user',
+            entityId: $user->id,
+            description: 'User signed out after password change',
+            details: ['reason' => 'password_change'],
+            actor: $user,
+        );
 
         Auth::logout();
         $request->session()->invalidate();

@@ -418,12 +418,15 @@ const NAV: NavItem[] = [
                 labelMm: 'ငွေလဲ',
                 href: '/admin/transactions/exchange',
             },
-            {
-                label: 'Activity Logs',
-                labelMm: 'လုပ်ဆောင်ချက်မှတ်တမ်း',
-                href: '/admin/transactions/activity-logs',
-            },
         ],
+    },
+    {
+        label: 'Audit Logs',
+        labelMm: 'စနစ်စစ်ဆေးမှတ်တမ်း',
+        href: '/admin/audit-logs',
+        icon: 'transactions',
+        roles: ['admin'],
+        section: 'Admin',
     },
     {
         label: 'Vault',
