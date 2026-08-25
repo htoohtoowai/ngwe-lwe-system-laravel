@@ -2,6 +2,7 @@
 import { Link, router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import BankLayout from '@/layouts/BankLayout.vue';
+import { transactionTone } from '@/lib/transaction-tone';
 
 type Transaction = {
     id: number;
@@ -86,7 +87,7 @@ function load(): void {
 
 <template>
     <BankLayout :role="role" :announcement="announcement" :notification-count="notificationCount">
-        <h1 class="text-2xl font-bold tracking-tight">{{ title }}</h1>
+        <h1 class="text-2xl font-bold tracking-tight" :class="transactionType ? transactionTone(transactionType).text : 'text-ink'">{{ title }}</h1>
         <section class="mt-5 rounded-xl border border-line bg-card p-5 shadow-sm">
             <form class="grid gap-2 md:grid-cols-5" @submit.prevent="load">
                 <input v-model="search" type="search" class="bank-input" placeholder="Search reference, customer, status" />
@@ -107,7 +108,7 @@ function load(): void {
                     <thead class="bg-mist text-xs text-slate uppercase"><tr><th class="px-4 py-3">Ref</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">Customer</th><th class="px-4 py-3 text-right">Amount</th><th class="px-4 py-3 text-right">Fee</th><th class="px-4 py-3">Status</th><th class="px-4 py-3">Time</th><th class="px-4 py-3"></th></tr></thead>
                     <tbody class="divide-y divide-line">
                         <tr v-for="row in paginated" :key="row.id">
-                            <td class="money px-4 py-3 font-black">#{{ row.id }}</td><td class="px-4 py-3 font-bold">{{ typeLabel(row.transaction_type) }}</td><td class="px-4 py-3">{{ row.customer_name ?? '-' }}</td><td class="money px-4 py-3 text-right font-bold">{{ money(row.amount) }}</td><td class="money px-4 py-3 text-right">{{ money(row.customer_fee) }}</td><td class="px-4 py-3">{{ row.status }}</td><td class="px-4 py-3 text-xs">{{ dateTime(row.created_at) }}</td><td class="px-4 py-3 text-right"><Link :href="`/admin/transactions/${row.id}`" class="font-black text-brand">View</Link></td>
+                            <td class="money px-4 py-3 font-black">#{{ row.id }}</td><td class="px-4 py-3"><span class="rounded-pill border px-2.5 py-1 text-[10px] font-black uppercase" :class="transactionTone(row.transaction_type).badge">{{ typeLabel(row.transaction_type) }}</span></td><td class="px-4 py-3">{{ row.customer_name ?? '-' }}</td><td class="money px-4 py-3 text-right font-bold">{{ money(row.amount) }}</td><td class="money px-4 py-3 text-right">{{ money(row.customer_fee) }}</td><td class="px-4 py-3">{{ row.status }}</td><td class="px-4 py-3 text-xs">{{ dateTime(row.created_at) }}</td><td class="px-4 py-3 text-right"><Link :href="`/admin/transactions/${row.id}`" class="font-black text-brand">View</Link></td>
                         </tr>
                         <tr v-if="!paginated.length"><td colspan="8" class="px-4 py-8 text-center text-slate">No transactions found.</td></tr>
                     </tbody>

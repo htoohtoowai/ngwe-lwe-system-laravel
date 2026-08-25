@@ -12,6 +12,7 @@ import {
 } from '@/lib/echo';
 import type { RealtimeHandlers } from '@/lib/echo';
 import { startSmartPolling } from '@/lib/smart-polling';
+import { transactionTone } from '@/lib/transaction-tone';
 
 type Denoms = Record<number, number>;
 type DenomRow = {
@@ -835,7 +836,11 @@ function statusLabel(status: string): string {
                         >
                             {{ item.label }}
                         </Link>
-                        <span v-else class="truncate text-ink">
+                        <span
+                            v-else
+                            class="truncate"
+                            :class="transactionTone(activeSection).text"
+                        >
                             {{ item.label }}
                         </span>
                     </li>
@@ -889,15 +894,15 @@ function statusLabel(status: string): string {
                 <Link
                     href="/cashier/teller-entry-notifications"
                     :headers="authHeaders()"
-                    class="rounded-2xl border border-line bg-card p-5 shadow-sm transition hover:border-brand/30 hover:shadow-md"
+                    class="rounded-2xl border border-credit/25 bg-credit/5 p-5 shadow-sm transition hover:border-credit/55 hover:bg-credit/10 hover:shadow-md"
                 >
-                    <p class="text-xs font-black text-slate uppercase">
+                    <p class="text-xs font-black text-credit uppercase">
                         Pending Cash In
                     </p>
-                    <p class="mt-3 text-2xl font-black text-ink">
+                    <p class="mt-3 text-2xl font-black text-credit">
                         {{ livePendingCashIns.length }}
                     </p>
-                    <p class="money mt-2 text-xs font-bold text-brand">
+                    <p class="money mt-2 text-xs font-bold text-credit">
                         {{ formatMoney(pendingCashInTotal) }} MMK awaiting
                         review →
                     </p>
@@ -963,10 +968,21 @@ function statusLabel(status: string): string {
                             class="flex items-center justify-between gap-4 px-5 py-3"
                         >
                             <div class="min-w-0">
-                                <p class="truncate text-sm font-black text-ink">
-                                    #{{ transaction.id }} ·
-                                    {{ statusLabel(transaction.type) }}
-                                </p>
+                                <div class="flex min-w-0 items-center gap-2">
+                                    <span
+                                        class="money text-sm font-black text-ink"
+                                        >#{{ transaction.id }}</span
+                                    >
+                                    <span
+                                        class="truncate rounded-pill border px-2 py-0.5 text-[10px] font-black uppercase"
+                                        :class="
+                                            transactionTone(transaction.type)
+                                                .badge
+                                        "
+                                    >
+                                        {{ statusLabel(transaction.type) }}
+                                    </span>
+                                </div>
                                 <p
                                     class="truncate text-xs font-semibold text-slate"
                                 >
@@ -975,7 +991,8 @@ function statusLabel(status: string): string {
                                 </p>
                             </div>
                             <p
-                                class="money shrink-0 text-sm font-black text-ink"
+                                class="money shrink-0 text-sm font-black"
+                                :class="transactionTone(transaction.type).text"
                             >
                                 {{ formatMoney(transaction.amount) }} MMK
                             </p>
@@ -1563,7 +1580,14 @@ function statusLabel(status: string): string {
                                 {{ transaction.teller }}
                             </td>
                             <td class="px-4 py-3">
-                                {{ transaction.type.replaceAll('_', ' ') }}
+                                <span
+                                    class="rounded-pill border px-2.5 py-1 text-[10px] font-black uppercase"
+                                    :class="
+                                        transactionTone(transaction.type).badge
+                                    "
+                                >
+                                    {{ transaction.type.replaceAll('_', ' ') }}
+                                </span>
                             </td>
                             <td class="money px-4 py-3 font-bold">
                                 {{ formatMoney(transaction.amount) }} MMK

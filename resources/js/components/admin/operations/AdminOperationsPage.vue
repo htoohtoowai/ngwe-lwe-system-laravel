@@ -5,6 +5,7 @@ import ConfirmActionModal from '@/components/bank/ConfirmActionModal.vue';
 import DenomDrawer from '@/components/bank/DenomDrawer.vue';
 import BankLayout from '@/layouts/BankLayout.vue';
 import AdminListFrame from '@/components/admin/operations/AdminListFrame.vue';
+import { transactionTone } from '@/lib/transaction-tone';
 
 type Role = 'admin' | 'cashier' | 'teller';
 type MoneyValue = string | number | null;
@@ -1594,27 +1595,37 @@ async function sendBroadcastTest(): Promise<void> {
                     </div>
 
                     <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        <div class="rounded-lg bg-mist p-4">
-                            <p class="text-xs font-bold text-slate">Cash In</p>
-                            <p class="money mt-1 font-black text-ink">
+                        <div
+                            class="rounded-lg border border-credit/25 bg-credit/5 p-4"
+                        >
+                            <p class="text-xs font-bold text-credit">Cash In</p>
+                            <p class="money mt-1 font-black text-credit">
                                 {{ money(dailySummary?.total_cash_in) }}
                             </p>
                         </div>
-                        <div class="rounded-lg bg-mist p-4">
-                            <p class="text-xs font-bold text-slate">Cash Out</p>
-                            <p class="money mt-1 font-black text-ink">
+                        <div
+                            class="rounded-lg border border-debit/25 bg-debit/5 p-4"
+                        >
+                            <p class="text-xs font-bold text-debit">Cash Out</p>
+                            <p class="money mt-1 font-black text-debit">
                                 {{ money(dailySummary?.total_cash_out) }}
                             </p>
                         </div>
-                        <div class="rounded-lg bg-mist p-4">
-                            <p class="text-xs font-bold text-slate">Transfer</p>
-                            <p class="money mt-1 font-black text-ink">
+                        <div
+                            class="rounded-lg border border-ink-700/20 bg-ink-100/45 p-4"
+                        >
+                            <p class="text-xs font-bold text-ink-700">
+                                Transfer
+                            </p>
+                            <p class="money mt-1 font-black text-ink-700">
                                 {{ money(dailySummary?.total_transfer) }}
                             </p>
                         </div>
-                        <div class="rounded-lg bg-mist p-4">
-                            <p class="text-xs font-bold text-slate">Exchange</p>
-                            <p class="money mt-1 font-black text-ink">
+                        <div
+                            class="rounded-lg border border-held/25 bg-held/5 p-4"
+                        >
+                            <p class="text-xs font-bold text-held">Exchange</p>
+                            <p class="money mt-1 font-black text-held">
                                 {{ money(dailySummary?.total_exchange) }}
                             </p>
                         </div>
@@ -3324,12 +3335,21 @@ async function sendBroadcastTest(): Promise<void> {
                             </div>
                             <div>
                                 <dt class="font-bold text-slate">Type</dt>
-                                <dd class="font-black text-ink">
-                                    {{
-                                        transactionTypeLabel(
-                                            currentTransaction.transaction_type,
-                                        )
-                                    }}
+                                <dd>
+                                    <span
+                                        class="inline-flex rounded-pill border px-3 py-1 text-xs font-black"
+                                        :class="
+                                            transactionTone(
+                                                currentTransaction.transaction_type,
+                                            ).badge
+                                        "
+                                    >
+                                        {{
+                                            transactionTypeLabel(
+                                                currentTransaction.transaction_type,
+                                            )
+                                        }}
+                                    </span>
                                 </dd>
                             </div>
                             <div>
@@ -3574,14 +3594,21 @@ async function sendBroadcastTest(): Promise<void> {
                                         >
                                             #{{ transaction.id }}
                                         </td>
-                                        <td
-                                            class="px-4 py-3 font-bold text-ink"
-                                        >
-                                            {{
-                                                transactionTypeLabel(
-                                                    transaction.transaction_type,
-                                                )
-                                            }}
+                                        <td class="px-4 py-3">
+                                            <span
+                                                class="rounded-pill border px-2.5 py-1 text-[10px] font-black uppercase"
+                                                :class="
+                                                    transactionTone(
+                                                        transaction.transaction_type,
+                                                    ).badge
+                                                "
+                                            >
+                                                {{
+                                                    transactionTypeLabel(
+                                                        transaction.transaction_type,
+                                                    )
+                                                }}
+                                            </span>
                                         </td>
                                         <td class="px-4 py-3 text-slate">
                                             {{

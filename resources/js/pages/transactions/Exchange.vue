@@ -433,7 +433,7 @@ function submit() {
         :announcement="announcement"
         :notification-count="notificationCount"
     >
-        <h1 class="text-2xl font-bold tracking-tight">
+        <h1 class="text-2xl font-bold tracking-tight text-held">
             {{ t('transaction.exchange') }}
         </h1>
 

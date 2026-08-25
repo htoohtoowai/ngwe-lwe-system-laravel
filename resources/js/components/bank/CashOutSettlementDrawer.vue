@@ -234,20 +234,20 @@ function clearAll(): void {
                         <th class="px-2 py-2.5 text-center">
                             {{ t('component.onHand', 'On hand') }}
                         </th>
-                        <th class="px-2 py-2.5 text-center text-brand">
+                        <th class="px-2 py-2.5 text-center text-debit">
                             {{
                                 t('transaction.customerPayoutShort', 'Payout −')
                             }}
                         </th>
                         <th
                             v-if="cashFee"
-                            class="px-2 py-2.5 text-center text-balance"
+                            class="px-2 py-2.5 text-center text-credit"
                         >
                             {{ t('transaction.feeReceivedShort', 'Fee +') }}
                         </th>
                         <th
                             v-if="cashFee"
-                            class="px-2 py-2.5 text-center text-brand"
+                            class="px-2 py-2.5 text-center text-debit"
                         >
                             {{ t('transaction.changeShort', 'Change −') }}
                         </th>
@@ -272,11 +272,11 @@ function clearAll(): void {
                         >
                             {{ onHandQty(note).toLocaleString() }}
                         </td>
-                        <td class="px-2 py-2">
+                        <td class="bg-debit/5 px-2 py-2">
                             <div class="mx-auto flex w-fit items-center gap-1">
                                 <button
                                     type="button"
-                                    class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-mist p-0 text-slate disabled:opacity-30"
+                                    class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-mist p-0 text-debit disabled:opacity-30"
                                     :disabled="payoutQty(note) === 0"
                                     @click="
                                         setPayout(note, payoutQty(note) - 1)
@@ -289,7 +289,7 @@ function clearAll(): void {
                                     :max="onHandQty(note)"
                                     min="0"
                                     inputmode="numeric"
-                                    class="money h-8 w-12 rounded-field border border-line bg-mist px-1 text-center text-xs font-black outline-none focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/20"
+                                    class="money h-8 w-12 rounded-field border border-line bg-mist px-1 text-center text-xs font-black text-debit outline-none focus:border-debit focus:bg-card focus:ring-2 focus:ring-debit/20"
                                     :aria-label="`${note.toLocaleString()} payout notes`"
                                     @input="
                                         setFromInput('payout', note, $event)
@@ -297,7 +297,7 @@ function clearAll(): void {
                                 />
                                 <button
                                     type="button"
-                                    class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-mist p-0 text-slate disabled:opacity-30"
+                                    class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-mist p-0 text-debit disabled:opacity-30"
                                     :disabled="
                                         payoutQty(note) >= onHandQty(note)
                                     "
@@ -309,11 +309,11 @@ function clearAll(): void {
                                 </button>
                             </div>
                         </td>
-                        <td v-if="cashFee" class="px-2 py-2">
+                        <td v-if="cashFee" class="bg-credit/5 px-2 py-2">
                             <div class="mx-auto flex w-fit items-center gap-1">
                                 <button
                                     type="button"
-                                    class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-balance/10 p-0 text-balance disabled:opacity-30"
+                                    class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-credit/10 p-0 text-credit disabled:opacity-30"
                                     :disabled="feeQty(note) === 0"
                                     @click="setFee(note, feeQty(note) - 1)"
                                 >
@@ -323,24 +323,24 @@ function clearAll(): void {
                                     :value="feeQty(note)"
                                     min="0"
                                     inputmode="numeric"
-                                    class="money h-8 w-12 rounded-field border border-balance/25 bg-balance/5 px-1 text-center text-xs font-black text-balance outline-none focus:border-balance focus:bg-card focus:ring-2 focus:ring-balance/20"
+                                    class="money h-8 w-12 rounded-field border border-credit/25 bg-credit/5 px-1 text-center text-xs font-black text-credit outline-none focus:border-credit focus:bg-card focus:ring-2 focus:ring-credit/20"
                                     :aria-label="`${note.toLocaleString()} fee received notes`"
                                     @input="setFromInput('fee', note, $event)"
                                 />
                                 <button
                                     type="button"
-                                    class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-balance/10 p-0 text-balance"
+                                    class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-credit/10 p-0 text-credit"
                                     @click="setFee(note, feeQty(note) + 1)"
                                 >
                                     +
                                 </button>
                             </div>
                         </td>
-                        <td v-if="cashFee" class="px-2 py-2">
+                        <td v-if="cashFee" class="bg-debit/5 px-2 py-2">
                             <div class="mx-auto flex w-fit items-center gap-1">
                                 <button
                                     type="button"
-                                    class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-mist p-0 text-slate disabled:opacity-30"
+                                    class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-mist p-0 text-debit disabled:opacity-30"
                                     :disabled="changeQty(note) === 0"
                                     @click="
                                         setChange(note, changeQty(note) - 1)
@@ -353,7 +353,7 @@ function clearAll(): void {
                                     :max="availableForChange(note)"
                                     min="0"
                                     inputmode="numeric"
-                                    class="money h-8 w-12 rounded-field border border-line bg-mist px-1 text-center text-xs font-black outline-none focus:border-brand focus:bg-card focus:ring-2 focus:ring-brand/20"
+                                    class="money h-8 w-12 rounded-field border border-line bg-mist px-1 text-center text-xs font-black text-debit outline-none focus:border-debit focus:bg-card focus:ring-2 focus:ring-debit/20"
                                     :aria-label="`${note.toLocaleString()} change notes`"
                                     @input="
                                         setFromInput('change', note, $event)
@@ -361,7 +361,7 @@ function clearAll(): void {
                                 />
                                 <button
                                     type="button"
-                                    class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-mist p-0 text-slate disabled:opacity-30"
+                                    class="bank-button grid size-8 min-h-8 place-items-center rounded-full bg-mist p-0 text-debit disabled:opacity-30"
                                     :disabled="
                                         changeQty(note) >=
                                         availableForChange(note)
@@ -378,7 +378,7 @@ function clearAll(): void {
                             class="money px-3 py-2.5 text-right text-sm font-black"
                             :class="
                                 projectedQty(note) < 0
-                                    ? 'text-brand'
+                                    ? 'text-debit'
                                     : 'text-ink'
                             "
                         >

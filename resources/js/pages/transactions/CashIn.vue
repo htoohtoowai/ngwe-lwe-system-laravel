@@ -501,7 +501,7 @@ function submit() {
         :announcement="announcement"
         :notification-count="notificationCount"
     >
-        <h1 class="text-2xl font-bold tracking-tight">
+        <h1 class="text-2xl font-bold tracking-tight text-credit">
             {{ t('transaction.cashIn') }}
         </h1>
 
@@ -737,7 +737,6 @@ function submit() {
                                 </span>
                             </button>
                         </div>
-
                     </section>
 
                     <AccountTile

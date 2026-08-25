@@ -9,6 +9,10 @@ import {
     watch,
 } from 'vue';
 import { useLocale } from '@/lib/i18n';
+import {
+    normalizeTransactionType,
+    transactionTone,
+} from '@/lib/transaction-tone';
 
 /**
  * Bank shell — reference layout, three breakpoints:
@@ -567,6 +571,36 @@ const navLabel = (item: NavItem) =>
     lang.value === 'mm' ? item.labelMm : item.label;
 const navChildLabel = (item: NavChild) =>
     lang.value === 'mm' ? (item.labelMm ?? item.label) : item.label;
+const childTransactionType = (child: NavChild): string | null =>
+    normalizeTransactionType(child.href);
+
+const navIconTones: Record<NavIcon, string> = {
+    overview: 'bg-sky-600 text-white',
+    counter: 'bg-violet-600 text-white',
+    cashIn: transactionTone('cash_in').sidebarIcon,
+    cashOut: transactionTone('cash_out').sidebarIcon,
+    transfer: transactionTone('transfer').sidebarIcon,
+    accounts: 'bg-indigo-600 text-white',
+    exchange: transactionTone('exchange').sidebarIcon,
+    floats: 'bg-cyan-600 text-white',
+    vault: 'bg-emerald-600 text-white',
+    reconcile: 'bg-teal-600 text-white',
+    reports: 'bg-blue-600 text-white',
+    companies: 'bg-purple-600 text-white',
+    services: 'bg-orange-600 text-white',
+    fees: 'bg-pink-600 text-white',
+    users: 'bg-fuchsia-600 text-white',
+    transactions: 'bg-slate-600 text-white',
+    settings: 'bg-zinc-600 text-white',
+};
+
+const navIconTone = (item: NavItem): string => {
+    if (item.label === 'Pending Cash In') {
+        return transactionTone('cash_in').sidebarIcon;
+    }
+
+    return navIconTones[item.icon];
+};
 const roleLabel = computed(() => t(`role.${props.role}`));
 const displayName = computed(
     () => user.value?.full_name ?? user.value?.username ?? roleLabel.value,
@@ -1007,11 +1041,12 @@ function signOut() {
                                         />
                                         <span
                                             class="grid size-9 shrink-0 place-items-center rounded-xl transition"
-                                            :class="
+                                            :class="[
+                                                navIconTone(item),
                                                 isNavItemActive(item)
-                                                    ? 'bg-brand text-white shadow-sm'
-                                                    : 'bg-white/10 text-white/60 group-hover:bg-white/15 group-hover:text-white'
-                                            "
+                                                    ? 'shadow-sm ring-1 ring-white/20'
+                                                    : 'opacity-90 group-hover:opacity-100',
+                                            ]"
                                         >
                                             <svg
                                                 class="size-4"
@@ -1086,9 +1121,19 @@ function signOut() {
                                                 <span
                                                     class="size-1.5 rounded-full transition"
                                                     :class="
-                                                        isChildActive(child)
-                                                            ? 'bg-brand'
-                                                            : 'bg-white/25 group-hover/child:bg-white/70'
+                                                        childTransactionType(
+                                                            child,
+                                                        )
+                                                            ? transactionTone(
+                                                                  childTransactionType(
+                                                                      child,
+                                                                  ),
+                                                              ).dot
+                                                            : isChildActive(
+                                                                    child,
+                                                                )
+                                                              ? 'bg-brand'
+                                                              : 'bg-white/25 group-hover/child:bg-white/70'
                                                     "
                                                 />
                                                 <span class="truncate">
@@ -1184,12 +1229,13 @@ function signOut() {
                                             "
                                         >
                                             <span
-                                                class="grid size-8 shrink-0 place-items-center rounded-lg"
-                                                :class="
+                                                class="grid size-8 shrink-0 place-items-center rounded-lg transition"
+                                                :class="[
+                                                    navIconTone(item),
                                                     isNavItemActive(item)
-                                                        ? 'bg-brand text-white'
-                                                        : 'bg-white/10 text-white/60'
-                                                "
+                                                        ? 'shadow-sm ring-1 ring-white/20'
+                                                        : 'opacity-90',
+                                                ]"
                                             >
                                                 <svg
                                                     class="size-4"
@@ -1239,9 +1285,19 @@ function signOut() {
                                                     <span
                                                         class="size-1.5 rounded-full"
                                                         :class="
-                                                            isChildActive(child)
-                                                                ? 'bg-brand'
-                                                                : 'bg-white/25'
+                                                            childTransactionType(
+                                                                child,
+                                                            )
+                                                                ? transactionTone(
+                                                                      childTransactionType(
+                                                                          child,
+                                                                      ),
+                                                                  ).dot
+                                                                : isChildActive(
+                                                                        child,
+                                                                    )
+                                                                  ? 'bg-brand'
+                                                                  : 'bg-white/25'
                                                         "
                                                     />
                                                     <span class="truncate">
