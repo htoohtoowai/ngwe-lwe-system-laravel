@@ -376,6 +376,7 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.customerDestinationAccountNumber':
             'Customer destination account number',
         'transaction.cashInAmount': 'Cash In amount',
+        'transaction.amountReadingHint': 'Amount reading',
         'transaction.cashOutAmount': 'Enter Cash Out Amount',
         'transaction.cashToExchange': 'Cash to exchange',
         'transaction.transferAmount': 'Transfer amount',
@@ -865,6 +866,7 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.customerDestinationAccountNumber':
             'Customer destination account number',
         'transaction.cashInAmount': 'Cash In ပမာဏ',
+        'transaction.amountReadingHint': 'ငွေပမာဏ ဖတ်ရန်',
         'transaction.cashOutAmount': 'ငွေထုတ်မည့်ပမာဏ',
         'transaction.cashToExchange': 'ငွေလဲမည့်ပမာဏ',
         'transaction.transferAmount': 'လွှဲမည့်ပမာဏ',

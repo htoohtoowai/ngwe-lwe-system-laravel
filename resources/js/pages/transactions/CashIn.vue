@@ -271,6 +271,37 @@ watch([amount, accountId], ([nextAmount, nextAccount]) => {
     }
 });
 
+const cashInAmountHint = computed(() => {
+    let remaining = Math.floor(Number(amount.value) || 0);
+
+    if (remaining < 100) {
+        return '';
+    }
+
+    const units: Array<[number, string]> = [
+        [100_000, 'သိန်း'],
+        [10_000, 'သောင်း'],
+        [1_000, 'ထောင်'],
+        [100, 'ရာ'],
+    ];
+    const parts: string[] = [];
+
+    for (const [unit, label] of units) {
+        const quantity = Math.floor(remaining / unit);
+
+        if (quantity > 0) {
+            parts.push(`${quantity.toLocaleString()} ${label}`);
+            remaining -= quantity * unit;
+        }
+    }
+
+    if (remaining > 0) {
+        parts.push(remaining.toLocaleString());
+    }
+
+    return parts.join(' ');
+});
+
 const mmk = (value: string | number) => Number(value).toLocaleString();
 function authHeaders(): Record<string, string> {
     return {};
@@ -558,12 +589,30 @@ function submit() {
                         compact
                     />
 
-                    <BigAmountInput
-                        v-model="amount"
-                        :label="t('transaction.cashInAmount')"
-                        required
-                        compact
-                    />
+                    <div>
+                        <BigAmountInput
+                            v-model="amount"
+                            :label="t('transaction.cashInAmount')"
+                            required
+                            compact
+                        />
+                        <p
+                            v-if="cashInAmountHint"
+                            id="transaction-amount-reading"
+                            aria-live="polite"
+                            class="mt-1.5 min-h-5 text-xs font-semibold text-slate"
+                        >
+                            {{
+                                t(
+                                    'transaction.amountReadingHint',
+                                    'Amount reading',
+                                )
+                            }}:
+                            <span class="font-bold text-ink">
+                                {{ cashInAmountHint }} ကျပ်
+                            </span>
+                        </p>
+                    </div>
 
                     <div>
                         <p class="bank-label">{{ t('transaction.fee') }}</p>
@@ -675,36 +724,6 @@ function submit() {
                     </div>
                 </div>
 
-                <div class="min-w-0 xl:col-span-2">
-                    <div
-                        class="flex items-start gap-3 rounded-2xl border border-credit/25 bg-credit/5 px-4 py-4 sm:px-5"
-                    >
-                        <span
-                            class="grid size-8 shrink-0 place-items-center rounded-full bg-credit text-xs font-black text-white"
-                            >✓</span
-                        >
-                        <div>
-                            <p class="text-sm font-black text-credit">
-                                {{
-                                    t(
-                                        'transaction.cashierCountsCash',
-                                        'Cashier counts the physical cash',
-                                    )
-                                }}
-                            </p>
-                            <p
-                                class="mt-1 text-xs leading-5 font-semibold text-slate"
-                            >
-                                {{
-                                    t(
-                                        'transaction.cashierCountsCashHint',
-                                        'Enter the Cash In details only. The Cashier will count received notes and return any change before confirming the transaction.',
-                                    )
-                                }}
-                            </p>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <p
