@@ -218,6 +218,34 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.netTellerCash': 'Net teller cash',
         'transaction.fillPayout': 'Fill payout',
         'transaction.fillChange': 'Fill change',
+        'transaction.fillExactDue': 'Fill exact due',
+        'transaction.receivedShort': 'Received +',
+        'transaction.amountDue': 'Amount due',
+        'transaction.customerPaid': 'Customer paid',
+        'transaction.netCashReceived': 'Net received',
+        'transaction.cashInCashierSettlementHint':
+            'Count all cash received together. If the customer overpays, select only the notes returned as change.',
+        'transaction.customer': 'Customer',
+        'transaction.cashInCashierCount': 'Cash In · Cashier Count',
+        'transaction.cashInPlusCashFee': 'Cash In + cash fee',
+        'transaction.cashInFeePaidByAccount':
+            'Cash In only · fee paid by account',
+        'transaction.closeCashInReview': 'Close Cash In review',
+        'transaction.receivedMinusChangeMustEqual':
+            'Received − Change must equal',
+        'transaction.rejectCashIn': 'Reject Cash In',
+        'transaction.confirmWithPin': 'Confirm with PIN',
+        'transaction.confirmPendingCashIn': 'Confirm Cash In',
+        'transaction.confirmCashInPinHint':
+            'Enter your Cashier PIN to post the counted cash into the main vault.',
+        'transaction.rejectCashInPinHint':
+            'Enter your Cashier PIN to reverse this pending Cash In.',
+        'transaction.insufficientChangeNotes': 'Not enough change notes',
+        'transaction.cashierCountsCash': 'Cashier counts the physical cash',
+        'transaction.cashierCountsCashHint':
+            'Enter the Cash In details only. The Cashier will count received notes and return any change before confirming the transaction.',
+        'transaction.physicalCashCount': 'Physical cash count',
+        'transaction.pendingCashierCount': 'Pending Cashier count',
         'transaction.cashSettlementMatched': 'Cash settlement matched',
         'transaction.cashFeeReceivedMinimumHint':
             'Count at least the fee amount received from the customer.',
@@ -689,6 +717,36 @@ const messages: Record<Locale, Record<string, string>> = {
         'transaction.netTellerCash': 'Teller ငွေသားအသားတင်',
         'transaction.fillPayout': 'ပေးငွေ အလိုအလျောက်ဖြည့်',
         'transaction.fillChange': 'ပြန်အမ်းငွေ အလိုအလျောက်ဖြည့်',
+        'transaction.fillExactDue': 'ကျသင့်ငွေအတိအကျ ဖြည့်',
+        'transaction.receivedShort': 'လက်ခံ +',
+        'transaction.amountDue': 'ကျသင့်ငွေ',
+        'transaction.customerPaid': 'Customer ပေးငွေ',
+        'transaction.netCashReceived': 'အသားတင်လက်ခံငွေ',
+        'transaction.cashInCashierSettlementHint':
+            'Customer ပေးသော ငွေသားအားလုံးကို တစ်ပေါင်းတည်းရေတွက်ပါ။ ပိုပေးထားပါက ပြန်အမ်းမည့် ငွေစက္ကူများကိုသာ ရွေးပါ။',
+        'transaction.customer': 'ဖောက်သည်',
+        'transaction.cashInCashierCount': 'Cash In · Cashier ငွေရေတွက်မှု',
+        'transaction.cashInPlusCashFee': 'Cash In + ငွေသားဝန်ဆောင်ခ',
+        'transaction.cashInFeePaidByAccount':
+            'Cash In သာ · ဝန်ဆောင်ခကို အကောင့်မှပေးချေသည်',
+        'transaction.closeCashInReview': 'Cash In စစ်ဆေးမှု ပိတ်မည်',
+        'transaction.receivedMinusChangeMustEqual':
+            'လက်ခံငွေ − ပြန်အမ်းငွေ သည် ကျသင့်ငွေနှင့် တူရမည်',
+        'transaction.rejectCashIn': 'Cash In ပယ်ချမည်',
+        'transaction.confirmWithPin': 'PIN ဖြင့် အတည်ပြုမည်',
+        'transaction.confirmPendingCashIn': 'Cash In အတည်ပြုမည်',
+        'transaction.confirmCashInPinHint':
+            'ရေတွက်ထားသောငွေကို Main Vault သို့ စာရင်းတင်ရန် Cashier PIN ထည့်ပါ။',
+        'transaction.rejectCashInPinHint':
+            'စောင့်ဆိုင်းနေသော Cash In ကို ပြန်လှန်ပယ်ချရန် Cashier PIN ထည့်ပါ။',
+        'transaction.insufficientChangeNotes':
+            'ပြန်အမ်းရန် ငွေစက္ကူမလုံလောက်ပါ',
+        'transaction.cashierCountsCash': 'Cashier က ငွေသားကို ရေတွက်မည်',
+        'transaction.cashierCountsCashHint':
+            'Teller သည် Cash In စာရင်းကိုသာ သွင်းရမည်။ Cashier က လက်ခံရငွေနှင့် ပြန်အမ်းငွေကို ရေတွက်ပြီးမှ အတည်ပြုမည်။',
+        'transaction.physicalCashCount': 'ငွေသားရေတွက်မှု',
+        'transaction.pendingCashierCount':
+            'Cashier ရေတွက်ရန် စောင့်ဆိုင်းနေသည်',
         'transaction.cashSettlementMatched': 'ငွေသားရှင်းတမ်း ကိုက်ညီပါသည်',
         'transaction.cashFeeReceivedMinimumHint':
             'Customer ဆီမှ လက်ခံသော fee ငွေသားကို သတ်မှတ် fee ထက် မနည်းအောင် ရေတွက်ပါ။',

@@ -9,6 +9,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -21,10 +22,14 @@ class DashboardController extends Controller
      */
     private array $accountLabels = [];
 
-    public function __invoke(Request $request): Response
+    public function __invoke(Request $request): Response|RedirectResponse
     {
         /** @var User $user */
         $user = $request->user();
+
+        if ($user->role === 'cashier') {
+            return redirect()->route('cashier');
+        }
         $range = $this->range($request);
 
         return Inertia::render('Dashboard', [
@@ -212,8 +217,8 @@ class DashboardController extends Controller
     }
 
     /**
-     * Cashier-only review data. Denomination maps are included so the
-     * confirmation decision is based on physical cash, not just a total.
+     * Cashier-only Cash In work queue. Physical denominations are intentionally
+     * empty until the Cashier counts the cash during confirmation.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -247,13 +252,11 @@ class DashboardController extends Controller
 
     private function cashInSettlementAmount(Transaction $transaction): string
     {
-        $receivedDenominations = is_array($transaction->received_denominations) ? $transaction->received_denominations : [];
-        $handoffDenominations = is_array($transaction->handoff_denominations) ? $transaction->handoff_denominations : [];
-        $settlementDenominations = $transaction->creator?->role === 'teller'
-            ? $handoffDenominations
-            : $receivedDenominations;
+        $cashFee = $transaction->fee_payment_method === 'cash'
+            ? (float) ($transaction->customer_fee ?? 0)
+            : 0.0;
 
-        return Money::normalize(Money::denominationTotal($settlementDenominations));
+        return Money::normalize((float) ($transaction->amount ?? 0) + $cashFee);
     }
 
     private function scopedTransactions(User $user): Builder

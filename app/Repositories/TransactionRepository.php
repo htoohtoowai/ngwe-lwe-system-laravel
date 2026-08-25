@@ -72,8 +72,19 @@ class TransactionRepository
             ->get();
     }
 
-    public function confirmPendingCashIn(Transaction $transaction, int $cashierId): ?Transaction
-    {
+    /**
+     * Complete one pending Cash In with the physical cash counted by the Cashier.
+     *
+     * @param  array<int, int>  $receivedDenominations
+     * @param  array<int, int>  $changeDenominations
+     */
+    public function confirmPendingCashIn(
+        Transaction $transaction,
+        int $cashierId,
+        array $receivedDenominations,
+        array $changeDenominations,
+        string $changeGiven,
+    ): ?Transaction {
         $affected = Transaction::query()
             ->where('id', $transaction->id)
             ->where('transaction_type', 'cash_in')
@@ -81,6 +92,10 @@ class TransactionRepository
             ->update([
                 'status' => 'COMPLETED',
                 'vault_impact' => 'main_vault_increase',
+                'received_denominations' => $receivedDenominations,
+                'handoff_denominations' => null,
+                'change_denominations' => $changeDenominations !== [] ? $changeDenominations : null,
+                'change_given' => $changeGiven,
                 'confirmed_by' => $cashierId,
                 'confirmed_at' => now(),
                 'cash_approved_by' => $cashierId,

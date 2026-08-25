@@ -154,7 +154,7 @@ class CashierController extends Controller
     }
 
     /**
-     * Cash In entries created by Tellers and waiting for Cashier review.
+     * Cash In entries created by Tellers and waiting for Cashier cash count.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -201,13 +201,11 @@ class CashierController extends Controller
 
     private function cashInSettlementAmount(Transaction $transaction): string
     {
-        $receivedDenominations = is_array($transaction->received_denominations) ? $transaction->received_denominations : [];
-        $handoffDenominations = is_array($transaction->handoff_denominations) ? $transaction->handoff_denominations : [];
-        $settlementDenominations = $transaction->creator?->role === 'teller'
-            ? $handoffDenominations
-            : $receivedDenominations;
+        $cashFee = $transaction->fee_payment_method === 'cash'
+            ? (float) ($transaction->customer_fee ?? 0)
+            : 0.0;
 
-        return Money::normalize(Money::denominationTotal($settlementDenominations));
+        return Money::normalize((float) ($transaction->amount ?? 0) + $cashFee);
     }
 
     /**

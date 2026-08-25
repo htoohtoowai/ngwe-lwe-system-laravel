@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\CancelCashInRequest;
 use App\Http\Requests\ChangePasswordRequest;
 use App\Http\Requests\ConfirmFloatReturnRequest;
+use App\Http\Requests\ConfirmPendingCashInRequest;
 use App\Http\Requests\IssueCashFloatRequest;
 use App\Http\Requests\SetPinRequest;
 use App\Models\CashFloatAssignment;
@@ -88,21 +89,23 @@ class CashierActionController extends Controller
         return back();
     }
 
-    public function confirmCashIn(Request $request, Transaction $transaction): RedirectResponse
+    public function confirmCashIn(ConfirmPendingCashInRequest $request, Transaction $transaction): RedirectResponse
     {
-        $data = $request->validate(
-            ['pin' => ['required', 'string', 'regex:/^[0-9]{4,8}$/']],
-            ['pin.regex' => 'PIN must be 4-8 digits.'],
-        );
+        $data = $request->validated();
 
         try {
             $this->pinVerifier->verify($request->user(), $data['pin']);
-            $this->transactions->confirmPendingCashIn($transaction, $request->user());
+            $this->transactions->confirmPendingCashIn(
+                $transaction,
+                $request->user(),
+                $data['received_denominations'],
+                $data['change_denominations'] ?? [],
+            );
         } catch (InvalidArgumentException|RuntimeException $exception) {
-            $this->fail($exception, 'pin');
+            $this->fail($exception, 'form');
         }
 
-        return back()->with('success', 'Cash In confirmed.');
+        return back()->with('success', 'Cash In confirmed and posted to the main vault.');
     }
 
     public function cancelCashIn(CancelCashInRequest $request, Transaction $transaction): RedirectResponse

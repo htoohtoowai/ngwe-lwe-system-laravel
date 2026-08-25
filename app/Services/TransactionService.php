@@ -29,10 +29,9 @@ use RuntimeException;
  * in repositories/cash_in_repository.py, cash_out_repository.py, and
  * transfer_repository.py.
  *
- * Employee floats are private working vaults. Cash-in temporarily receives
- * notes into the teller float, removes the exact cashier handoff and any
- * customer change, and only posts the handoff to the shared main vault when
- * a cashier confirms. Owners use the shared main vault directly.
+ * Employee floats are private working vaults. Teller Cash In is entry-only:
+ * the Cashier counts the physical customer cash, returns any change, and posts
+ * those denomination movements to the shared main vault when confirming.
  */
 class TransactionService
 {
@@ -59,16 +58,16 @@ class TransactionService
      *   fee_account_id?: int|null,
      *   screenshot_path?: string|null,
      *   note?: string|null,
-     *   amount_received?: float|string|null,
-     *   received_denominations?: array<int|string, int|string>|null,
-     *   handoff_denominations?: array<int|string, int|string>|null,
-     *   change_denominations?: array<int|string, int|string>|null,
      * }  $data
      */
     public function createCashIn(array $data, User $creator): Transaction
     {
         $amount = Money::normalize($data['amount']);
         $this->guardPositive($amount);
+
+        if ($creator->role !== 'teller') {
+            throw new InvalidArgumentException('Only a Teller can create a pending Cash In entry.');
+        }
 
         $account = $this->accounts->find((int) $data['account_id']);
         if ($account === null || ! $account->is_active) {
@@ -80,80 +79,19 @@ class TransactionService
         $commissionResult = $this->agentCommissions->resolveForMovement($account, $amount, -((float) $amount));
         $commission = $commissionResult['amount'];
         $feePayment = $this->resolveFeePayment($data, $account, $fees['customer_fee']);
-        // Cash changes the physical settlement only when cash fee payment is explicitly selected.
-        $cashFee = ($feePayment['method'] === 'cash' && array_key_exists('fee_payment_method', $data))
-            ? (float) $fees['customer_fee']
-            : 0.0;
-        $cashSettlementAmount = Money::normalize((float) $amount + $cashFee);
         $fromCompanyId = $account->company_id;
 
-        $amountReceived = isset($data['amount_received']) && $data['amount_received'] !== null
-            ? Money::normalize($data['amount_received'])
-            : $cashSettlementAmount;
-
-        $rawReceivedDenominations = is_array($data['received_denominations'] ?? null)
-            ? $data['received_denominations']
-            : [];
-        $normalizedReceivedDenominations = $this->floatValidator->normalizeReceivedDenominations($rawReceivedDenominations);
-        $rawHandoffDenominations = is_array($data['handoff_denominations'] ?? null)
-            ? $data['handoff_denominations']
-            : [];
-        $normalizedHandoffDenominations = $this->floatValidator->normalizeReceivedDenominations($rawHandoffDenominations);
-
-        if ($normalizedReceivedDenominations === []) {
-            throw new InvalidArgumentException('Denomination breakdown is required for Cash In received cash.');
-        }
-
-        if ($creator->role === 'teller' && $normalizedHandoffDenominations === []) {
-            throw new InvalidArgumentException('Denomination breakdown is required for Teller Cash In cashier handoff.');
-        }
-
-        if ($normalizedReceivedDenominations !== []) {
-            $receivedTotal = Money::denominationTotal($normalizedReceivedDenominations);
-            if ((float) $receivedTotal !== (float) $amountReceived) {
-                throw new InvalidArgumentException(
-                    "Received denomination total {$receivedTotal} does not match cash received {$amountReceived}."
-                );
-            }
-        }
-
-        if ((float) $amountReceived < (float) $cashSettlementAmount) {
-            throw new InvalidArgumentException("amount_received must be greater than or equal to {$cashSettlementAmount}.");
-        }
-
-        if ($creator->role === 'teller') {
-            $handoffTotal = Money::denominationTotal($normalizedHandoffDenominations);
-            if ($handoffTotal !== (int) $cashSettlementAmount) {
-                throw new InvalidArgumentException("Handoff denomination total {$handoffTotal} does not match Cash In settlement amount {$cashSettlementAmount}.");
-            }
-        } elseif ($normalizedHandoffDenominations !== []) {
-            throw new InvalidArgumentException('handoff_denominations are only allowed for Teller Cash In.');
-        }
-
-        $changeDueFloat = (float) $amountReceived - (float) $cashSettlementAmount;
-        $changeDue = Money::normalize($changeDueFloat);
-        $rawChangeBreakdown = is_array($data['change_denominations'] ?? null) ? $data['change_denominations'] : [];
-        $normalizedChangeDenominations = null;
-
-        if ($changeDueFloat > 0) {
-            if ($creator->role !== 'teller') {
-                throw new InvalidArgumentException(
-                    'Employee float is required to give Cash In overpayment change.'
-                );
-            }
-            $normalizedChangeDenominations = $this->floatValidator->validateFloatOperation(
-                $creator->id,
-                $rawChangeBreakdown,
-                $changeDue,
-                'cash-in overpayment change',
-            );
-        } elseif ($rawChangeBreakdown !== []) {
-            throw new InvalidArgumentException(
-                'change_denominations is only allowed when amount_received exceeds amount.'
-            );
-        }
-
-        $transaction = DB::transaction(function () use ($data, $creator, $account, $amount, $amountReceived, $cashSettlementAmount, $fees, $feePayment, $commission, $commissionResult, $fromCompanyId, $changeDue, $normalizedReceivedDenominations, $normalizedHandoffDenominations, $normalizedChangeDenominations): Transaction {
+        $transaction = DB::transaction(function () use (
+            $data,
+            $creator,
+            $account,
+            $amount,
+            $fees,
+            $feePayment,
+            $commission,
+            $commissionResult,
+            $fromCompanyId,
+        ): Transaction {
             try {
                 $this->accounts->debitBalance($account->id, $amount);
             } catch (InsufficientBalanceException $exception) {
@@ -182,108 +120,33 @@ class TransactionService
                 'from_company_id' => $fromCompanyId,
                 'status' => 'PENDING_CASHIER_CONFIRM',
                 'vault_impact' => 'none',
-                'change_given' => $changeDue,
-                'received_denominations' => $normalizedReceivedDenominations !== [] ? $normalizedReceivedDenominations : null,
-                'handoff_denominations' => $normalizedHandoffDenominations !== [] ? $normalizedHandoffDenominations : null,
-                'change_denominations' => $normalizedChangeDenominations,
+                'change_given' => Money::normalize(0),
+                'received_denominations' => null,
+                'handoff_denominations' => null,
+                'change_denominations' => null,
             ]);
 
+            // Electronic account-side effects stay tied to the transaction entry.
+            // Physical cash does not move until the Cashier confirms the count.
             $this->creditFeeAccount($feePayment['fee_account_id'], $fees['customer_fee']);
             $this->creditAgentCommission($account->id, $commission);
             $this->recordAgentCommission($txn, $account, $amount, $commissionResult);
 
-            if ($creator->role === 'teller') {
-                $activeFloat = $this->floats->activeForEmployee($creator->id);
-                if ($activeFloat === null) {
-                    throw new RuntimeException('Employee float went inactive during cash-in.');
-                }
-
-                $this->floats->addDenominations($activeFloat->id, $normalizedReceivedDenominations);
-                $this->floats->incrementBalance($creator->id, $amountReceived);
-
-                $this->recordPhysicalCashMovement(
-                    entryType: 'vault_in',
-                    txnType: 'cash_in_received',
-                    denominations: $normalizedReceivedDenominations,
-                    performedBy: $creator->id,
-                    floatId: $activeFloat->id,
-                    transactionId: $txn->id,
-                    movementType: 'customer_to_teller',
-                    sourceType: 'customer',
-                    sourceId: null,
-                    destinationType: 'teller_float',
-                    destinationId: $activeFloat->id,
-                    affectsMainVault: false,
-                    note: "Cash In received txn #{$txn->id}",
-                );
-
-                if ($normalizedChangeDenominations !== null) {
-                    $this->floats->deductDenominations($activeFloat->id, $normalizedChangeDenominations);
-                    $this->floats->deductBalance($creator->id, $changeDue);
-
-                    $this->recordPhysicalCashMovement(
-                        entryType: 'vault_out',
-                        txnType: 'cash_in_change',
-                        denominations: $normalizedChangeDenominations,
-                        performedBy: $creator->id,
-                        floatId: $activeFloat->id,
-                        transactionId: $txn->id,
-                        movementType: 'teller_to_customer',
-                        sourceType: 'teller_float',
-                        sourceId: $activeFloat->id,
-                        destinationType: 'customer',
-                        destinationId: null,
-                        affectsMainVault: false,
-                        note: "Cash In overpayment change txn #{$txn->id}",
-                    );
-
-                    $this->log($creator->id, 'cash_in_overpayment_change_given', $txn->id, [
-                        'type' => 'cash_in',
-                        'account_id' => $account->id,
-                        'amount' => $amount,
-                        'change_due' => $changeDue,
-                        'change_denominations' => $normalizedChangeDenominations,
-                    ]);
-                }
-
-                // Validate the handoff after received notes are in the float;
-                // the handoff may consist of those newly received notes.
-                $normalizedHandoffDenominations = $this->floatValidator->validateFloatOperation(
-                    $creator->id,
-                    $normalizedHandoffDenominations,
-                    $cashSettlementAmount,
-                    'cash-in cashier handoff',
-                );
-                $this->floats->deductDenominations($activeFloat->id, $normalizedHandoffDenominations);
-                $this->floats->deductBalance($creator->id, $cashSettlementAmount);
-
-                $this->recordPhysicalCashMovement(
-                    entryType: 'vault_out',
-                    txnType: 'cash_in_handoff',
-                    denominations: $normalizedHandoffDenominations,
-                    performedBy: $creator->id,
-                    floatId: $activeFloat->id,
-                    transactionId: $txn->id,
-                    movementType: 'teller_to_cashier',
-                    sourceType: 'teller_float',
-                    sourceId: $activeFloat->id,
-                    destinationType: 'cashier_handoff',
-                    destinationId: null,
-                    affectsMainVault: false,
-                    note: "Cash In cashier handoff txn #{$txn->id}",
-                );
-            }
+            $cashDue = Money::normalize(
+                (float) $amount + ($feePayment['method'] === 'cash' ? (float) $fees['customer_fee'] : 0.0),
+            );
 
             $this->log($creator->id, 'transaction_created', $txn->id, [
                 'type' => 'cash_in',
                 'account_id' => $account->id,
                 'amount' => $amount,
+                'customer_fee' => $fees['customer_fee'],
+                'fee_payment_method' => $feePayment['method'],
+                'cash_due' => $cashDue,
                 'balance_delta' => $cashInBalanceChange,
                 'status' => 'PENDING_CASHIER_CONFIRM',
                 'vault_impact' => 'none',
-                'change_due' => $changeDue,
-                'received_denominations' => $normalizedReceivedDenominations,
-                'handoff_denominations' => $normalizedHandoffDenominations,
+                'physical_cash_status' => 'awaiting_cashier_count',
             ]);
 
             return $txn;
@@ -994,8 +857,20 @@ class TransactionService
         return $transaction;
     }
 
-    public function confirmPendingCashIn(Transaction $transaction, User $cashier): Transaction
-    {
+    /**
+     * Cashier counts all customer cash in one Received column and any returned
+     * cash in one Change column. Fee paid in cash is already included in the
+     * expected amount due; there is no separate fee-denomination column.
+     *
+     * @param  array<int|string, int|string>  $receivedDenominations
+     * @param  array<int|string, int|string>  $changeDenominations
+     */
+    public function confirmPendingCashIn(
+        Transaction $transaction,
+        User $cashier,
+        array $receivedDenominations,
+        array $changeDenominations = [],
+    ): Transaction {
         if ($cashier->role !== 'cashier') {
             throw new InvalidArgumentException('Only a cashier can confirm Cash In transactions.');
         }
@@ -1004,35 +879,110 @@ class TransactionService
             throw new InvalidArgumentException('Only Cash In transactions can be confirmed here.');
         }
 
-        $updated = DB::transaction(function () use ($transaction, $cashier): Transaction {
-            $updated = $this->transactions->confirmPendingCashIn($transaction, $cashier->id);
+        $normalizedReceived = $this->floatValidator->normalizeReceivedDenominations($receivedDenominations);
+        $normalizedChange = $this->floatValidator->normalizeReceivedDenominations($changeDenominations);
+
+        if ($normalizedReceived === []) {
+            throw new InvalidArgumentException('Count the customer cash before confirming Cash In.');
+        }
+
+        $cashFee = $transaction->fee_payment_method === 'cash'
+            ? (float) ($transaction->customer_fee ?? 0)
+            : 0.0;
+        $amountDue = Money::normalize((float) ($transaction->amount ?? 0) + $cashFee);
+        $amountDueValue = (float) $amountDue;
+        if (floor($amountDueValue) !== $amountDueValue) {
+            throw new InvalidArgumentException(
+                "Cash In amount due {$amountDue} MMK cannot be settled with whole-note denominations."
+            );
+        }
+
+        $amountDueInt = (int) $amountDueValue;
+        $receivedTotal = Money::denominationTotal($normalizedReceived);
+
+        if ($receivedTotal < $amountDueInt) {
+            throw new InvalidArgumentException(
+                "Customer cash {$receivedTotal} MMK is less than amount due {$amountDue} MMK."
+            );
+        }
+
+        $changeDue = $receivedTotal - $amountDueInt;
+        $changeTotal = Money::denominationTotal($normalizedChange);
+        if ($changeTotal !== $changeDue) {
+            throw new InvalidArgumentException(
+                "Change denomination total {$changeTotal} MMK does not match change due {$changeDue} MMK."
+            );
+        }
+
+        // Customer notes can immediately be reused as change, so available cash
+        // is current main-vault stock plus the notes being received in this count.
+        $available = $this->cashDenominations->getAvailableBalance();
+        foreach ($normalizedChange as $denomination => $quantity) {
+            $availableQuantity = (int) ($available[$denomination] ?? 0)
+                + (int) ($normalizedReceived[$denomination] ?? 0);
+            if ($quantity > $availableQuantity) {
+                throw new InsufficientVaultDenominationException(
+                    (int) $denomination,
+                    $availableQuantity,
+                    (int) $quantity,
+                );
+            }
+        }
+
+        $updated = DB::transaction(function () use (
+            $transaction,
+            $cashier,
+            $normalizedReceived,
+            $normalizedChange,
+            $receivedTotal,
+            $changeDue,
+            $amountDue,
+        ): Transaction {
+            $updated = $this->transactions->confirmPendingCashIn(
+                $transaction,
+                $cashier->id,
+                $normalizedReceived,
+                $normalizedChange,
+                Money::normalize($changeDue),
+            );
             if ($updated === null) {
                 throw new RuntimeException("Transaction #{$transaction->id} is not pending cashier confirmation.");
             }
 
-            $creator = User::query()->find($updated->created_by);
-            $receivedDenominations = is_array($updated->received_denominations) ? $updated->received_denominations : [];
-            $handoffDenominations = is_array($updated->handoff_denominations) ? $updated->handoff_denominations : [];
-            $mainVaultDenominations = $creator?->role === 'teller'
-                ? $handoffDenominations
-                : $receivedDenominations;
-            if ($mainVaultDenominations !== []) {
+            // Physical movement 1: Customer -> Cashier main vault.
+            $this->recordPhysicalCashMovement(
+                entryType: 'vault_in',
+                txnType: 'cash_in_received',
+                denominations: $normalizedReceived,
+                performedBy: $cashier->id,
+                floatId: null,
+                transactionId: $updated->id,
+                movementType: 'customer_to_cashier',
+                sourceType: 'customer',
+                sourceId: null,
+                destinationType: 'cashier_vault',
+                destinationId: $cashier->id,
+                affectsMainVault: true,
+                note: "Cash In received txn #{$updated->id}",
+                verifiedBy: $cashier->id,
+            );
+
+            // Physical movement 2: Cashier -> Customer change, only when needed.
+            if ($normalizedChange !== []) {
                 $this->recordPhysicalCashMovement(
-                    entryType: 'vault_in',
-                    txnType: 'cash_in',
-                    denominations: $mainVaultDenominations,
+                    entryType: 'vault_out',
+                    txnType: 'cash_in_change',
+                    denominations: $normalizedChange,
                     performedBy: $cashier->id,
                     floatId: null,
                     transactionId: $updated->id,
-                    movementType: $creator?->role === 'teller'
-                        ? 'cashier_accept_teller_handoff'
-                        : 'customer_to_cashier',
-                    sourceType: $creator?->role === 'teller' ? 'cashier_handoff' : 'customer',
-                    sourceId: null,
-                    destinationType: 'cashier_vault',
-                    destinationId: $cashier->id,
+                    movementType: 'cashier_to_customer_change',
+                    sourceType: 'cashier_vault',
+                    sourceId: $cashier->id,
+                    destinationType: 'customer',
+                    destinationId: null,
                     affectsMainVault: true,
-                    note: "Cash In confirmed txn #{$updated->id}",
+                    note: "Cash In change returned txn #{$updated->id}",
                     verifiedBy: $cashier->id,
                 );
             }
@@ -1041,9 +991,15 @@ class TransactionService
                 'type' => 'cash_in',
                 'account_id' => $updated->account_id,
                 'amount' => Money::normalize($updated->amount),
+                'customer_fee' => Money::normalize($updated->customer_fee ?? 0),
+                'amount_due' => $amountDue,
+                'customer_paid' => Money::normalize($receivedTotal),
+                'change_given' => Money::normalize($changeDue),
+                'net_cash_received' => Money::normalize($receivedTotal - $changeDue),
+                'received_denominations' => $normalizedReceived,
+                'change_denominations' => $normalizedChange,
                 'status' => 'COMPLETED',
                 'vault_impact' => 'main_vault_increase',
-                'main_vault_denominations' => $mainVaultDenominations,
             ]);
 
             return $updated;

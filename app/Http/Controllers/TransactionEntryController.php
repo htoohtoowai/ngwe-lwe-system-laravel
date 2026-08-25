@@ -149,7 +149,7 @@ class TransactionEntryController extends Controller
             'float' => $float ? $this->floatProp($float) : null,
             'notes' => $this->notes(),
             'floatStock' => $float ? $this->floats->getDenominationBalance($float->id) : [],
-            'cashInRequiresDenominations' => $user?->role === 'teller',
+            'cashInRequiresDenominations' => false,
             'cashInStock' => $float ? $this->floats->getDenominationBalance($float->id) : [],
             'cashOutRequiresDenominations' => in_array($user?->role, ['admin', 'teller'], true),
             'cashOutStock' => $user?->role === 'admin'

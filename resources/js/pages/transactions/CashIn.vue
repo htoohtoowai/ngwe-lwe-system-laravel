@@ -3,7 +3,6 @@ import { Link, router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import AccountTile from '@/components/bank/AccountTile.vue';
 import BigAmountInput from '@/components/bank/BigAmountInput.vue';
-import DenomDrawer from '@/components/bank/DenomDrawer.vue';
 import FeePaymentSelector from '@/components/bank/FeePaymentSelector.vue';
 import type { FeePaymentMethod } from '@/components/bank/FeePaymentSelector.vue';
 import TransactionHistoryTable from '@/components/teller/TransactionHistoryTable.vue';
@@ -67,10 +66,6 @@ const customerName = ref('');
 const customerPhone = ref('');
 const amount = ref(0);
 const screenshot = ref<File | null>(null);
-const receivedDenoms = ref<Record<number, number>>({});
-const changeDenoms = ref<Record<number, number>>({});
-const showReceivedDenoms = ref(true);
-const showChangeDenoms = ref(true);
 const feePaymentMethod = ref<FeePaymentMethod>('cash');
 const feeAccountId = ref<number | null>(null);
 const submitting = ref(false);
@@ -129,15 +124,6 @@ const account = computed(() =>
 const feeAccount = computed(() =>
     props.feeAccounts.find((a) => a.id === feeAccountId.value),
 );
-const cashInAccountCounts = computed(() => {
-    const counts = new Map<string, number>();
-
-    for (const account of props.accounts) {
-        counts.set(account.company, (counts.get(account.company) ?? 0) + 1);
-    }
-
-    return counts;
-});
 const companies = computed(() => {
     const unique = new Map<
         string,
@@ -186,109 +172,11 @@ const visibleAccounts = computed(() =>
             !selectedCompany.value || account.company === selectedCompany.value,
     ),
 );
-const receivedTotal = computed(() =>
-    props.notes.reduce(
-        (sum, note) => sum + note * (receivedDenoms.value[note] ?? 0),
-        0,
-    ),
-);
-const cashInNeedsDenoms = computed(() => props.cashInRequiresDenominations);
 const accountBalanceRequired = computed(() => amount.value);
 const cashSettlementAmount = computed(
     () => amount.value + (feePaymentMethod.value === 'cash' ? feeNum.value : 0),
 );
-const customerTotalDue = computed(() => amount.value + feeNum.value);
-const amountReceived = computed(() =>
-    cashInNeedsDenoms.value ? receivedTotal.value : amount.value,
-);
-const changeDue = computed(() =>
-    Math.max(0, amountReceived.value - cashSettlementAmount.value),
-);
-const cashDifference = computed(
-    () => amountReceived.value - cashSettlementAmount.value,
-);
-const cashShortfall = computed(() => Math.max(0, -cashDifference.value));
-const changeTotal = computed(() =>
-    props.notes.reduce(
-        (sum, note) => sum + note * (changeDenoms.value[note] ?? 0),
-        0,
-    ),
-);
-const changeBalanced = computed(() => changeTotal.value === changeDue.value);
-const netReceivedDenoms = computed(() =>
-    props.notes.reduce(
-        (stock, note) => {
-            stock[note] = Math.max(
-                0,
-                (receivedDenoms.value[note] ?? 0) -
-                    (changeDenoms.value[note] ?? 0),
-            );
-
-            return stock;
-        },
-        {} as Record<number, number>,
-    ),
-);
-const handoffDenoms = computed(() => {
-    let remaining = cashSettlementAmount.value;
-    const result: Record<number, number> = {};
-
-    for (const note of [...props.notes].sort((a, b) => b - a)) {
-        const available = netReceivedDenoms.value[note] ?? 0;
-        const quantity = Math.min(Math.floor(remaining / note), available);
-
-        if (quantity > 0) {
-            result[note] = quantity;
-            remaining -= quantity * note;
-        }
-    }
-
-    for (const note of [...props.notes].sort((a, b) => b - a)) {
-        const alreadyUsed = result[note] ?? 0;
-        const available = Math.max(
-            0,
-            (props.floatStock[note] ?? 0) +
-                (netReceivedDenoms.value[note] ?? 0) -
-                alreadyUsed,
-        );
-        const quantity = Math.min(Math.floor(remaining / note), available);
-
-        if (quantity > 0) {
-            result[note] = alreadyUsed + quantity;
-            remaining -= quantity * note;
-        }
-    }
-
-    return result;
-});
-const handoffTotal = computed(() =>
-    props.notes.reduce(
-        (sum, note) => sum + note * (handoffDenoms.value[note] ?? 0),
-        0,
-    ),
-);
-const tellerDenominationDelta = computed(() =>
-    props.notes
-        .map((note) => ({
-            note,
-            quantity:
-                (receivedDenoms.value[note] ?? 0) -
-                (changeDenoms.value[note] ?? 0) -
-                (handoffDenoms.value[note] ?? 0),
-        }))
-        .filter((line) => line.quantity !== 0),
-);
-const floatLocked = computed(
-    () => props.role === 'teller' && props.float?.status !== 'ACTIVE',
-);
 const cashierLocked = computed(() => props.role === 'cashier');
-const canCountCash = computed(
-    () =>
-        accountId.value !== null &&
-        amount.value > 0 &&
-        !floatLocked.value &&
-        !cashierLocked.value,
-);
 const feePaymentValid = computed(
     () =>
         feeNum.value <= 0 ||
@@ -303,24 +191,9 @@ const ready = computed(
         amount.value > 0 &&
         Number(account.value?.balance ?? 0) >= accountBalanceRequired.value &&
         feePaymentValid.value &&
-        (!cashInNeedsDenoms.value ||
-            receivedTotal.value >= cashSettlementAmount.value) &&
-        (props.role !== 'teller' ||
-            handoffTotal.value === cashSettlementAmount.value) &&
-        (!cashInNeedsDenoms.value ||
-            changeDue.value === 0 ||
-            changeTotal.value === changeDue.value) &&
-        !floatLocked.value &&
         !cashierLocked.value,
 );
 const readyIssue = computed(() => {
-    if (floatLocked.value) {
-        return t(
-            'transaction.floatLocked',
-            'Activate your teller float first.',
-        );
-    }
-
     if (cashierLocked.value) {
         return t(
             'transaction.cashierLocked',
@@ -361,32 +234,6 @@ const readyIssue = computed(() => {
         return t('transaction.feeAccountRequired', 'Choose the fee account.');
     }
 
-    if (cashInNeedsDenoms.value && receivedTotal.value <= 0) {
-        return t('transaction.countCustomerCash', 'Count the customer cash.');
-    }
-
-    if (cashInNeedsDenoms.value && cashShortfall.value > 0) {
-        return `${t('transaction.cashShort', 'Received cash is short.')} ${cashShortfall.value.toLocaleString()} MMK`;
-    }
-
-    if (
-        cashInNeedsDenoms.value &&
-        changeDue.value > 0 &&
-        !changeBalanced.value
-    ) {
-        return `${t('transaction.changeMyVault', 'Change from my teller vault')}: ${changeDue.value.toLocaleString()} MMK`;
-    }
-
-    if (
-        props.role === 'teller' &&
-        handoffTotal.value !== cashSettlementAmount.value
-    ) {
-        return t(
-            'transaction.cashierHandoffNotReady',
-            'Cashier handoff notes are not ready.',
-        );
-    }
-
     return '';
 });
 
@@ -404,16 +251,6 @@ watch(selectedCompany, () => {
         !visibleAccounts.value.some((account) => account.id === accountId.value)
     ) {
         accountId.value = null;
-    }
-});
-watch(canCountCash, (canCount) => {
-    if (canCount) {
-        showReceivedDenoms.value = true;
-    }
-});
-watch(changeDue, (nextChange, previousChange) => {
-    if (nextChange > 0 && previousChange <= 0) {
-        showChangeDenoms.value = true;
     }
 });
 
@@ -435,11 +272,6 @@ watch([amount, accountId], ([nextAmount, nextAccount]) => {
 });
 
 const mmk = (value: string | number) => Number(value).toLocaleString();
-const denominationSummary = (map: Record<number, number>) =>
-    props.notes
-        .filter((note) => (map[note] ?? 0) > 0)
-        .map((note) => `${mmk(note)} × ${map[note]}`)
-        .join(', ');
 function authHeaders(): Record<string, string> {
     return {};
 }
@@ -465,17 +297,12 @@ function submit() {
             amount: amount.value,
             customer_name: customerName.value.trim(),
             customer_phone: customerPhone.value.trim(),
-            amount_received: amountReceived.value,
             fee_payment_method: feePaymentMethod.value,
             fee_account_id:
                 feePaymentMethod.value === 'account'
                     ? feeAccountId.value
                     : null,
             screenshot: screenshot.value,
-            received_denominations: receivedDenoms.value,
-            handoff_denominations:
-                props.role === 'teller' ? handoffDenoms.value : {},
-            change_denominations: changeDue.value > 0 ? changeDenoms.value : {},
         },
         {
             headers: authHeaders(),
@@ -584,18 +411,6 @@ function submit() {
         </template>
 
         <p
-            v-if="view === 'entry' && floatLocked"
-            class="mt-4 max-w-3xl rounded-field bg-brand-soft px-4 py-3 text-sm font-semibold text-brand-deep"
-        >
-            {{ t('transaction.floatLocked') }}
-            <Link
-                href="/teller/float"
-                :headers="authHeaders()"
-                class="underline underline-offset-2"
-                >{{ t('transaction.goToFloats') }}</Link
-            >
-        </p>
-        <p
             v-if="view === 'entry' && cashierLocked"
             class="mt-4 max-w-3xl rounded-field bg-brand-soft px-4 py-3 text-sm font-semibold text-brand-deep"
         >
@@ -664,11 +479,7 @@ function submit() {
         <section
             v-else-if="view === 'entry' && step === 'form'"
             class="bank-form-shell mt-5 max-w-5xl p-5 sm:p-6"
-            :class="
-                floatLocked || cashierLocked
-                    ? 'pointer-events-none opacity-50'
-                    : ''
-            "
+            :class="cashierLocked ? 'pointer-events-none opacity-50' : ''"
         >
             <h2 class="text-base font-bold">
                 {{ t('transaction.enterDetails') }}
@@ -723,7 +534,7 @@ function submit() {
                                     "
                                 >
                                     <img
-                                        :src="company.logoUrl"
+                                        :src="company.logoUrl ?? undefined"
                                         :alt="`${company.name} logo`"
                                         class="size-full object-contain p-0.5"
                                         @error="markCompanyLogoFailed(company)"
@@ -864,278 +675,32 @@ function submit() {
                     </div>
                 </div>
 
-                <div v-if="cashInNeedsDenoms && canCountCash" class="min-w-0">
-                    <div class="grid items-start gap-3">
-                        <section
-                            class="overflow-hidden rounded-field border border-brand/20 bg-card"
-                            aria-labelledby="cash-in-customer-cash-title"
-                        >
-                            <button
-                                type="button"
-                                class="flex w-full items-center justify-between gap-3 border-b border-line bg-brand-soft/55 px-3 py-2.5 text-left transition hover:bg-brand-soft focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/35 sm:px-4"
-                                :aria-expanded="showReceivedDenoms"
-                                aria-controls="cash-in-customer-denominations"
-                                @click="
-                                    showReceivedDenoms = !showReceivedDenoms
-                                "
-                            >
-                                <div class="flex min-w-0 items-center gap-2">
-                                    <span
-                                        class="grid size-6 shrink-0 place-items-center rounded-lg bg-brand text-[10px] font-black text-white"
-                                        >01</span
-                                    >
-                                    <div class="min-w-0">
-                                        <h3
-                                            id="cash-in-customer-cash-title"
-                                            class="text-sm font-bold text-ink"
-                                        >
-                                            {{
-                                                t(
-                                                    'transaction.cashReceivedCustomer',
-                                                )
-                                            }}
-                                        </h3>
-                                    </div>
-                                </div>
-                                <div class="shrink-0 text-right">
-                                    <p
-                                        class="text-[10px] font-bold tracking-wide text-slate uppercase"
-                                    >
-                                        {{ t('component.counted') }}
-                                    </p>
-                                    <p
-                                        class="money mt-0.5 text-lg font-black text-brand"
-                                    >
-                                        {{ mmk(amountReceived) }}
-                                    </p>
-                                    <p class="text-[10px] font-bold text-slate">
-                                        MMK
-                                    </p>
-                                </div>
-                                <span
-                                    class="grid size-7 shrink-0 place-items-center rounded-full bg-card text-sm font-black text-slate shadow-sm"
-                                    aria-hidden="true"
-                                >
-                                    {{ showReceivedDenoms ? '⌃' : '⌄' }}
-                                </span>
-                            </button>
-                            <div
-                                v-show="showReceivedDenoms"
-                                id="cash-in-customer-denominations"
-                                class="p-2.5 sm:p-3"
-                            >
-                                <DenomDrawer
-                                    v-model="receivedDenoms"
-                                    :notes="notes"
-                                    :target="null"
-                                    :label="t('component.notesCounted')"
-                                    id-prefix="cash-in-customer-denomination"
-                                    :show-title="false"
-                                    :compact="true"
-                                />
-                            </div>
-                            <footer
-                                class="grid gap-2 border-t border-line bg-mist/45 px-3 py-2 text-xs sm:px-4"
-                            >
-                                <div class="flex items-center justify-between">
-                                    <span class="font-semibold text-slate">{{
-                                        t('transaction.cashReceived')
-                                    }}</span>
-                                    <span class="money font-black text-ink"
-                                        >{{ mmk(receivedTotal) }} MMK</span
-                                    >
-                                </div>
-                                <div
-                                    v-if="receivedTotal > 0"
-                                    class="grid gap-1 rounded-lg bg-card/70 px-2.5 py-2 sm:grid-cols-3"
-                                >
-                                    <div class="flex justify-between gap-3">
-                                        <span
-                                            class="font-semibold text-slate"
-                                            >{{
-                                                t('transaction.cashDue', 'Due')
-                                            }}</span
-                                        >
-                                        <span
-                                            class="money font-black text-ink"
-                                            >{{
-                                                mmk(cashSettlementAmount)
-                                            }}</span
-                                        >
-                                    </div>
-                                    <div class="flex justify-between gap-3">
-                                        <span
-                                            class="font-semibold text-slate"
-                                            >{{
-                                                t(
-                                                    'transaction.cashReceived',
-                                                    'Received',
-                                                )
-                                            }}</span
-                                        >
-                                        <span
-                                            class="money font-black text-ink"
-                                            >{{ mmk(receivedTotal) }}</span
-                                        >
-                                    </div>
-                                    <div
-                                        class="flex justify-between gap-3"
-                                        :class="
-                                            cashShortfall > 0
-                                                ? 'text-brand'
-                                                : changeDue > 0
-                                                  ? 'text-held'
-                                                  : 'text-balance'
-                                        "
-                                    >
-                                        <span class="font-black">{{
-                                            cashShortfall > 0
-                                                ? t(
-                                                      'transaction.cashShortfall',
-                                                      'Short',
-                                                  )
-                                                : changeDue > 0
-                                                  ? t(
-                                                        'transaction.changeDue',
-                                                        'Change due',
-                                                    )
-                                                  : t(
-                                                        'common.balanced',
-                                                        'Balanced',
-                                                    )
-                                        }}</span>
-                                        <span class="money font-black">{{
-                                            mmk(cashShortfall || changeDue)
-                                        }}</span>
-                                    </div>
-                                </div>
-                            </footer>
-                        </section>
-
-                        <p
-                            v-if="cashShortfall > 0"
-                            class="rounded-field border border-brand/25 bg-brand-soft px-3 py-2 text-xs font-bold text-brand"
-                        >
-                            {{ t('transaction.cashShort') }}
-                            <span class="money block"
-                                >{{ mmk(cashShortfall) }} MMK</span
-                            >
-                        </p>
-
-                        <section
-                            v-if="role === 'teller' && changeDue > 0"
-                            class="overflow-hidden rounded-field border border-held/20 bg-card"
-                            aria-labelledby="cash-in-change-title"
-                        >
-                            <button
-                                type="button"
-                                class="flex w-full items-center justify-between gap-3 border-b border-line bg-held/5 px-3 py-2.5 text-left transition hover:bg-held/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-held/35 sm:px-4"
-                                :aria-expanded="showChangeDenoms"
-                                aria-controls="cash-in-change-denominations"
-                                @click="showChangeDenoms = !showChangeDenoms"
-                            >
-                                <div class="flex min-w-0 items-center gap-2">
-                                    <span
-                                        class="grid size-6 shrink-0 place-items-center rounded-lg bg-held text-[10px] font-black text-white"
-                                        >02</span
-                                    >
-                                    <div class="min-w-0">
-                                        <h3
-                                            id="cash-in-change-title"
-                                            class="text-sm font-bold text-ink"
-                                        >
-                                            {{ t('transaction.changeMyVault') }}
-                                        </h3>
-                                        <p
-                                            class="mt-0.5 text-[11px] font-semibold text-slate"
-                                        >
-                                            {{ t('transaction.changeNotice') }}
-                                        </p>
-                                    </div>
-                                </div>
-                                <div class="shrink-0 text-right">
-                                    <p
-                                        class="text-[10px] font-bold tracking-wide text-slate uppercase"
-                                    >
-                                        {{ t('component.required') }}
-                                    </p>
-                                    <p
-                                        class="money mt-0.5 text-lg font-black text-held"
-                                    >
-                                        {{ mmk(changeDue) }}
-                                    </p>
-                                    <p class="text-[10px] font-bold text-slate">
-                                        MMK
-                                    </p>
-                                </div>
-                                <span
-                                    class="grid size-7 shrink-0 place-items-center rounded-full bg-card text-sm font-black text-slate shadow-sm"
-                                    aria-hidden="true"
-                                >
-                                    {{ showChangeDenoms ? '⌃' : '⌄' }}
-                                </span>
-                            </button>
-                            <div
-                                v-show="showChangeDenoms"
-                                id="cash-in-change-denominations"
-                                class="p-2.5 sm:p-3"
-                            >
-                                <DenomDrawer
-                                    v-model="changeDenoms"
-                                    :notes="notes"
-                                    :target="changeDue"
-                                    :stock="floatStock"
-                                    :label="t('component.notesCounted')"
-                                    id-prefix="cash-in-change-denomination"
-                                    :show-title="false"
-                                    :compact="true"
-                                />
-                            </div>
-                            <footer
-                                class="flex items-center justify-between border-t px-3 py-2 text-xs sm:px-4"
-                                :class="
-                                    changeBalanced
-                                        ? 'border-balance/25 bg-balance/5'
-                                        : 'border-held/20 bg-held/5'
-                                "
-                            >
-                                <span
-                                    class="font-semibold"
-                                    :class="
-                                        changeBalanced
-                                            ? 'text-balance'
-                                            : 'text-held'
-                                    "
-                                    >{{
-                                        t('transaction.floatAfterChange')
-                                    }}</span
-                                >
-                                <span class="money font-black text-ink"
-                                    >{{ mmk(changeTotal) }} /
-                                    {{ mmk(changeDue) }} MMK</span
-                                >
-                            </footer>
-                        </section>
-                    </div>
-                </div>
-
-                <div
-                    v-else-if="cashInNeedsDenoms"
-                    class="min-w-0 xl:col-span-2"
-                >
+                <div class="min-w-0 xl:col-span-2">
                     <div
-                        class="flex items-start gap-3 rounded-2xl border border-line bg-mist/60 px-4 py-4 sm:px-5"
+                        class="flex items-start gap-3 rounded-2xl border border-credit/25 bg-credit/5 px-4 py-4 sm:px-5"
                     >
                         <span
-                            class="grid size-8 shrink-0 place-items-center rounded-full bg-ink text-xs font-black text-white"
-                            >01</span
+                            class="grid size-8 shrink-0 place-items-center rounded-full bg-credit text-xs font-black text-white"
+                            >✓</span
                         >
                         <div>
-                            <p class="text-sm font-bold text-ink">
-                                {{ t('transaction.cashInCountPrerequisite') }}
+                            <p class="text-sm font-black text-credit">
+                                {{
+                                    t(
+                                        'transaction.cashierCountsCash',
+                                        'Cashier counts the physical cash',
+                                    )
+                                }}
                             </p>
-                            <p class="mt-1 text-xs leading-5 text-slate">
-                                {{ t('transaction.cashInDenominationHint') }}
+                            <p
+                                class="mt-1 text-xs leading-5 font-semibold text-slate"
+                            >
+                                {{
+                                    t(
+                                        'transaction.cashierCountsCashHint',
+                                        'Enter the Cash In details only. The Cashier will count received notes and return any change before confirming the transaction.',
+                                    )
+                                }}
                             </p>
                         </div>
                     </div>
@@ -1199,14 +764,16 @@ function submit() {
                             {{ t('transaction.customerSends') }}
                         </p>
                         <p class="mt-1 text-[13px] font-semibold text-slate">
-                            {{ t('transaction.amount') }} +
-                            {{ t('transaction.fee') }}
+                            {{ t('transaction.amount') }}
+                            <template v-if="feePaymentMethod === 'cash'">
+                                + {{ t('transaction.fee') }}
+                            </template>
                         </p>
                     </div>
                     <p
                         class="money text-right text-2xl font-black text-balance"
                     >
-                        {{ mmk(customerTotalDue) }}
+                        {{ mmk(cashSettlementAmount) }}
                         <span class="text-xs text-slate">MMK</span>
                     </p>
                 </div>
@@ -1234,23 +801,22 @@ function submit() {
                         <span class="text-[11px] text-slate">MMK</span>
                     </dd>
                 </div>
-                <div
-                    v-if="cashInNeedsDenoms"
-                    class="flex justify-between py-3 text-sm"
-                >
-                    <dt class="text-slate">
-                        {{ t('transaction.cashReceived') }}
-                    </dt>
-                    <dd class="money font-bold">
-                        {{ mmk(amountReceived) }} MMK
-                    </dd>
-                </div>
-                <div class="flex justify-between py-3 text-sm">
+                <div class="flex justify-between gap-6 py-3 text-sm">
                     <dt class="font-bold">
-                        {{ t('transaction.cashHandedCashier') }}
+                        {{
+                            t(
+                                'transaction.physicalCashCount',
+                                'Physical cash count',
+                            )
+                        }}
                     </dt>
-                    <dd class="money font-bold text-balance">
-                        +{{ mmk(cashSettlementAmount) }} MMK
+                    <dd class="text-right font-bold text-credit">
+                        {{
+                            t(
+                                'transaction.pendingCashierCount',
+                                'Pending Cashier count',
+                            )
+                        }}
                     </dd>
                 </div>
                 <div class="flex justify-between gap-6 py-3 text-sm">
@@ -1264,55 +830,6 @@ function submit() {
                         {{ t('transaction.customerPhone') }}
                     </dt>
                     <dd class="text-right font-bold">{{ customerPhone }}</dd>
-                </div>
-                <div
-                    v-if="role === 'teller'"
-                    class="flex justify-between py-3 text-sm"
-                >
-                    <dt class="font-bold">
-                        {{ t('transaction.tellerVaultNetChange') }}
-                    </dt>
-                    <dd class="money font-bold text-balance">0 MMK</dd>
-                </div>
-                <div
-                    v-if="role === 'teller' && tellerDenominationDelta.length"
-                    class="flex justify-between gap-6 py-3 text-sm"
-                >
-                    <dt class="font-bold">
-                        {{ t('transaction.tellerDenominationChange') }}
-                    </dt>
-                    <dd class="text-right">
-                        <span
-                            v-for="line in tellerDenominationDelta"
-                            :key="line.note"
-                            class="money block font-bold"
-                            :class="
-                                line.quantity > 0
-                                    ? 'text-balance'
-                                    : 'text-brand'
-                            "
-                        >
-                            {{ line.quantity > 0 ? '+' : '−'
-                            }}{{ mmk(line.note) }} ×
-                            {{ Math.abs(line.quantity) }}
-                        </span>
-                    </dd>
-                </div>
-                <div
-                    v-if="role === 'teller' && changeDue > 0"
-                    class="flex justify-between py-3 text-sm"
-                >
-                    <dt class="font-bold">
-                        {{ t('transaction.changeMyVault') }}
-                    </dt>
-                    <dd class="text-right font-bold text-brand">
-                        <span class="money block"
-                            >−{{ mmk(changeDue) }} MMK</span
-                        >
-                        <span class="money block text-[11px] font-medium">{{
-                            denominationSummary(changeDenoms)
-                        }}</span>
-                    </dd>
                 </div>
                 <div class="flex justify-between py-3 text-sm">
                     <dt class="text-slate">
