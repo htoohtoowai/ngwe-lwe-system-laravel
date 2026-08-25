@@ -2,7 +2,7 @@ import { ref } from 'vue';
 
 export type Locale = 'en' | 'mm';
 
-const STORAGE_KEY = 'doctor-phone:locale';
+const STORAGE_KEY = 'ngwe-lwe:locale';
 
 const cp1252Bytes: Record<number, number> = {
     0x20ac: 0x80,
@@ -503,6 +503,42 @@ const messages: Record<Locale, Record<string, string>> = {
         'component.reference': 'Reference',
         'component.type': 'Type',
         'component.time': 'Time',
+        'common.balanced': 'Balanced',
+        'common.entries': 'entries',
+        'common.history': 'History',
+        'common.next': 'Next',
+        'common.previous': 'Previous',
+        'common.records': 'records',
+        'common.refresh': 'Refresh',
+        'common.reject': 'Reject',
+        'common.show': 'Show',
+        'component.denomination': 'Denomination',
+        'teller.countIncomingFloat': 'Count incoming float',
+        'teller.floatTransactions': 'Float transactions',
+        'teller.noFloatTransactions': 'No float transactions yet.',
+        'teller.pinReject': 'Enter your PIN to reject this float.',
+        'teller.rejectFloatTitle': 'Reject float',
+        'transaction.accountBalanceNotEnough':
+            'The selected account does not have enough balance.',
+        'transaction.cashDue': 'Cash due',
+        'transaction.cashShortfall': 'Cash shortfall',
+        'transaction.cashierHandoffNotReady':
+            'Cashier handoff is not ready yet.',
+        'transaction.changeDue': 'Change due',
+        'transaction.chooseAccountFirst': 'Choose an account first.',
+        'transaction.completeRequiredFields':
+            'Complete all required fields before continuing.',
+        'transaction.countCustomerCash': 'Count customer cash',
+        'transaction.customerNameRequired': 'Customer name is required.',
+        'transaction.customerPhoneRequired': 'Customer phone is required.',
+        'transaction.enterAmountBeforeContinue':
+            'Enter an amount before continuing.',
+        'transaction.enterCashInAmountFirst': 'Enter the Cash In amount first.',
+        'transaction.readyForReview': 'Ready for review',
+        'transaction.selectAccountBeforeContinue':
+            'Select an account before continuing.',
+        'transaction.cashOutDenominationHint':
+            'Count the exact notes for the Cash Out settlement.',
     },
     mm: {
         'brand.name': 'ဒေါက်တာဖုန်း',
@@ -944,6 +980,44 @@ const messages: Record<Locale, Record<string, string>> = {
         'component.reference': 'ရည်ညွှန်းနံပါတ်',
         'component.type': 'အမျိုးအစား',
         'component.time': 'အချိန်',
+        'common.balanced': 'ကိုက်ညီပါသည်',
+        'common.entries': 'စာရင်း',
+        'common.history': 'မှတ်တမ်း',
+        'common.next': 'နောက်တစ်မျက်နှာ',
+        'common.previous': 'ရှေ့တစ်မျက်နှာ',
+        'common.records': 'မှတ်တမ်း',
+        'common.refresh': 'ပြန်တင်မည်',
+        'common.reject': 'ပယ်ချမည်',
+        'common.show': 'ပြမည်',
+        'component.denomination': 'ငွေစက္ကူအမျိုးအစား',
+        'teller.countIncomingFloat': 'ဝင်လာသော ငွေခွဲ ရေတွက်ရန်',
+        'teller.floatTransactions': 'ငွေခွဲမှတ်တမ်းများ',
+        'teller.noFloatTransactions': 'ငွေခွဲမှတ်တမ်း မရှိသေးပါ။',
+        'teller.pinReject': 'ဒီငွေခွဲကို ပယ်ချရန် သင့် PIN ထည့်ပါ။',
+        'teller.rejectFloatTitle': 'ငွေခွဲ ပယ်ချမည်',
+        'transaction.accountBalanceNotEnough':
+            'ရွေးထားသောအကောင့်တွင် လက်ကျန်မလုံလောက်ပါ။',
+        'transaction.cashDue': 'ပေးရန်ငွေသား',
+        'transaction.cashFeeReceivedHint':
+            'ဖောက်သည်ထံမှ လက်ခံရရှိသော ဝန်ဆောင်ခငွေသားကို ရေတွက်ပါ။',
+        'transaction.cashFeeReceivedNotes':
+            'ဝန်ဆောင်ခအဖြစ် လက်ခံသော ငွေစက္ကူများ',
+        'transaction.cashOutDenominationHint':
+            'ငွေထုတ်ရှင်းတမ်းအတွက် ငွေစက္ကူများကို အတိအကျ ရေတွက်ပါ။',
+        'transaction.cashShortfall': 'ငွေသားလိုငွေ',
+        'transaction.cashierHandoffNotReady':
+            'Cashier ထံ အပ်ငွေ အဆင်သင့်မဖြစ်သေးပါ။',
+        'transaction.changeDue': 'ပြန်အမ်းရမည့်ငွေ',
+        'transaction.chooseAccountFirst': 'အကောင့်ကို အရင်ရွေးပါ။',
+        'transaction.completeRequiredFields':
+            'ဆက်မလုပ်မီ လိုအပ်သောအချက်များကို ပြည့်စုံအောင်ဖြည့်ပါ။',
+        'transaction.countCustomerCash': 'ဖောက်သည်ငွေသား ရေတွက်ရန်',
+        'transaction.customerNameRequired': 'ဖောက်သည်အမည် လိုအပ်ပါသည်။',
+        'transaction.customerPhoneRequired': 'ဖောက်သည်ဖုန်းနံပါတ် လိုအပ်ပါသည်။',
+        'transaction.enterAmountBeforeContinue': 'ဆက်မလုပ်မီ ပမာဏထည့်ပါ။',
+        'transaction.enterCashInAmountFirst': 'Cash In ပမာဏကို အရင်ထည့်ပါ။',
+        'transaction.readyForReview': 'ပြန်စစ်ရန် အဆင်သင့်',
+        'transaction.selectAccountBeforeContinue': 'ဆက်မလုပ်မီ အကောင့်ရွေးပါ။',
     },
 };
 
@@ -952,7 +1026,15 @@ function initialLocale(): Locale {
         return 'mm';
     }
 
-    return window.localStorage.getItem(STORAGE_KEY) === 'en' ? 'en' : 'mm';
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored === 'en' || stored === 'mm') return stored;
+
+    const cookie = document.cookie.match(
+        /(?:^|; )ngwe_lwe_locale=(en|mm)(?:;|$)/,
+    )?.[1];
+    if (cookie === 'en' || cookie === 'mm') return cookie;
+
+    return 'mm';
 }
 
 const locale = ref<Locale>(initialLocale());
@@ -963,6 +1045,7 @@ export function useLocale() {
 
         if (typeof window !== 'undefined') {
             window.localStorage.setItem(STORAGE_KEY, next);
+            document.cookie = `ngwe_lwe_locale=${next}; Path=/; Max-Age=31536000; SameSite=Lax`;
             document.documentElement.lang = next === 'mm' ? 'my' : 'en';
         }
     }

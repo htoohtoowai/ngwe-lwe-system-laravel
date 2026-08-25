@@ -2,6 +2,7 @@ import { createInertiaApp } from '@inertiajs/vue3';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import type { DefineComponent } from 'vue';
 import { createApp, h } from 'vue';
+import { installEnterpriseDomLocalization } from '@/lib/enterprise-locale';
 import '../css/app.css';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Ngwe Lwe System';
@@ -17,6 +18,7 @@ createInertiaApp({
         createApp({ render: () => h(App, props) })
             .use(plugin)
             .mount(el);
+        installEnterpriseDomLocalization(document.body);
     },
     progress: {
         color: '#ffb000',

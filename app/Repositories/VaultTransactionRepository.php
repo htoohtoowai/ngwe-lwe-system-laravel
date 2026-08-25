@@ -217,12 +217,20 @@ class VaultTransactionRepository
     private function vaultDetails(Collection $group): Collection
     {
         return $group
-            ->map(fn (VaultTransaction $row): array => [
-                'id' => $row->id,
-                'denomination' => (int) $row->denomination,
-                'quantity' => (int) $row->quantity,
-                'amount' => (int) $row->denomination * (int) $row->quantity,
-            ])
+            ->groupBy(fn (VaultTransaction $row): int => (int) $row->denomination)
+            ->map(function (Collection $rows, int|string $denomination): array {
+                /** @var VaultTransaction $first */
+                $first = $rows->first();
+                $quantity = (int) $rows->sum(fn (VaultTransaction $row): int => (int) $row->quantity);
+                $denomination = (int) $denomination;
+
+                return [
+                    'id' => $first->id,
+                    'denomination' => $denomination,
+                    'quantity' => $quantity,
+                    'amount' => $denomination * $quantity,
+                ];
+            })
             ->sortByDesc('denomination')
             ->values();
     }
@@ -231,13 +239,24 @@ class VaultTransactionRepository
     private function cashDetails(Collection $rows): Collection
     {
         return $rows
-            ->map(fn (CashDenominationLog $row): array => [
-                'id' => $row->id,
-                'denomination' => (int) $row->denomination,
-                'quantity' => (int) $row->quantity,
-                'amount' => (int) $row->denomination * (int) $row->quantity,
-                'affects_main_vault' => (bool) $row->affects_main_vault,
-            ])
+            ->groupBy(fn (CashDenominationLog $row): string => implode('|', [
+                (string) (int) $row->denomination,
+                $row->affects_main_vault ? '1' : '0',
+            ]))
+            ->map(function (Collection $group): array {
+                /** @var CashDenominationLog $first */
+                $first = $group->first();
+                $denomination = (int) $first->denomination;
+                $quantity = (int) $group->sum(fn (CashDenominationLog $row): int => (int) $row->quantity);
+
+                return [
+                    'id' => $first->id,
+                    'denomination' => $denomination,
+                    'quantity' => $quantity,
+                    'amount' => $denomination * $quantity,
+                    'affects_main_vault' => (bool) $first->affects_main_vault,
+                ];
+            })
             ->sortByDesc('denomination')
             ->values();
     }

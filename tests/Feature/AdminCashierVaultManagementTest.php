@@ -84,6 +84,17 @@ class AdminCashierVaultManagementTest extends TestCase
                 ->has('rows.0.cash_details', 2)
             );
 
+        $this->actingAs($cashier)->get('/cashier/main-vault-audit-log')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->component('cashier/VaultAuditLog')
+                ->has('vaultLogs', 1)
+                ->where('vaultLogs.0.denomination_count', 2)
+                ->where('vaultLogs.0.total_amount', 60000)
+                ->has('vaultLogs.0.details', 2)
+                ->where('vaultLogs.0.reconciliation_status', 'matched')
+            );
+
         $this->actingAs($admin)->post('/admin/actions/vault/entries', [
             'entry_type' => 'vault_out',
             'denominations' => [10000 => 2],

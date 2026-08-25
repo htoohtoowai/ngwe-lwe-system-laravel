@@ -244,16 +244,27 @@ class CashierController extends Controller
      */
     private function vaultLogs(): array
     {
-        return collect($this->vaultTransactions->paginateLog(perPage: 80)->items())
-            ->map(fn ($row): array => [
-                'id' => $row->id,
-                'type' => $row->txn_type,
-                'float_id' => $row->float_id,
-                'denomination' => (int) $row->denomination,
-                'quantity' => (int) $row->quantity,
-                'note' => $row->note,
-                'performed_by' => $row->performer?->full_name ?? $row->performer?->username,
-                'created_at' => $row->created_at?->toISOString(),
+        return collect($this->vaultTransactions->groupedLog(limit: 200))
+            ->map(fn (array $row): array => [
+                'id' => $row['id'],
+                'batch_id' => $row['batch_id'],
+                'type' => $row['txn_type'],
+                'movement_type' => $row['movement_type'],
+                'source_type' => $row['source_type'],
+                'source_id' => $row['source_id'],
+                'destination_type' => $row['destination_type'],
+                'destination_id' => $row['destination_id'],
+                'float_id' => $row['float_id'],
+                'transaction_id' => $row['transaction_id'],
+                'total_amount' => $row['total_amount'],
+                'denomination_count' => $row['denomination_count'],
+                'details' => $row['details'],
+                'note' => $row['note'],
+                'performed_by' => $row['performed_by_name'],
+                'verified_by' => $row['verified_by_name'],
+                'created_at' => $row['created_at'],
+                'reconciliation_status' => $row['reconciliation_status'],
+                'reconciliation_issues' => $row['reconciliation_issues'],
             ])->values()->all();
     }
 }

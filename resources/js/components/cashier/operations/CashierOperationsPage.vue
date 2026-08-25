@@ -41,15 +41,38 @@ type FloatRow = {
     closed_at: string | null;
     denominations: { denomination: number; quantity: number }[];
 };
-type VaultLog = {
+type VaultLogDetail = {
     id: number;
-    type: string;
-    float_id: number | null;
     denomination: number;
     quantity: number;
+    amount: number;
+};
+type VaultReconciliationStatus =
+    | 'matched'
+    | 'mismatch'
+    | 'missing_cash_log'
+    | 'legacy_unlinked'
+    | 'not_applicable';
+type VaultLog = {
+    id: number;
+    batch_id: string | null;
+    type: string;
+    movement_type: string | null;
+    source_type: string | null;
+    source_id: number | null;
+    destination_type: string | null;
+    destination_id: number | null;
+    float_id: number | null;
+    transaction_id: number | null;
+    total_amount: number;
+    denomination_count: number;
+    details: VaultLogDetail[];
     note: string | null;
     performed_by: string | null;
+    verified_by: string | null;
     created_at: string | null;
+    reconciliation_status: VaultReconciliationStatus;
+    reconciliation_issues: string[];
 };
 type RecentTransaction = {
     id: number;
@@ -172,6 +195,7 @@ const vaultLogSearch = ref('');
 const vaultLogType = ref('all');
 const vaultLogPage = ref(1);
 const vaultLogPageSize = ref(25);
+const selectedVaultLog = ref<VaultLog | null>(null);
 const pendingSearch = ref('');
 const pendingPage = ref(1);
 const pendingPageSize = ref(25);
@@ -351,27 +375,49 @@ const paginatedTransactions = computed(() =>
     ),
 );
 const vaultLogTypes = computed(() => [
-    ...new Set(props.vaultLogs.map((log) => log.type)),
+    ...new Set(props.vaultLogs.map((log) => vaultMovementKey(log))),
 ]);
 const filteredVaultLogs = computed(() => {
     const query = vaultLogSearch.value.trim().toLowerCase();
-    return props.vaultLogs.filter(
-        (log) =>
-            (vaultLogType.value === 'all' || log.type === vaultLogType.value) &&
+
+    return props.vaultLogs.filter((log) => {
+        const detailValues = log.details.flatMap((detail) => [
+            detail.denomination,
+            detail.quantity,
+            detail.amount,
+        ]);
+        const matchesType =
+            vaultLogType.value === 'all' ||
+            vaultMovementKey(log) === vaultLogType.value;
+
+        return (
+            matchesType &&
             (!query ||
                 [
                     log.id,
+                    log.batch_id,
                     log.type,
+                    log.movement_type,
+                    log.source_type,
+                    log.source_id,
+                    log.destination_type,
+                    log.destination_id,
+                    log.transaction_id,
+                    log.float_id,
                     log.note,
                     log.performed_by,
-                    log.denomination,
-                    log.quantity,
+                    log.verified_by,
+                    log.total_amount,
+                    log.reconciliation_status,
+                    ...log.reconciliation_issues,
+                    ...detailValues,
                 ].some((value) =>
                     String(value ?? '')
                         .toLowerCase()
                         .includes(query),
-                )),
-    );
+                ))
+        );
+    });
 });
 const vaultLogPageCount = computed(() =>
     Math.max(
@@ -803,6 +849,58 @@ function confirmPendingCashIn(pin: string) {
 
 function statusLabel(status: string): string {
     return status.replaceAll('_', ' ');
+}
+
+function vaultMovementKey(log: VaultLog): string {
+    return log.movement_type || log.type;
+}
+
+function vaultFlowLabel(log: VaultLog): string {
+    if (!log.source_type && !log.destination_type) {
+        return '-';
+    }
+
+    return `${statusLabel(log.source_type || '?')} → ${statusLabel(log.destination_type || '?')}`;
+}
+
+function vaultReference(log: VaultLog): string {
+    return log.batch_id
+        ? log.batch_id.slice(0, 8).toUpperCase()
+        : `LEGACY-${log.id}`;
+}
+
+function vaultReconciliationLabel(status: VaultReconciliationStatus): string {
+    return {
+        matched: 'MATCHED',
+        mismatch: 'MISMATCH',
+        missing_cash_log: 'MISSING CASH LOG',
+        legacy_unlinked: 'LEGACY / UNLINKED',
+        not_applicable: 'N/A (VERIFY)',
+    }[status];
+}
+
+function vaultReconciliationClass(status: VaultReconciliationStatus): string {
+    if (status === 'matched') {
+        return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    }
+
+    if (status === 'not_applicable') {
+        return 'border-slate-200 bg-slate-50 text-slate-600';
+    }
+
+    if (status === 'legacy_unlinked') {
+        return 'border-amber-200 bg-amber-50 text-amber-700';
+    }
+
+    return 'border-rose-200 bg-rose-50 text-rose-700';
+}
+
+function openVaultLogDetails(log: VaultLog): void {
+    selectedVaultLog.value = log;
+}
+
+function closeVaultLogDetails(): void {
+    selectedVaultLog.value = null;
 }
 </script>
 
@@ -1677,15 +1775,15 @@ function statusLabel(status: string): string {
             <header class="border-b border-line px-4 py-4 sm:px-6">
                 <h2 class="text-lg font-black">Main vault audit log</h2>
                 <p class="mt-1 text-xs text-slate">
-                    Every note movement is recorded with its operator and
-                    reason.
+                    One physical cash movement is one audit row. Banknote
+                    denominations are available in Details.
                 </p>
                 <div class="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                     <input
                         v-model="vaultLogSearch"
                         type="search"
                         class="bank-input"
-                        placeholder="Search movement, note, operator or denomination"
+                        placeholder="Search reference, movement, note, operator or denomination"
                     />
                     <select v-model="vaultLogType" class="bank-input">
                         <option value="all">All movements</option>
@@ -1700,15 +1798,19 @@ function statusLabel(status: string): string {
                 </div>
             </header>
             <div class="overflow-x-auto">
-                <table class="min-w-full text-left text-sm">
+                <table class="w-full min-w-[1120px] text-left text-sm">
                     <thead
                         class="border-b border-line bg-mist/45 text-[11px] tracking-wide text-slate uppercase"
                     >
                         <tr>
                             <th class="px-4 py-3 sm:px-6">Time</th>
+                            <th class="px-4 py-3">Reference</th>
                             <th class="px-4 py-3">Movement</th>
-                            <th class="px-4 py-3">Note</th>
-                            <th class="px-4 py-3">Quantity</th>
+                            <th class="px-4 py-3">Flow</th>
+                            <th class="px-4 py-3">Reason / Note</th>
+                            <th class="px-4 py-3 text-right">Total</th>
+                            <th class="px-4 py-3">Reconcile</th>
+                            <th class="px-4 py-3 text-center">Details</th>
                             <th class="px-4 py-3 sm:px-6">Operator</th>
                         </tr>
                     </thead>
@@ -1717,20 +1819,55 @@ function statusLabel(status: string): string {
                             <td class="px-4 py-3 text-xs text-slate sm:px-6">
                                 {{ formatDate(log.created_at) }}
                             </td>
-                            <td class="px-4 py-3 font-bold">
-                                {{ statusLabel(log.type) }}
+                            <td class="px-4 py-3 font-mono text-xs font-black">
+                                {{ vaultReference(log) }}
                             </td>
-                            <td class="money px-4 py-3">
-                                {{ formatMoney(log.denomination) }}
+                            <td class="px-4 py-3 font-bold capitalize">
+                                {{ statusLabel(vaultMovementKey(log)) }}
                             </td>
-                            <td class="px-4 py-3">{{ log.quantity }}</td>
+                            <td
+                                class="px-4 py-3 text-xs font-semibold text-slate"
+                            >
+                                {{ vaultFlowLabel(log) }}
+                            </td>
+                            <td class="max-w-[280px] px-4 py-3 text-slate">
+                                {{ log.note || '-' }}
+                            </td>
+                            <td class="money px-4 py-3 text-right font-black">
+                                {{ formatMoney(log.total_amount) }}
+                            </td>
+                            <td class="px-4 py-3">
+                                <span
+                                    class="inline-flex rounded-full border px-2.5 py-1 text-[11px] font-black"
+                                    :class="
+                                        vaultReconciliationClass(
+                                            log.reconciliation_status,
+                                        )
+                                    "
+                                >
+                                    {{
+                                        vaultReconciliationLabel(
+                                            log.reconciliation_status,
+                                        )
+                                    }}
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <button
+                                    type="button"
+                                    class="bank-button bank-button-secondary px-3 py-2 text-xs"
+                                    @click="openVaultLogDetails(log)"
+                                >
+                                    Details ({{ log.denomination_count }})
+                                </button>
+                            </td>
                             <td class="px-4 py-3 text-xs text-slate sm:px-6">
                                 {{ log.performed_by || 'Cashier' }}
                             </td>
                         </tr>
                         <tr v-if="!paginatedVaultLogs.length">
                             <td
-                                colspan="5"
+                                colspan="9"
                                 class="px-6 py-10 text-center text-sm text-slate"
                             >
                                 No vault movements yet.
@@ -1792,6 +1929,143 @@ function statusLabel(status: string): string {
                 </div>
             </footer>
         </section>
+
+        <div
+            v-if="selectedVaultLog"
+            class="fixed inset-0 z-50 grid place-items-center bg-ink/55 p-3 sm:p-6"
+            @click.self="closeVaultLogDetails"
+        >
+            <section
+                class="max-h-[calc(100vh-1.5rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-line bg-card shadow-2xl sm:max-h-[calc(100vh-3rem)]"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="vault-log-details-title"
+            >
+                <header
+                    class="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-line bg-card px-5 py-4 sm:px-6"
+                >
+                    <div>
+                        <p
+                            class="text-xs font-black tracking-wide text-slate uppercase"
+                        >
+                            {{ vaultReference(selectedVaultLog) }}
+                        </p>
+                        <h3
+                            id="vault-log-details-title"
+                            class="mt-1 text-lg font-black"
+                        >
+                            Banknote breakdown
+                        </h3>
+                        <p class="mt-1 text-sm text-slate">
+                            {{
+                                statusLabel(vaultMovementKey(selectedVaultLog))
+                            }}
+                            ·
+                            {{ formatDate(selectedVaultLog.created_at) }}
+                        </p>
+                    </div>
+                    <button
+                        type="button"
+                        class="bank-button bank-button-secondary px-3 py-2"
+                        @click="closeVaultLogDetails"
+                    >
+                        Close
+                    </button>
+                </header>
+
+                <div class="space-y-5 p-5 sm:p-6">
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <div
+                            class="rounded-xl border border-line bg-mist/30 p-4"
+                        >
+                            <p class="text-xs font-bold text-slate uppercase">
+                                Flow
+                            </p>
+                            <p class="mt-1 font-black">
+                                {{ vaultFlowLabel(selectedVaultLog) }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-xl border border-line bg-mist/30 p-4"
+                        >
+                            <p class="text-xs font-bold text-slate uppercase">
+                                Total
+                            </p>
+                            <p class="money mt-1 text-lg font-black">
+                                {{
+                                    formatMoney(selectedVaultLog.total_amount)
+                                }}
+                                MMK
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto rounded-xl border border-line">
+                        <table class="w-full min-w-[520px] text-left text-sm">
+                            <thead
+                                class="bg-mist/50 text-xs text-slate uppercase"
+                            >
+                                <tr>
+                                    <th class="px-4 py-3">Banknote</th>
+                                    <th class="px-4 py-3 text-right">
+                                        Quantity
+                                    </th>
+                                    <th class="px-4 py-3 text-right">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-line">
+                                <tr
+                                    v-for="detail in selectedVaultLog.details"
+                                    :key="`${selectedVaultLog.id}-${detail.denomination}`"
+                                >
+                                    <td class="money px-4 py-3 font-bold">
+                                        {{
+                                            formatMoney(detail.denomination)
+                                        }}
+                                        MMK
+                                    </td>
+                                    <td class="px-4 py-3 text-right font-bold">
+                                        {{ detail.quantity }}
+                                    </td>
+                                    <td
+                                        class="money px-4 py-3 text-right font-black"
+                                    >
+                                        {{ formatMoney(detail.amount) }} MMK
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div
+                        v-if="selectedVaultLog.note"
+                        class="rounded-xl border border-line bg-mist/20 p-4"
+                    >
+                        <p class="text-xs font-bold text-slate uppercase">
+                            Reason / Note
+                        </p>
+                        <p class="mt-1 text-sm font-semibold">
+                            {{ selectedVaultLog.note }}
+                        </p>
+                    </div>
+
+                    <div
+                        v-if="selectedVaultLog.reconciliation_issues.length"
+                        class="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700"
+                    >
+                        <p class="font-black">Reconciliation issues</p>
+                        <ul class="mt-2 list-disc space-y-1 pl-5">
+                            <li
+                                v-for="issue in selectedVaultLog.reconciliation_issues"
+                                :key="issue"
+                            >
+                                {{ issue }}
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </div>
 
         <div
             v-if="returnFloat"
