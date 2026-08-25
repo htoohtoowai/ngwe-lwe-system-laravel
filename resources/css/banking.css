@@ -119,6 +119,15 @@ select.bank-input {
     font-variant-numeric: tabular-nums;
 }
 
+/* Quantity/count inputs need enough horizontal room for large note counts.
+   Keep this separate from full-width money amount fields and PIN inputs. */
+.bank-quantity-input {
+    width: 5rem;
+    min-width: 5rem;
+    max-width: 5rem;
+    font-variant-numeric: tabular-nums;
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

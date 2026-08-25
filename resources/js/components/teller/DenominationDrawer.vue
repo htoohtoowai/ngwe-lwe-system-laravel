@@ -200,7 +200,7 @@ const mismatch = (n: number) =>
                             :aria-label="`${n.toLocaleString()} denomination count`"
                             :aria-invalid="mismatch(n)"
                             @input="setFromInput(n, $event)"
-                            class="field-input money h-10 w-14 rounded-counter px-1 py-1 text-center text-sm"
+                            class="bank-quantity-input field-input money h-10 rounded-counter px-2 py-1 text-center text-sm"
                             :class="
                                 mismatch(n) ? 'border-debit text-debit' : ''
                             "
