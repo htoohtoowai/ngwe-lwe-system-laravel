@@ -124,7 +124,7 @@ $renderAdminOperations = static function (
             : null,
         'announcement' => 'Owner console for setup pages, reports, vault visibility and audit review.',
         'notificationCount' => Transaction::query()
-            ->where('transaction_type', 'cash_in')
+            ->whereIn('transaction_type', ['cash_in', 'send_money'])
             ->where('status', 'PENDING_CASHIER_CONFIRM')
             ->count(),
         'adminData' => app(AdminOperationsDataService::class)->get($request),

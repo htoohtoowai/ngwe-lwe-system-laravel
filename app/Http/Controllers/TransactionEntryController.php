@@ -181,7 +181,7 @@ class TransactionEntryController extends Controller
             'role' => $user?->role,
             'view' => $view,
             'announcement' => 'Use the review step before confirming a transaction.',
-            'notificationCount' => $this->pendingCashIns(),
+            'notificationCount' => $this->pendingCashIns($user?->id),
             'float' => $float ? $this->floatProp($float) : null,
             'notes' => $this->notes(),
             'floatStock' => $float ? $this->floats->getDenominationBalance($float->id) : [],
@@ -257,9 +257,10 @@ class TransactionEntryController extends Controller
         return redirect()->back()->with('completed', $this->completed($transaction));
     }
 
-    private function pendingCashIns(): int
+    private function pendingCashIns(?int $createdBy): int
     {
         return (int) Transaction::query()
+            ->where('created_by', $createdBy)
             ->whereIn('transaction_type', ['cash_in', 'send_money'])
             ->where('status', 'PENDING_CASHIER_CONFIRM')
             ->count();
