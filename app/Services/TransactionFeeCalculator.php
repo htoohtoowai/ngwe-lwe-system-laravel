@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\AccountFeature;
+use App\Enums\CalculationType;
 use App\Models\Account;
 use App\Models\ProviderFeeTier;
 use App\Repositories\ProviderFeeTierRepository;
@@ -61,6 +62,106 @@ class TransactionFeeCalculator
             'customer_fee' => Money::normalize(Money::roundMmkFee($baseFee + $additionalFee)),
             'additional_fee' => Money::normalize($additionalFee),
         ];
+    }
+
+    /**
+     * Resolve an "all-in" customer total into principal + configured fee.
+     * This is important around tier boundaries: using the total itself as the
+     * tier lookup amount can select the wrong fee row.
+     *
+     * @return array{principal:string,customer_total:string,customer_fee:string,additional_fee:string}
+     */
+    public function resolveIncludedTotal(Account $account, float|string $customerTotal, AccountFeature $feature): array
+    {
+        $total = (float) Money::normalize($customerTotal);
+        if ($total <= 0) {
+            return [
+                'principal' => Money::normalize(0),
+                'customer_total' => Money::normalize(0),
+                ...$this->zeroFees(),
+            ];
+        }
+
+        if ($account->company_id === null) {
+            return [
+                'principal' => Money::normalize($total),
+                'customer_total' => Money::normalize($total),
+                ...$this->zeroFees(),
+            ];
+        }
+
+        $tiers = $this->tiers->activeForCompanyFeature((int) $account->company_id, $feature->value);
+        if ($tiers->isEmpty()) {
+            return [
+                'principal' => Money::normalize($total),
+                'customer_total' => Money::normalize($total),
+                ...$this->zeroFees(),
+            ];
+        }
+
+        foreach ($tiers as $tier) {
+            $fixed = 0.0;
+            $percentage = 0.0;
+
+            foreach ([
+                [$tier->fee_type, $tier->fee_value],
+                [$tier->additional_fee_type, $tier->additional_fee_value],
+            ] as [$type, $value]) {
+                $calculationType = $type instanceof CalculationType
+                    ? $type
+                    : CalculationType::from(strtoupper((string) $type));
+
+                if ($calculationType === CalculationType::Fixed) {
+                    $fixed += (float) $value;
+                } else {
+                    $percentage += (float) $value;
+                }
+            }
+
+            $divisor = 1 + ($percentage / 100);
+            if ($divisor <= 0) {
+                continue;
+            }
+
+            $principal = ($total - $fixed) / $divisor;
+            if ($principal <= 0) {
+                continue;
+            }
+
+            if ($principal + 0.00001 < (float) $tier->amount_from || $principal - 0.00001 > (float) $tier->amount_to) {
+                continue;
+            }
+
+            $fees = $this->resolveForFeature($account, $principal, $feature);
+            $roundedPrincipal = Money::normalize(Money::roundMmkFee($principal));
+            $resolvedTotal = Money::normalize((float) $roundedPrincipal + (float) $fees['customer_fee']);
+
+            // MMK customer totals are whole-note values. If rounding the principal
+            // moves us by one kyat, adjust it so principal + fee equals the input.
+            $difference = Money::roundMmkFee($total - (float) $resolvedTotal);
+            if ($difference !== 0.0) {
+                $adjustedPrincipal = Money::normalize((float) $roundedPrincipal + $difference);
+                $adjustedFees = $this->resolveForFeature($account, $adjustedPrincipal, $feature);
+                $adjustedTotal = Money::normalize((float) $adjustedPrincipal + (float) $adjustedFees['customer_fee']);
+                if ((float) $adjustedPrincipal > 0 && abs((float) $adjustedTotal - $total) < 0.01) {
+                    return [
+                        'principal' => $adjustedPrincipal,
+                        'customer_total' => Money::normalize($total),
+                        ...$adjustedFees,
+                    ];
+                }
+            }
+
+            if (abs((float) $resolvedTotal - $total) < 0.01) {
+                return [
+                    'principal' => $roundedPrincipal,
+                    'customer_total' => Money::normalize($total),
+                    ...$fees,
+                ];
+            }
+        }
+
+        throw new \InvalidArgumentException('The all-in amount cannot be matched to the configured fee tiers.');
     }
 
     private function resolveTier(

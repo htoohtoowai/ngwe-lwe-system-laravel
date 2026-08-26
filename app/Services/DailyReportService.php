@@ -42,6 +42,8 @@ class DailyReportService
                 [
                     'total_cash_in' => $summary['total_cash_in'],
                     'total_cash_out' => $summary['total_cash_out'],
+                    'total_send_money' => $summary['total_send_money'],
+                    'total_receive_money' => $summary['total_receive_money'],
                     'total_transfer' => $summary['total_transfer'],
                     'total_exchange' => $summary['total_exchange'],
                     'total_commission' => $summary['total_commission'],
@@ -56,6 +58,8 @@ class DailyReportService
                 'closed_by' => $closedBy->id,
                 'total_cash_in' => $summary['total_cash_in'],
                 'total_cash_out' => $summary['total_cash_out'],
+                'total_send_money' => $summary['total_send_money'],
+                'total_receive_money' => $summary['total_receive_money'],
                 'total_transfer' => $summary['total_transfer'],
                 'total_exchange' => $summary['total_exchange'],
                 'total_commission' => $summary['total_commission'],
@@ -107,6 +111,8 @@ class DailyReportService
             'summary_date' => $date,
             'total_cash_in' => $this->sumType($completed, 'cash_in'),
             'total_cash_out' => $this->sumType($completed, 'cash_out'),
+            'total_send_money' => $this->sumType($completed, 'send_money'),
+            'total_receive_money' => $this->sumType($completed, 'receive_money'),
             'total_transfer' => $this->sumType($completed, 'transfer'),
             'total_exchange' => $this->sumType($completed, 'exchange'),
             'total_commission' => $totalCommission,
@@ -116,6 +122,11 @@ class DailyReportService
             'pending_cash_in_count' => Transaction::query()
                 ->whereDate('created_at', $date)
                 ->where('transaction_type', 'cash_in')
+                ->where('status', 'PENDING_CASHIER_CONFIRM')
+                ->count(),
+            'pending_send_money_count' => Transaction::query()
+                ->whereDate('created_at', $date)
+                ->where('transaction_type', 'send_money')
                 ->where('status', 'PENDING_CASHIER_CONFIRM')
                 ->count(),
         ];

@@ -17,6 +17,8 @@ class DailyReconciliationResource extends JsonResource
             'closed_at' => $this->closed_at?->toISOString(),
             'total_cash_in' => $this->total_cash_in,
             'total_cash_out' => $this->total_cash_out,
+            'total_send_money' => $this->total_send_money,
+            'total_receive_money' => $this->total_receive_money,
             'total_transfer' => $this->total_transfer,
             'total_exchange' => $this->total_exchange,
             'total_commission' => $this->total_commission,

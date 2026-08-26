@@ -19,7 +19,7 @@ type Transaction = {
 const props = defineProps<{
     role: 'admin';
     title: string;
-    transactionType?: '' | 'cash_in' | 'cash_out' | 'transfer' | 'exchange';
+    transactionType?: '' | 'cash_in' | 'cash_out' | 'transfer' | 'exchange' | 'send_money' | 'receive_money';
     announcement?: string | null;
     notificationCount?: number;
     rows: Transaction[];
@@ -69,7 +69,7 @@ watch([search, pageSize], () => (page.value = 1));
 watch(pageCount, (count) => (page.value = Math.min(page.value, count)));
 
 function typeLabel(type: string): string {
-    return { cash_in: 'Cash In', cash_out: 'Cash Out', transfer: 'Transfer', exchange: 'Exchange' }[type] ?? type;
+    return { cash_in: 'Cash In', cash_out: 'Cash Out', transfer: 'Transfer', exchange: 'Exchange', send_money: 'Send Money', receive_money: 'Receive Money' }[type] ?? type;
 }
 function money(value: string | number | null): string {
     return Number(value ?? 0).toLocaleString();
@@ -97,6 +97,8 @@ function load(): void {
                     <option value="cash_out">Cash Out</option>
                     <option value="transfer">Transfer</option>
                     <option value="exchange">Exchange</option>
+                    <option value="send_money">Send Money</option>
+                    <option value="receive_money">Receive Money</option>
                 </select>
                 <input v-model="dateFrom" type="date" class="bank-input" aria-label="From date" />
                 <input v-model="dateTo" type="date" class="bank-input" aria-label="To date" />

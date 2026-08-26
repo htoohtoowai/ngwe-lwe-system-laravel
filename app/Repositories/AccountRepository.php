@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Enums\AccountFeature;
+use App\Enums\AccountType;
 use App\Exceptions\InsufficientBalanceException;
 use App\Models\Account;
 use App\Support\Money;
@@ -43,6 +44,23 @@ class AccountRepository
             ->where('is_active', true)
             ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true))
             ->whereHas('featureAssignments', fn ($featureQuery) => $featureQuery->where('feature', $feature->value))
+            ->with(['company', 'featureAssignments'])
+            ->orderBy('account_name')
+            ->get();
+    }
+
+    /**
+     * Send Money / Receive Money may only use active PAY agent accounts.
+     */
+    public function activePayAgentsForFeature(AccountFeature $feature): Collection
+    {
+        return Account::query()
+            ->where('account_type', AccountType::Pay->value)
+            ->where('is_agent', true)
+            ->where('is_active', true)
+            ->whereHas('company', fn ($companyQuery) => $companyQuery->where('is_active', true))
+            ->whereHas('featureAssignments', fn ($featureQuery) => $featureQuery
+                ->where('feature', $feature->value))
             ->with(['company', 'featureAssignments'])
             ->orderBy('account_name')
             ->get();

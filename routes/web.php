@@ -33,6 +33,8 @@ Route::middleware(['auth', 'role:admin'])->get('/reports/daily/pdf', function (R
         'Date: '.$summary['summary_date'],
         'Cash In: '.$summary['total_cash_in'],
         'Cash Out: '.$summary['total_cash_out'],
+        'Send Money: '.$summary['total_send_money'],
+        'Receive Money: '.$summary['total_receive_money'],
         'Transfer: '.$summary['total_transfer'],
         'Exchange: '.$summary['total_exchange'],
         'Commission: '.$summary['total_commission'],
@@ -189,6 +191,8 @@ Route::middleware(['auth', 'role:admin'])
         Route::get('/transactions/cash-out', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'cash_out'))->name('.transactions.cash-out');
         Route::get('/transactions/transfer', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'transfer'))->name('.transactions.transfer');
         Route::get('/transactions/exchange', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'exchange'))->name('.transactions.exchange');
+        Route::get('/transactions/send-money', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'send_money'))->name('.transactions.send-money');
+        Route::get('/transactions/receive-money', fn (Request $request) => app(AdminReadController::class)->transactions($request, 'receive_money'))->name('.transactions.receive-money');
         Route::get('/audit-logs', AdminAuditLogController::class)->name('.audit-logs');
         Route::get('/audit-logs/export', [AdminAuditLogController::class, 'export'])->name('.audit-logs.export');
         Route::redirect('/transactions/activity-logs', '/admin/audit-logs')->name('.transactions.activity-logs');
@@ -216,6 +220,8 @@ Route::middleware(['auth', 'role:cashier'])
     ->group(function (): void {
         Route::post('/transactions/{transaction}/confirm-cash-in', [CashierActionController::class, 'confirmCashIn'])->name('transactions.confirm-cash-in');
         Route::post('/transactions/{transaction}/cancel-cash-in', [CashierActionController::class, 'cancelCashIn'])->name('transactions.cancel-cash-in');
+        Route::post('/transactions/{transaction}/confirm-send-money', [CashierActionController::class, 'confirmSendMoney'])->name('transactions.confirm-send-money');
+        Route::post('/transactions/{transaction}/cancel-send-money', [CashierActionController::class, 'cancelSendMoney'])->name('transactions.cancel-send-money');
     });
 Route::middleware(['auth', 'role:cashier'])
     ->prefix('cashier')
@@ -229,6 +235,8 @@ Route::middleware(['auth', 'role:cashier'])
         Route::post('/notifications/{transaction}/read', [CashierActionController::class, 'markNotificationRead'])->name('notifications.read');
         Route::post('/transactions/{transaction}/confirm-cash-in', [CashierActionController::class, 'confirmCashIn'])->name('transactions.confirm-cash-in');
         Route::post('/transactions/{transaction}/cancel-cash-in', [CashierActionController::class, 'cancelCashIn'])->name('transactions.cancel-cash-in');
+        Route::post('/transactions/{transaction}/confirm-send-money', [CashierActionController::class, 'confirmSendMoney'])->name('transactions.confirm-send-money');
+        Route::post('/transactions/{transaction}/cancel-send-money', [CashierActionController::class, 'cancelSendMoney'])->name('transactions.cancel-send-money');
         Route::get('/{section}', CashierController::class)
             ->whereIn('section', [
                 'dashboard',
@@ -241,6 +249,8 @@ Route::middleware(['auth', 'role:cashier'])
                 'teller-entry-history-cash-out',
                 'teller-entry-history-transfer',
                 'teller-entry-history-exchange',
+                'teller-entry-history-send-money',
+                'teller-entry-history-receive-money',
                 'main-vault-audit-log',
             ])
             ->name('section');
@@ -252,7 +262,13 @@ Route::middleware(['auth', 'role:teller'])
     ->group(function (): void {
         Route::get('/cash-in', 'cashIn')->name('cash-in');
         Route::get('/cash-in/history', 'cashInHistory')->name('cash-in.history');
+        Route::get('/send-money', 'sendMoney')->name('send-money');
+        Route::get('/send-money/history', 'sendMoneyHistory')->name('send-money.history');
+        Route::get('/receive-money', 'receiveMoney')->name('receive-money');
+        Route::get('/receive-money/history', 'receiveMoneyHistory')->name('receive-money.history');
         Route::post('/cash-in', 'cashInStore')->name('cash-in.store');
+        Route::post('/send-money', 'sendMoneyStore')->name('send-money.store');
+        Route::post('/receive-money', 'receiveMoneyStore')->name('receive-money.store');
     });
 
 Route::middleware(['auth', 'role:teller'])
@@ -287,6 +303,8 @@ Route::middleware(['auth', 'role:teller'])
         Route::get('/', 'counter')->name('counter');
         Route::redirect('/cash-in', '/transactions/cash-in')->name('cash-in');
         Route::redirect('/cash-out', '/transactions/cash-out')->name('cash-out');
+        Route::redirect('/send-money', '/transactions/send-money')->name('send-money');
+        Route::redirect('/receive-money', '/transactions/receive-money')->name('receive-money');
         Route::redirect('/transfer', '/transactions/transfer')->name('transfer');
         Route::redirect('/exchange', '/transactions/exchange')->name('exchange');
         Route::get('/float', 'floatPage')->name('float');

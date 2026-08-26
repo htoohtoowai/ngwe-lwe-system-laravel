@@ -145,6 +145,8 @@ type Summary = {
     summary_date?: string;
     total_cash_in?: MoneyValue;
     total_cash_out?: MoneyValue;
+    total_send_money?: MoneyValue;
+    total_receive_money?: MoneyValue;
     total_transfer?: MoneyValue;
     total_exchange?: MoneyValue;
     total_commission?: MoneyValue;
@@ -1609,6 +1611,26 @@ async function sendBroadcastTest(): Promise<void> {
                             <p class="text-xs font-bold text-debit">Cash Out</p>
                             <p class="money mt-1 font-black text-debit">
                                 {{ money(dailySummary?.total_cash_out) }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-lg border border-credit/25 bg-credit/5 p-4"
+                        >
+                            <p class="text-xs font-bold text-credit">
+                                Send Money
+                            </p>
+                            <p class="money mt-1 font-black text-credit">
+                                {{ money(dailySummary?.total_send_money) }}
+                            </p>
+                        </div>
+                        <div
+                            class="rounded-lg border border-debit/25 bg-debit/5 p-4"
+                        >
+                            <p class="text-xs font-bold text-debit">
+                                Receive Money
+                            </p>
+                            <p class="money mt-1 font-black text-debit">
+                                {{ money(dailySummary?.total_receive_money) }}
                             </p>
                         </div>
                         <div

@@ -173,7 +173,7 @@ class AdminFeeController extends Controller
             'section' => 'fees',
             'announcement' => 'Configure provider customer fees, agent commissions and transfer route fees independently.',
             'notificationCount' => Transaction::query()
-                ->where('transaction_type', 'cash_in')
+                ->whereIn('transaction_type', ['cash_in', 'send_money'])
                 ->where('status', 'PENDING_CASHIER_CONFIRM')
                 ->count(),
             'mode' => $mode,

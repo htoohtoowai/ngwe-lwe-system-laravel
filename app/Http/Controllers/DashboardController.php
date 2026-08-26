@@ -58,13 +58,13 @@ class DashboardController extends Controller
         if ($user->role === 'teller') {
             return (int) Transaction::query()
                 ->where('created_by', $user->id)
-                ->where('transaction_type', 'cash_in')
+                ->whereIn('transaction_type', ['cash_in', 'send_money'])
                 ->where('status', 'PENDING_CASHIER_CONFIRM')
                 ->count();
         }
 
         return (int) Transaction::query()
-            ->where('transaction_type', 'cash_in')
+            ->whereIn('transaction_type', ['cash_in', 'send_money'])
             ->where('status', 'PENDING_CASHIER_CONFIRM')
             ->count();
     }
@@ -148,7 +148,7 @@ class DashboardController extends Controller
                     return;
                 }
 
-                if ($transaction->transaction_type === 'cash_in') {
+                if (in_array($transaction->transaction_type, ['cash_in', 'send_money'], true)) {
                     $cashIn[$key] += (float) $transaction->amount;
 
                     return;
@@ -209,7 +209,7 @@ class DashboardController extends Controller
                 'type' => str_replace('_', ' ', $transaction->transaction_type),
                 'label' => $this->transactionLabel($transaction),
                 'amount' => Money::normalize($transaction->amount ?? 0),
-                'direction' => $transaction->transaction_type === 'cash_in' ? 'in' : 'out',
+                'direction' => in_array($transaction->transaction_type, ['cash_in', 'send_money'], true) ? 'in' : 'out',
                 'time' => $transaction->created_at?->diffForHumans() ?? '',
             ])
             ->values()

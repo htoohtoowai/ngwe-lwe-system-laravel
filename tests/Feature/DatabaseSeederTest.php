@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Account;
 use App\Models\AgentCommissionTier;
+use App\Models\Company;
+use App\Models\ProviderFeeTier;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -31,5 +33,29 @@ class DatabaseSeederTest extends TestCase
         $this->assertArrayNotHasKey('feature', $tier->getAttributes());
         $this->assertArrayHasKey('out_commission_value', $tier->getAttributes());
         $this->assertArrayHasKey('in_commission_value', $tier->getAttributes());
+
+        $wave = Company::query()->where('name', 'Wave Money')->firstOrFail();
+        $kbz = Company::query()->where('name', 'KBZPay')->firstOrFail();
+
+        $this->assertSame(14, ProviderFeeTier::query()->where('company_id', $wave->id)->where('feature', 'send_money')->count());
+        $this->assertSame(0, ProviderFeeTier::query()->where('company_id', $wave->id)->where('feature', 'receive_money')->count());
+        $this->assertSame(14, ProviderFeeTier::query()->where('company_id', $kbz->id)->where('feature', 'send_money')->count());
+        $this->assertSame(0, ProviderFeeTier::query()->where('company_id', $kbz->id)->where('feature', 'receive_money')->count());
+
+        $wave100k = AgentCommissionTier::query()
+            ->where('company_id', $wave->id)
+            ->where('amount_from', '50001.00')
+            ->where('amount_to', '100000.00')
+            ->firstOrFail();
+        $this->assertSame('196.0000', $wave100k->out_commission_value);
+        $this->assertSame('392.0000', $wave100k->in_commission_value);
+
+        $kbz100k = AgentCommissionTier::query()
+            ->where('company_id', $kbz->id)
+            ->where('amount_from', '50001.00')
+            ->where('amount_to', '100000.00')
+            ->firstOrFail();
+        $this->assertSame('300.0000', $kbz100k->out_commission_value);
+        $this->assertSame('0.0000', $kbz100k->in_commission_value);
     }
 }

@@ -252,7 +252,7 @@ class TellerController extends Controller
     }
 
     /**
-     * @return array{cash_in:string,cash_out:string,transfer:string,exchange:string,count:int}
+     * @return array{cash_in:string,cash_out:string,send_money:string,receive_money:string,transfer:string,exchange:string,count:int}
      */
     private function today(Request $request): array
     {
@@ -262,6 +262,8 @@ class TellerController extends Controller
             return [
                 'cash_in' => '0.00',
                 'cash_out' => '0.00',
+                'send_money' => '0.00',
+                'receive_money' => '0.00',
                 'transfer' => '0.00',
                 'exchange' => '0.00',
                 'count' => 0,
@@ -275,6 +277,8 @@ class TellerController extends Controller
         return [
             'cash_in' => Money::normalize($rows->where('transaction_type', 'cash_in')->sum(fn ($row) => (float) $row->amount)),
             'cash_out' => Money::normalize($rows->where('transaction_type', 'cash_out')->sum(fn ($row) => (float) $row->amount)),
+            'send_money' => Money::normalize($rows->where('transaction_type', 'send_money')->sum(fn ($row) => (float) $row->amount)),
+            'receive_money' => Money::normalize($rows->where('transaction_type', 'receive_money')->sum(fn ($row) => (float) $row->amount)),
             'transfer' => Money::normalize($rows->where('transaction_type', 'transfer')->sum(fn ($row) => (float) $row->amount)),
             'exchange' => Money::normalize($rows->where('transaction_type', 'exchange')->sum(fn ($row) => (float) $row->amount)),
             'count' => $rows->count(),

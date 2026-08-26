@@ -24,7 +24,7 @@ class AdminAuditLogController extends Controller
             'role' => 'admin',
             'announcement' => 'Immutable system activity audit trail.',
             'notificationCount' => Transaction::query()
-                ->where('transaction_type', 'cash_in')
+                ->whereIn('transaction_type', ['cash_in', 'send_money'])
                 ->where('status', 'PENDING_CASHIER_CONFIRM')
                 ->count(),
             'rows' => ActivityLogResource::collection($paginator->items())->resolve($request),

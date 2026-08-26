@@ -247,6 +247,8 @@ export type DailySummaryReport = {
     summary_date: string;
     total_cash_in: string;
     total_cash_out: string;
+    total_send_money: string;
+    total_receive_money: string;
     total_transfer: string;
     total_exchange: string;
     total_commission: string;
@@ -254,6 +256,7 @@ export type DailySummaryReport = {
     total_profit: string;
     transaction_count: number;
     pending_cash_in_count: number;
+    pending_send_money_count: number;
     main_vault_total: string;
     employee_floats_total: string;
     total_cash: string;
@@ -272,6 +275,8 @@ export type DailyReconciliation = {
     closed_at: string | null;
     total_cash_in: string;
     total_cash_out: string;
+    total_send_money: string;
+    total_receive_money: string;
     total_transfer: string;
     total_exchange: string;
     total_commission: string;

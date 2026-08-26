@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Models\ProviderFeeTier;
+use Illuminate\Database\Eloquent\Collection;
 
 class ProviderFeeTierRepository
 {
@@ -24,4 +25,20 @@ class ProviderFeeTierRepository
             ->orderBy('id')
             ->first();
     }
+    /** @return Collection<int, ProviderFeeTier> */
+    public function activeForCompanyFeature(int $companyId, string $feature): Collection
+    {
+        if ($companyId <= 0 || $feature === '') {
+            return new Collection();
+        }
+
+        return ProviderFeeTier::query()
+            ->where('company_id', $companyId)
+            ->where('feature', $feature)
+            ->where('is_active', true)
+            ->orderBy('amount_from')
+            ->orderBy('id')
+            ->get();
+    }
+
 }

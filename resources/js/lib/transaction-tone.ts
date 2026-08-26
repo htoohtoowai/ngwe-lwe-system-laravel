@@ -2,7 +2,9 @@ export type TransactionSemanticType =
     | 'cash_in'
     | 'cash_out'
     | 'transfer'
-    | 'exchange';
+    | 'exchange'
+    | 'send_money'
+    | 'receive_money';
 
 type TransactionTone = {
     text: string;
@@ -39,6 +41,22 @@ const tones: Record<TransactionSemanticType, TransactionTone> = {
         icon: 'bg-debit/10 text-debit',
         sidebarIcon: 'bg-debit text-white',
     },
+    send_money: {
+        text: 'text-credit',
+        badge: 'border-credit/25 bg-credit/5 text-credit',
+        card: 'border-credit/25 bg-credit/5',
+        dot: 'bg-credit',
+        icon: 'bg-credit/10 text-credit',
+        sidebarIcon: 'bg-credit text-white',
+    },
+    receive_money: {
+        text: 'text-debit',
+        badge: 'border-debit/25 bg-debit/5 text-debit',
+        card: 'border-debit/25 bg-debit/5',
+        dot: 'bg-debit',
+        icon: 'bg-debit/10 text-debit',
+        sidebarIcon: 'bg-debit text-white',
+    },
     transfer: {
         text: 'text-ink-700',
         badge: 'border-ink-700/20 bg-ink-100/60 text-ink-700',
@@ -68,6 +86,8 @@ export function normalizeTransactionType(
 
     if (normalized.includes('cash_in')) return 'cash_in';
     if (normalized.includes('cash_out')) return 'cash_out';
+    if (normalized.includes('send_money')) return 'send_money';
+    if (normalized.includes('receive_money')) return 'receive_money';
     if (normalized.includes('transfer')) return 'transfer';
     if (normalized.includes('exchange')) return 'exchange';
 

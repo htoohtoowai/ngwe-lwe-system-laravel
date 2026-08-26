@@ -29,6 +29,8 @@ const props = defineProps<{
     today: {
         cash_in: string;
         cash_out: string;
+        send_money: string;
+        receive_money: string;
         transfer: string;
         exchange: string;
         count: number;
@@ -75,6 +77,24 @@ const actions = computed(() => [
         dotTone: 'bg-debit',
     },
     {
+        label: 'Send Money',
+        href: '/transactions/send-money',
+        note: 'Send through a PAY Agent account.',
+        cardTone:
+            'border-credit/25 bg-credit/5 hover:border-credit/55 hover:bg-credit/10',
+        labelTone: 'text-credit',
+        dotTone: 'bg-credit',
+    },
+    {
+        label: 'Receive Money',
+        href: '/transactions/receive-money',
+        note: 'Pay customer cash from Teller Float.',
+        cardTone:
+            'border-debit/25 bg-debit/5 hover:border-debit/55 hover:bg-debit/10',
+        labelTone: 'text-debit',
+        dotTone: 'bg-debit',
+    },
+    {
         label: t('nav.transfer'),
         href: '/transactions/transfer',
         note: t('teller.transferNote'),
@@ -98,6 +118,7 @@ const paidOutToday = computed(() =>
     Math.max(
         0,
         Number(props.today.cash_out) +
+            Number(props.today.receive_money) +
             Number(props.today.transfer) +
             Number(props.today.exchange),
     ),
@@ -284,6 +305,34 @@ onBeforeUnmount(() => {
                     <div class="flex justify-between">
                         <dt
                             class="font-semibold"
+                            :class="transactionTone('send_money').text"
+                        >
+                            Send Money
+                        </dt>
+                        <dd>
+                            <MoneyText
+                                :value="today.send_money"
+                                :class="transactionTone('send_money').text"
+                            />
+                        </dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt
+                            class="font-semibold"
+                            :class="transactionTone('receive_money').text"
+                        >
+                            Receive Money
+                        </dt>
+                        <dd>
+                            <MoneyText
+                                :value="today.receive_money"
+                                :class="transactionTone('receive_money').text"
+                            />
+                        </dd>
+                    </div>
+                    <div class="flex justify-between">
+                        <dt
+                            class="font-semibold"
                             :class="transactionTone('transfer').text"
                         >
                             {{ t('nav.transfer') }}
@@ -313,7 +362,7 @@ onBeforeUnmount(() => {
             </section>
         </div>
 
-        <div class="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div class="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-6">
             <Link
                 v-for="a in actions"
                 :key="a.href"

@@ -38,7 +38,7 @@ class DatabaseSeeder extends Seeder
             'balance' => '5000000.00',
             'is_agent' => false,
             'is_fee_account' => false,
-            'features' => [AccountFeature::CashIn, AccountFeature::SendMoney, AccountFeature::ReceiveMoney],
+            'features' => [AccountFeature::CashIn],
         ],
         [
             'company' => 'KBZPay',
@@ -83,7 +83,7 @@ class DatabaseSeeder extends Seeder
             'balance' => '4000000.00',
             'is_agent' => false,
             'is_fee_account' => false,
-            'features' => [AccountFeature::CashIn, AccountFeature::SendMoney, AccountFeature::ReceiveMoney],
+            'features' => [AccountFeature::CashIn],
         ],
         [
             'company' => 'Wave Money',
@@ -136,22 +136,52 @@ class DatabaseSeeder extends Seeder
         'KBZPay' => [
             AccountFeature::CashIn->value => ['PERCENTAGE', '0.1000', 'FIXED', '0.0000'],
             AccountFeature::CashOut->value => ['PERCENTAGE', '0.2000', 'FIXED', '0.0000'],
-            AccountFeature::SendMoney->value => ['FIXED', '500.0000', 'FIXED', '0.0000'],
-            AccountFeature::ReceiveMoney->value => ['FIXED', '500.0000', 'FIXED', '0.0000'],
         ],
         'Wave Money' => [
             AccountFeature::CashIn->value => ['PERCENTAGE', '0.1000', 'FIXED', '0.0000'],
             AccountFeature::CashOut->value => ['PERCENTAGE', '0.2000', 'FIXED', '0.0000'],
-            AccountFeature::SendMoney->value => ['FIXED', '500.0000', 'FIXED', '0.0000'],
-            AccountFeature::ReceiveMoney->value => ['FIXED', '500.0000', 'FIXED', '0.0000'],
         ],
     ];
 
     private const DEMO_AGENT_COMMISSION_TIERS = [
-        'KBZPay' => ['FIXED', '100.0000', '100.0000'],
-        'Wave Money' => ['FIXED', '123.0000', '117.0000'],
         'AYA Pay' => ['FIXED', '100.0000', '100.0000'],
         'CB Pay' => ['FIXED', '100.0000', '100.0000'],
+    ];
+
+    /** Wave Money official Send fee plus Agent OUT/IN commission table supplied for this project. */
+    private const WAVE_MONEY_AGENT_TIERS = [
+        [1, 10000, 400, 69, 88],
+        [10001, 25000, 700, 123, 172],
+        [25001, 50000, 1000, 147, 245],
+        [50001, 100000, 1500, 196, 392],
+        [100001, 150000, 2000, 294, 490],
+        [150001, 200000, 2500, 392, 588],
+        [200001, 300000, 3000, 490, 686],
+        [300001, 400000, 4000, 653, 915],
+        [400001, 500000, 4500, 735, 1029],
+        [500001, 600000, 5400, 882, 1235],
+        [600001, 700000, 6000, 980, 1372],
+        [700001, 800000, 6700, 1094, 1532],
+        [800001, 900000, 7400, 1209, 1692],
+        [900001, 1000000, 8000, 1307, 1829],
+    ];
+
+    /** KBZPay Send fee plus Agent OUT commission. IN commission is intentionally zero until source data is supplied. */
+    private const KBZPAY_AGENT_TIERS = [
+        [1, 10000, 400, 80, 0],
+        [10001, 25000, 700, 140, 0],
+        [25001, 50000, 1000, 200, 0],
+        [50001, 100000, 1500, 300, 0],
+        [100001, 150000, 2000, 400, 0],
+        [150001, 200000, 2500, 500, 0],
+        [200001, 300000, 3000, 600, 0],
+        [300001, 400000, 4000, 800, 0],
+        [400001, 500000, 4500, 900, 0],
+        [500001, 600000, 5200, 1040, 0],
+        [600001, 700000, 5800, 1160, 0],
+        [700001, 800000, 6500, 1300, 0],
+        [800001, 900000, 7200, 1440, 0],
+        [900001, 1000000, 7800, 1560, 0],
     ];
 
     private const DEMO_OPERATION_PROVIDERS = [
@@ -327,7 +357,7 @@ class DatabaseSeeder extends Seeder
                     'balance' => '7000000.00',
                     'is_agent' => false,
                     'is_fee_account' => false,
-                    'features' => [AccountFeature::Transfer, AccountFeature::SendMoney, AccountFeature::ReceiveMoney],
+                    'features' => [AccountFeature::Transfer],
                 ]);
             }
 
@@ -389,6 +419,41 @@ class DatabaseSeeder extends Seeder
                     'additional_fee_value' => $additionalFeeValue,
                     'is_active' => true,
                 ]);
+            }
+
+            $agentMoneyTiers = match ($companyName) {
+                'Wave Money' => self::WAVE_MONEY_AGENT_TIERS,
+                'KBZPay' => self::KBZPAY_AGENT_TIERS,
+                default => null,
+            };
+
+            if ($agentMoneyTiers !== null) {
+                foreach ($agentMoneyTiers as [$from, $to, $sendFee, $outCommission, $inCommission]) {
+                    ProviderFeeTier::query()->create([
+                        'company_id' => $company->id,
+                        'feature' => AccountFeature::SendMoney->value,
+                        'amount_from' => number_format($from, 2, '.', ''),
+                        'amount_to' => number_format($to, 2, '.', ''),
+                        'fee_type' => 'FIXED',
+                        'fee_value' => number_format($sendFee, 4, '.', ''),
+                        'additional_fee_type' => 'FIXED',
+                        'additional_fee_value' => '0.0000',
+                        'is_active' => true,
+                    ]);
+
+                    AgentCommissionTier::query()->create([
+                        'company_id' => $company->id,
+                        'amount_from' => number_format($from, 2, '.', ''),
+                        'amount_to' => number_format($to, 2, '.', ''),
+                        'commission_type' => 'FIXED',
+                        'out_commission_value' => number_format($outCommission, 4, '.', ''),
+                        'in_commission_value' => number_format($inCommission, 4, '.', ''),
+                        'is_active' => true,
+                    ]);
+                }
+
+                // Receive Money has no customer-fee source table yet, so no ReceiveMoney ProviderFeeTier is seeded.
+                continue;
             }
 
             if ($commissionTier !== null) {

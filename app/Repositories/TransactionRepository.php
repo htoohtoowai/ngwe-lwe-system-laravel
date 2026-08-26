@@ -127,6 +127,63 @@ class TransactionRepository
         return $affected > 0 ? $transaction->refresh() : null;
     }
 
+
+    /**
+     * Complete one pending Send Money transaction after the Cashier counts the
+     * physical cash received at the counter.
+     *
+     * @param  array<int, int>  $receivedDenominations
+     * @param  array<int, int>  $changeDenominations
+     */
+    public function confirmPendingSendMoney(
+        Transaction $transaction,
+        int $cashierId,
+        array $receivedDenominations,
+        array $changeDenominations,
+        string $changeGiven,
+    ): ?Transaction {
+        $affected = Transaction::query()
+            ->where('id', $transaction->id)
+            ->where('transaction_type', 'send_money')
+            ->where('status', 'PENDING_CASHIER_CONFIRM')
+            ->update([
+                'status' => 'COMPLETED',
+                'vault_impact' => 'main_vault_increase',
+                'received_denominations' => $receivedDenominations,
+                'handoff_denominations' => null,
+                'change_denominations' => $changeDenominations !== [] ? $changeDenominations : null,
+                'change_given' => $changeGiven,
+                'confirmed_by' => $cashierId,
+                'confirmed_at' => now(),
+                'cash_approved_by' => $cashierId,
+                'cash_approved_at' => now(),
+            ]);
+
+        return $affected > 0 ? $transaction->refresh() : null;
+    }
+
+    public function cancelPendingSendMoney(Transaction $transaction, int $cashierId, ?string $note = null): ?Transaction
+    {
+        $update = [
+            'status' => 'CANCELLED',
+            'vault_impact' => 'none',
+            'confirmed_by' => $cashierId,
+            'confirmed_at' => now(),
+        ];
+
+        if ($note !== null && $note !== '') {
+            $update['note'] = $note;
+        }
+
+        $affected = Transaction::query()
+            ->where('id', $transaction->id)
+            ->where('transaction_type', 'send_money')
+            ->where('status', 'PENDING_CASHIER_CONFIRM')
+            ->update($update);
+
+        return $affected > 0 ? $transaction->refresh() : null;
+    }
+
     public function approveIfUnapproved(Transaction $transaction, int $cashierId): ?Transaction
     {
         $affected = Transaction::query()

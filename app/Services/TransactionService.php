@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\AccountFeature;
+use App\Enums\AccountType;
 use App\Exceptions\InsufficientBalanceException;
 use App\Exceptions\InsufficientVaultDenominationException;
 use App\Models\Account;
@@ -443,6 +444,252 @@ class TransactionService
                 'fee_cash_received_total' => Money::normalize($cashFeeReceivedTotal),
                 'change_given' => Money::normalize($cashFeeChangeDue),
                 'change_denominations' => $normalizedChangeDenominations,
+            ]);
+
+            return $txn;
+        });
+
+        $transaction->load(['agentCommissionEntries.account', 'agentCommissionEntries.company']);
+        $this->broadcasts->transactionCreated($transaction);
+
+        return $transaction;
+    }
+
+    /**
+     * Send Money is a Cash-In-family operation. The entered amount is always
+     * the recipient principal. The configured provider fee is added
+     * automatically, so customer physical cash due is amount + provider fee.
+     * Agent commission is a digital balance adjustment only.
+     *
+     * @param  array{
+     *   account_id:int,
+     *   amount:float|string,
+     *   customer_name:string,
+     *   customer_phone:string,
+     *   destination_customer_name:string,
+     *   destination_account_number:string,
+     *   note?:string|null
+     * } $data
+     */
+    public function createSendMoney(array $data, User $creator): Transaction
+    {
+        if ($creator->role !== 'teller') {
+            throw new InvalidArgumentException('Only a Teller can create a Send Money entry.');
+        }
+
+        $amount = Money::normalize($data['amount']);
+        $this->guardPositive($amount);
+
+        $account = $this->accounts->find((int) $data['account_id']);
+        if ($account === null || ! $account->is_active) {
+            throw new InvalidArgumentException("Account #{$data['account_id']} not found or inactive.");
+        }
+        $this->guardPayAgentAccount($account, AccountFeature::SendMoney, 'Send Money');
+
+        $fees = $this->calculator->resolveForFeature($account, $amount, AccountFeature::SendMoney);
+        $customerTotal = Money::normalize((float) $amount + (float) $fees['customer_fee']);
+
+        $commissionResult = $this->agentCommissions->resolveForMovement(
+            $account,
+            $amount,
+            -((float) $amount),
+        );
+        $commission = $commissionResult['amount'];
+
+        $transaction = DB::transaction(function () use (
+            $data,
+            $creator,
+            $account,
+            $amount,
+            $fees,
+            $customerTotal,
+            $commission,
+            $commissionResult,
+        ): Transaction {
+            // Provider fee is part of the PAY Agent digital debit. Commission
+            // is credited only to the Agent digital balance and never enters
+            // Cashier/Teller physical cash inventories.
+            $agentDebitTotal = Money::normalize((float) $amount + (float) $fees['customer_fee']);
+            $this->accounts->debitBalance($account->id, $agentDebitTotal);
+            $this->creditAgentCommission($account->id, $commission);
+
+            $balanceChange = Money::normalize(-((float) $agentDebitTotal) + (float) $commission);
+
+            $txn = $this->transactions->create([
+                'transaction_type' => 'send_money',
+                'account_id' => $account->id,
+                'from_company_id' => $account->company_id,
+                'customer_name' => $data['customer_name'],
+                'customer_phone' => $data['customer_phone'],
+                'destination_provider' => $account->company?->name,
+                'destination_customer_name' => $data['destination_customer_name'],
+                'destination_account_number' => $data['destination_account_number'],
+                'amount' => $amount,
+                'customer_fee' => $fees['customer_fee'],
+                'customer_total' => $customerTotal,
+                'additional_fee_amount' => $fees['additional_fee'],
+                'balance_change' => $balanceChange,
+                'currency' => 'MMK',
+                'fee_payment_method' => 'cash',
+                'fee_mode' => null,
+                'note' => $data['note'] ?? null,
+                'created_by' => $creator->id,
+                'status' => 'PENDING_CASHIER_CONFIRM',
+                'vault_impact' => 'none',
+                'change_given' => Money::normalize(0),
+                'received_denominations' => null,
+                'handoff_denominations' => null,
+                'change_denominations' => null,
+            ]);
+
+            $this->recordAgentCommission($txn, $account, $amount, $commissionResult);
+
+            $this->log($creator->id, 'transaction_created', $txn->id, [
+                'type' => 'send_money',
+                'account_id' => $account->id,
+                'amount' => $amount,
+                'customer_fee' => $fees['customer_fee'],
+                'customer_total' => $customerTotal,
+                'balance_delta' => $balanceChange,
+                'commission_amount' => $commission,
+                'status' => 'PENDING_CASHIER_CONFIRM',
+                'vault_impact' => 'none',
+            ]);
+
+            return $txn;
+        });
+
+        $transaction->load(['agentCommissionEntries.account', 'agentCommissionEntries.company']);
+        $this->broadcasts->transactionCreated($transaction);
+
+        return $transaction;
+    }
+
+    /**
+     * Receive Money is a Cash-Out-family operation. The customer always receives
+     * the entered amount in physical cash from Teller Float. There is no customer
+     * fee mode on Receive Money. Principal + IN commission are credited only to
+     * the selected PAY Agent digital balance.
+     *
+     * @param  array{
+     *   account_id:int,
+     *   amount:float|string,
+     *   customer_name:string,
+     *   customer_phone:string,
+     *   source_account_number?:string|null,
+     *   note?:string|null,
+     *   denominations:array<int|string,int|string>
+     * } $data
+     */
+    public function createReceiveMoney(array $data, User $creator): Transaction
+    {
+        if ($creator->role !== 'teller') {
+            throw new InvalidArgumentException('Only a Teller can create a Receive Money transaction.');
+        }
+
+        $amount = Money::normalize($data['amount']);
+        $this->guardPositive($amount);
+
+        $account = $this->accounts->find((int) $data['account_id']);
+        if ($account === null || ! $account->is_active) {
+            throw new InvalidArgumentException("Account #{$data['account_id']} not found or inactive.");
+        }
+        $this->guardPayAgentAccount($account, AccountFeature::ReceiveMoney, 'Receive Money');
+
+        $payoutAmount = $amount;
+        $normalizedPayout = $this->floatValidator->validateFloatOperation(
+            $creator->id,
+            is_array($data['denominations'] ?? null) ? $data['denominations'] : [],
+            $payoutAmount,
+            'receive-money',
+        );
+
+        $commissionResult = $this->agentCommissions->resolveForMovement(
+            $account,
+            $amount,
+            (float) $amount,
+        );
+        $commission = $commissionResult['amount'];
+
+        $transaction = DB::transaction(function () use (
+            $data,
+            $creator,
+            $account,
+            $amount,
+            $payoutAmount,
+            $normalizedPayout,
+            $commission,
+            $commissionResult,
+        ): Transaction {
+            // Principal and commission are both digital Agent movements. The
+            // physical side contains only the exact customer payout amount.
+            $credited = $this->accounts->incrementBalance($account->id, $amount);
+            if ($credited === null) {
+                throw new RuntimeException("Unable to credit Receive Money agent account #{$account->id}.");
+            }
+            $this->creditAgentCommission($account->id, $commission);
+
+            $balanceChange = Money::normalize((float) $amount + (float) $commission);
+
+            $txn = $this->transactions->create([
+                'transaction_type' => 'receive_money',
+                'account_id' => $account->id,
+                'from_company_id' => $account->company_id,
+                'customer_name' => $data['customer_name'],
+                'customer_phone' => $data['customer_phone'],
+                'source_provider' => $account->company?->name,
+                'source_account_number' => $data['source_account_number'] ?? null,
+                'amount' => $amount,
+                'customer_fee' => Money::normalize(0),
+                'customer_total' => $payoutAmount,
+                'additional_fee_amount' => Money::normalize(0),
+                'balance_change' => $balanceChange,
+                'currency' => 'MMK',
+                'fee_payment_method' => null,
+                'fee_mode' => null,
+                'note' => $data['note'] ?? null,
+                'created_by' => $creator->id,
+                'status' => 'COMPLETED',
+                'vault_impact' => 'none',
+                'received_denominations' => null,
+                'change_given' => Money::normalize(0),
+                'change_denominations' => null,
+            ]);
+
+            $this->recordAgentCommission($txn, $account, $amount, $commissionResult);
+
+            $activeFloat = $this->floats->activeForEmployee($creator->id);
+            if ($activeFloat === null) {
+                throw new RuntimeException('Employee float went inactive during Receive Money.');
+            }
+
+            $this->floats->deductDenominations($activeFloat->id, $normalizedPayout);
+            $this->floats->deductBalance($creator->id, $payoutAmount);
+            $this->recordPhysicalCashMovement(
+                entryType: 'vault_out',
+                txnType: 'receive_money',
+                denominations: $normalizedPayout,
+                performedBy: $creator->id,
+                floatId: $activeFloat->id,
+                transactionId: $txn->id,
+                movementType: 'teller_to_customer_receive_money',
+                sourceType: 'teller_float',
+                sourceId: $activeFloat->id,
+                destinationType: 'customer',
+                destinationId: null,
+                affectsMainVault: false,
+                note: "Receive Money payout txn #{$txn->id}",
+            );
+
+            $this->log($creator->id, 'transaction_created', $txn->id, [
+                'type' => 'receive_money',
+                'account_id' => $account->id,
+                'amount' => $amount,
+                'customer_fee' => Money::normalize(0),
+                'customer_payout' => $payoutAmount,
+                'balance_delta' => $balanceChange,
+                'commission_amount' => $commission,
+                'denominations' => $normalizedPayout,
             ]);
 
             return $txn;
@@ -1010,6 +1257,208 @@ class TransactionService
         return $updated;
     }
 
+    /**
+     * Cashier settlement for a pending Send Money entry.
+     *
+     * @param  array<int|string, int|string>  $receivedDenominations
+     * @param  array<int|string, int|string>  $changeDenominations
+     */
+    public function confirmPendingSendMoney(
+        Transaction $transaction,
+        User $cashier,
+        array $receivedDenominations,
+        array $changeDenominations = [],
+    ): Transaction {
+        if ($cashier->role !== 'cashier') {
+            throw new InvalidArgumentException('Only a cashier can confirm Send Money transactions.');
+        }
+
+        if ($transaction->transaction_type !== 'send_money') {
+            throw new InvalidArgumentException('Only Send Money transactions can be confirmed here.');
+        }
+
+        $normalizedReceived = $this->floatValidator->normalizeReceivedDenominations($receivedDenominations);
+        $normalizedChange = $this->floatValidator->normalizeReceivedDenominations($changeDenominations);
+        if ($normalizedReceived === []) {
+            throw new InvalidArgumentException('Count the customer cash before confirming Send Money.');
+        }
+
+        $amountDue = Money::normalize(
+            $transaction->customer_total ?? ((float) ($transaction->amount ?? 0) + (float) ($transaction->customer_fee ?? 0))
+        );
+        $amountDueValue = (float) $amountDue;
+        if (floor($amountDueValue) !== $amountDueValue) {
+            throw new InvalidArgumentException(
+                "Send Money amount due {$amountDue} MMK cannot be settled with whole-note denominations."
+            );
+        }
+
+        $amountDueInt = (int) $amountDueValue;
+        $receivedTotal = Money::denominationTotal($normalizedReceived);
+        if ($receivedTotal < $amountDueInt) {
+            throw new InvalidArgumentException(
+                "Customer cash {$receivedTotal} MMK is less than amount due {$amountDue} MMK."
+            );
+        }
+
+        $changeDue = $receivedTotal - $amountDueInt;
+        $changeTotal = Money::denominationTotal($normalizedChange);
+        if ($changeTotal !== $changeDue) {
+            throw new InvalidArgumentException(
+                "Change denomination total {$changeTotal} MMK does not match change due {$changeDue} MMK."
+            );
+        }
+
+        $available = $this->cashDenominations->getAvailableBalance();
+        foreach ($normalizedChange as $denomination => $quantity) {
+            $availableQuantity = (int) ($available[$denomination] ?? 0)
+                + (int) ($normalizedReceived[$denomination] ?? 0);
+            if ($quantity > $availableQuantity) {
+                throw new InsufficientVaultDenominationException(
+                    (int) $denomination,
+                    $availableQuantity,
+                    (int) $quantity,
+                );
+            }
+        }
+
+        $updated = DB::transaction(function () use (
+            $transaction,
+            $cashier,
+            $normalizedReceived,
+            $normalizedChange,
+            $receivedTotal,
+            $changeDue,
+            $amountDue,
+        ): Transaction {
+            $updated = $this->transactions->confirmPendingSendMoney(
+                $transaction,
+                $cashier->id,
+                $normalizedReceived,
+                $normalizedChange,
+                Money::normalize($changeDue),
+            );
+            if ($updated === null) {
+                throw new RuntimeException("Transaction #{$transaction->id} is not pending cashier confirmation.");
+            }
+
+            $this->recordPhysicalCashMovement(
+                entryType: 'vault_in',
+                txnType: 'send_money_received',
+                denominations: $normalizedReceived,
+                performedBy: $cashier->id,
+                floatId: null,
+                transactionId: $updated->id,
+                movementType: 'customer_to_cashier_send_money',
+                sourceType: 'customer',
+                sourceId: null,
+                destinationType: 'cashier_vault',
+                destinationId: $cashier->id,
+                affectsMainVault: true,
+                note: "Send Money received txn #{$updated->id}",
+                verifiedBy: $cashier->id,
+            );
+
+            if ($normalizedChange !== []) {
+                $this->recordPhysicalCashMovement(
+                    entryType: 'vault_out',
+                    txnType: 'send_money_change',
+                    denominations: $normalizedChange,
+                    performedBy: $cashier->id,
+                    floatId: null,
+                    transactionId: $updated->id,
+                    movementType: 'cashier_to_customer_send_money_change',
+                    sourceType: 'cashier_vault',
+                    sourceId: $cashier->id,
+                    destinationType: 'customer',
+                    destinationId: null,
+                    affectsMainVault: true,
+                    note: "Send Money change returned txn #{$updated->id}",
+                    verifiedBy: $cashier->id,
+                );
+            }
+
+            $this->log($cashier->id, 'send_money_confirmed', $updated->id, [
+                'type' => 'send_money',
+                'account_id' => $updated->account_id,
+                'amount' => Money::normalize($updated->amount),
+                'customer_fee' => Money::normalize($updated->customer_fee ?? 0),
+                'fee_mode' => $updated->fee_mode,
+                'amount_due' => $amountDue,
+                'customer_paid' => Money::normalize($receivedTotal),
+                'change_given' => Money::normalize($changeDue),
+                'net_cash_received' => Money::normalize($receivedTotal - $changeDue),
+                'received_denominations' => $normalizedReceived,
+                'change_denominations' => $normalizedChange,
+                'status' => 'COMPLETED',
+                'vault_impact' => 'main_vault_increase',
+            ]);
+
+            return $updated;
+        });
+
+        $this->broadcasts->balanceUpdated();
+
+        return $updated;
+    }
+
+    public function cancelPendingSendMoney(Transaction $transaction, User $cashier, ?string $note = null): Transaction
+    {
+        if ($cashier->role !== 'cashier') {
+            throw new InvalidArgumentException('Only a cashier can cancel Send Money transactions.');
+        }
+        if ($transaction->transaction_type !== 'send_money') {
+            throw new InvalidArgumentException('Only Send Money transactions can be cancelled here.');
+        }
+        if ($transaction->status !== 'PENDING_CASHIER_CONFIRM') {
+            throw new RuntimeException("Transaction #{$transaction->id} is not pending cashier confirmation.");
+        }
+
+        $updated = DB::transaction(function () use ($transaction, $cashier, $note): Transaction {
+            $earnedCommission = $transaction->earnedAgentCommissionTotal();
+            $agentDebitTotal = Money::normalize(
+                $transaction->customer_total
+                    ?? ((float) ($transaction->amount ?? 0) + (float) ($transaction->customer_fee ?? 0)),
+            );
+            $reversal = Money::normalize((float) $agentDebitTotal - (float) $earnedCommission);
+
+            $refunded = $this->accounts->incrementBalance($transaction->account_id, $reversal);
+            if ($refunded === null) {
+                throw new RuntimeException("Unable to reverse Send Money balance for active account #{$transaction->account_id}.");
+            }
+
+            $updated = $this->transactions->cancelPendingSendMoney($transaction, $cashier->id, $note);
+            if ($updated === null) {
+                throw new RuntimeException("Transaction #{$transaction->id} is no longer pending confirmation.");
+            }
+
+            AgentCommissionEntry::query()
+                ->where('transaction_id', $updated->id)
+                ->where('status', 'EARNED')
+                ->update([
+                    'status' => 'REVERSED',
+                    'reversed_at' => now(),
+                    'reversed_by' => $cashier->id,
+                ]);
+
+            $updated->load(['agentCommissionEntries.account', 'agentCommissionEntries.company']);
+            $this->log($cashier->id, 'send_money_auto_reversed', $updated->id, [
+                'type' => 'send_money',
+                'account_id' => $updated->account_id,
+                'amount' => Money::normalize($updated->amount),
+                'balance_delta' => $reversal,
+                'commission_reversed' => $earnedCommission,
+                'status' => 'CANCELLED',
+            ]);
+
+            return $updated;
+        });
+
+        $this->broadcasts->balanceUpdated();
+
+        return $updated;
+    }
+
     public function cancelPendingCashIn(Transaction $transaction, User $cashier, ?string $note = null): Transaction
     {
         if ($cashier->role !== 'cashier') {
@@ -1206,6 +1655,21 @@ class TransactionService
         );
 
         return $batchId;
+    }
+
+    private function guardPayAgentAccount(Account $account, AccountFeature $feature, string $operation): void
+    {
+        $accountType = $account->account_type instanceof AccountType
+            ? $account->account_type
+            : AccountType::tryFrom(strtoupper((string) $account->account_type));
+
+        if ($accountType !== AccountType::Pay || ! $account->is_agent) {
+            throw new InvalidArgumentException(
+                "{$operation} requires an account with account_type=PAY and is_agent=true."
+            );
+        }
+
+        $this->guardAccountFeature($account, $feature, $operation);
     }
 
     private function guardAccountFeature(Account $account, AccountFeature $feature, string $operation): void

@@ -33,7 +33,7 @@ class RealtimeBroadcastService
 
         $this->dispatchSafely(fn () => NewTransaction::dispatch($payload));
 
-        if ($transaction->transaction_type === 'cash_in' && $transaction->status === 'PENDING_CASHIER_CONFIRM') {
+        if (in_array($transaction->transaction_type, ['cash_in', 'send_money'], true) && $transaction->status === 'PENDING_CASHIER_CONFIRM') {
             $this->dispatchSafely(fn () => CashInPending::dispatch($payload));
         }
 
@@ -81,10 +81,21 @@ class RealtimeBroadcastService
         $transaction = $transaction->refresh()->load(['creator', 'agentCommissionEntries.account', 'agentCommissionEntries.company']);
         $payload = (new TransactionResource($transaction))->resolve();
 
-        if ($transaction->transaction_type !== 'cash_in') {
+        if (! in_array($transaction->transaction_type, ['cash_in', 'send_money'], true)) {
             return $payload;
         }
 
+        if ($transaction->transaction_type === 'send_money') {
+            return array_merge($payload, [
+                'teller' => $transaction->creator?->full_name
+                    ?? $transaction->creator?->username
+                    ?? 'Teller',
+                'creator_role' => $transaction->creator?->role,
+                'settlement_amount' => Money::normalize($transaction->customer_total ?? $transaction->amount ?? 0),
+            ]);
+        }
+
+        // Keep the existing Cash In payload semantics unchanged.
         $settlementDenominations = $transaction->creator?->role === 'teller'
             ? ($transaction->handoff_denominations ?? [])
             : ($transaction->received_denominations ?? []);

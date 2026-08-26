@@ -159,6 +159,16 @@ const NAV: NavItem[] = [
                 labelMm: 'ငွေလဲ',
                 href: '/cashier/teller-entry-history-exchange',
             },
+            {
+                label: 'Send Money',
+                labelMm: 'ငွေလွှဲပို့',
+                href: '/cashier/teller-entry-history-send-money',
+            },
+            {
+                label: 'Receive Money',
+                labelMm: 'ငွေလွှဲထုတ်',
+                href: '/cashier/teller-entry-history-receive-money',
+            },
         ],
     },
     {
@@ -255,6 +265,48 @@ const NAV: NavItem[] = [
                 label: 'History',
                 labelMm: 'ငွေထုတ်မှတ်တမ်း',
                 href: '/transactions/cash-out/history',
+            },
+        ],
+    },
+    {
+        label: 'Send Money',
+        labelMm: 'Agent ငွေလွှဲပို့',
+        href: '/transactions/send-money',
+        icon: 'transfer',
+        roles: ['teller'],
+        section: 'Banking',
+        children: [
+            {
+                label: 'Entry',
+                labelMm: 'ငွေလွှဲပို့စာရင်း',
+                href: '/transactions/send-money',
+                exactOnly: true,
+            },
+            {
+                label: 'History',
+                labelMm: 'ငွေလွှဲပို့မှတ်တမ်း',
+                href: '/transactions/send-money/history',
+            },
+        ],
+    },
+    {
+        label: 'Receive Money',
+        labelMm: 'Agent ငွေလွှဲထုတ်',
+        href: '/transactions/receive-money',
+        icon: 'transfer',
+        roles: ['teller'],
+        section: 'Banking',
+        children: [
+            {
+                label: 'Entry',
+                labelMm: 'ငွေလွှဲထုတ်စာရင်း',
+                href: '/transactions/receive-money',
+                exactOnly: true,
+            },
+            {
+                label: 'History',
+                labelMm: 'ငွေလွှဲထုတ်မှတ်တမ်း',
+                href: '/transactions/receive-money/history',
             },
         ],
     },
@@ -417,6 +469,16 @@ const NAV: NavItem[] = [
                 label: 'Exchange',
                 labelMm: 'ငွေလဲ',
                 href: '/admin/transactions/exchange',
+            },
+            {
+                label: 'Send Money',
+                labelMm: 'Agent ငွေလွှဲပို့',
+                href: '/admin/transactions/send-money',
+            },
+            {
+                label: 'Receive Money',
+                labelMm: 'Agent ငွေလွှဲထုတ်',
+                href: '/admin/transactions/receive-money',
             },
         ],
     },

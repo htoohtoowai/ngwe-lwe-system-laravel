@@ -59,6 +59,8 @@ class AdminReadController extends Controller
             'cash_out' => 'admin/transactions/CashOut',
             'transfer' => 'admin/transactions/Transfer',
             'exchange' => 'admin/transactions/Exchange',
+            'send_money' => 'admin/transactions/SendMoney',
+            'receive_money' => 'admin/transactions/ReceiveMoney',
             default => 'admin/transactions/All',
         };
     }
@@ -66,7 +68,7 @@ class AdminReadController extends Controller
     private function notificationCount(): int
     {
         return Transaction::query()
-            ->where('transaction_type', 'cash_in')
+            ->whereIn('transaction_type', ['cash_in', 'send_money'])
             ->where('status', 'PENDING_CASHIER_CONFIRM')
             ->count();
     }

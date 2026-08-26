@@ -83,6 +83,7 @@ type RecentTransaction = {
 };
 type PendingCashIn = {
     id: number;
+    transaction_type: 'cash_in' | 'send_money' | string;
     amount: string;
     customer_name: string | null;
     teller: string;
@@ -107,6 +108,8 @@ type CashierSection =
     | 'teller-entry-history-cash-out'
     | 'teller-entry-history-transfer'
     | 'teller-entry-history-exchange'
+    | 'teller-entry-history-send-money'
+    | 'teller-entry-history-receive-money'
     | 'main-vault-audit-log';
 type BreadcrumbItem = {
     label: string;
@@ -142,6 +145,8 @@ const sectionLabels: Record<CashierSection, string> = {
     'teller-entry-history-cash-out': 'Cash Out history',
     'teller-entry-history-transfer': 'Transfer history',
     'teller-entry-history-exchange': 'Exchange history',
+    'teller-entry-history-send-money': 'Send Money history',
+    'teller-entry-history-receive-money': 'Receive Money history',
     'main-vault-audit-log': 'Main vault audit log',
 };
 const sectionDescriptions: Record<CashierSection, string> = {
@@ -158,6 +163,9 @@ const sectionDescriptions: Record<CashierSection, string> = {
     'teller-entry-history-cash-out': 'Read-only Teller Cash Out history.',
     'teller-entry-history-transfer': 'Read-only Teller Transfer history.',
     'teller-entry-history-exchange': 'Read-only Teller Exchange history.',
+    'teller-entry-history-send-money': 'Read-only Teller Send Money history.',
+    'teller-entry-history-receive-money':
+        'Read-only Teller Receive Money history.',
     'main-vault-audit-log': 'Every main vault denomination movement.',
 };
 const sectionPaths: Record<CashierSection, string> = {
@@ -171,6 +179,10 @@ const sectionPaths: Record<CashierSection, string> = {
     'teller-entry-history-cash-out': '/cashier/teller-entry-history-cash-out',
     'teller-entry-history-transfer': '/cashier/teller-entry-history-transfer',
     'teller-entry-history-exchange': '/cashier/teller-entry-history-exchange',
+    'teller-entry-history-send-money':
+        '/cashier/teller-entry-history-send-money',
+    'teller-entry-history-receive-money':
+        '/cashier/teller-entry-history-receive-money',
     'main-vault-audit-log': '/cashier/main-vault-audit-log',
 };
 
@@ -329,6 +341,8 @@ const historyTransactionTypes: Partial<Record<CashierSection, string>> = {
     'teller-entry-history-cash-out': 'cash_out',
     'teller-entry-history-transfer': 'transfer',
     'teller-entry-history-exchange': 'exchange',
+    'teller-entry-history-send-money': 'send_money',
+    'teller-entry-history-receive-money': 'receive_money',
 };
 const filteredTransactions = computed(() => {
     const query = transactionSearch.value.trim().toLowerCase();
@@ -455,6 +469,9 @@ const pendingCashInTotal = computed(() =>
             sum + Number(entry.settlement_amount ?? entry.amount ?? 0),
         0,
     ),
+);
+const hasPendingSendMoney = computed(() =>
+    livePendingCashIns.value.some((entry) => entry.transaction_type === 'send_money'),
 );
 const pendingPageCount = computed(() =>
     Math.max(
@@ -604,7 +621,9 @@ function addRealtimePendingCashIn(payload: Record<string, unknown>): void {
 
     if (
         !transaction ||
-        transaction.transaction_type !== 'cash_in' ||
+        !['cash_in', 'send_money'].includes(
+            String(transaction.transaction_type),
+        ) ||
         transaction.status !== 'PENDING_CASHIER_CONFIRM'
     ) {
         return;
@@ -618,6 +637,7 @@ function addRealtimePendingCashIn(payload: Record<string, unknown>): void {
 
     livePendingCashIns.value.unshift({
         id,
+        transaction_type: String(transaction.transaction_type),
         amount: String(transaction.amount ?? 0),
         customer_name: (transaction.customer_name as string | null) ?? null,
         teller: String(transaction.teller ?? 'Teller'),
@@ -819,7 +839,7 @@ function confirmPendingCashIn(pin: string) {
 
     const action = pendingAction.value;
     router.post(
-        `/cashier/transactions/${entry.id}/${action}-cash-in`,
+        `/cashier/transactions/${entry.id}/${action}-${entry.transaction_type === 'send_money' ? 'send-money' : 'cash-in'}`,
         action === 'confirm'
             ? {
                   pin,
@@ -835,10 +855,14 @@ function confirmPendingCashIn(pin: string) {
                 pendingReview.value = null;
                 pendingReceivedDenoms.value = {};
                 pendingChangeDenoms.value = {};
+                const operationLabel =
+                    entry.transaction_type === 'send_money'
+                        ? 'Send Money'
+                        : 'Cash In';
                 notice.value =
                     action === 'confirm'
-                        ? 'Cash In confirmed and posted to the main vault.'
-                        : 'Cash In cancelled and account-side state reversed.';
+                        ? `${operationLabel} confirmed and posted to the main vault.`
+                        : `${operationLabel} cancelled and account-side state reversed.`;
             },
             onError: (errors) => {
                 pendingPinError.value = firstInertiaError(errors);
@@ -1202,7 +1226,11 @@ function closeVaultLogDetails(): void {
                                 {{ t('role.teller', 'Teller') }}
                             </th>
                             <th class="px-4 py-3 text-right">
-                                {{ t('transaction.cashIn', 'Cash In') }}
+                                {{
+                                    hasPendingSendMoney
+                                        ? 'Operation amount'
+                                        : t('transaction.cashIn', 'Cash In')
+                                }}
                             </th>
                             <th class="px-4 py-3 text-right">Amount due</th>
                             <th class="px-4 py-3">Time</th>
@@ -1217,6 +1245,14 @@ function closeVaultLogDetails(): void {
                         >
                             <td class="px-4 py-3 font-black sm:px-6">
                                 #{{ entry.id }}
+                                <span
+                                    class="ml-2 rounded-pill border border-line px-2 py-0.5 text-[10px] font-black text-slate uppercase"
+                                    >{{
+                                        entry.transaction_type === 'send_money'
+                                            ? 'Send Money'
+                                            : 'Cash In'
+                                    }}</span
+                                >
                                 <p class="text-xs font-normal text-slate">
                                     {{ entry.customer_name || 'Customer' }}
                                 </p>
@@ -1648,6 +1684,8 @@ function closeVaultLogDetails(): void {
                         <option value="cash_out">Cash Out</option>
                         <option value="transfer">Transfer</option>
                         <option value="exchange">Exchange</option>
+                        <option value="send_money">Send Money</option>
+                        <option value="receive_money">Receive Money</option>
                     </select>
                     <input
                         v-model="transactionDateFrom"
@@ -2395,7 +2433,12 @@ function closeVaultLogDetails(): void {
                             @click="requestCashInReview('cancel')"
                         >
                             {{
-                                t('transaction.rejectCashIn', 'Reject Cash In')
+                                pendingReview?.transaction_type === 'send_money'
+                                    ? 'Reject Send Money'
+                                    : t(
+                                          'transaction.rejectCashIn',
+                                          'Reject Cash In',
+                                      )
                             }}
                         </button>
                         <button
@@ -2422,8 +2465,15 @@ function closeVaultLogDetails(): void {
             :open="pendingPinOpen"
             :title="
                 pendingAction === 'confirm'
-                    ? t('transaction.confirmPendingCashIn', 'Confirm Cash In')
-                    : t('transaction.rejectCashIn', 'Reject Cash In')
+                    ? pendingReview?.transaction_type === 'send_money'
+                        ? 'Confirm Send Money'
+                        : t(
+                              'transaction.confirmPendingCashIn',
+                              'Confirm Cash In',
+                          )
+                    : pendingReview?.transaction_type === 'send_money'
+                      ? 'Reject Send Money'
+                      : t('transaction.rejectCashIn', 'Reject Cash In')
             "
             :detail="
                 pendingAction === 'confirm'
@@ -2433,7 +2483,9 @@ function closeVaultLogDetails(): void {
                       )
                     : t(
                           'transaction.rejectCashInPinHint',
-                          'Enter your Cashier PIN to reverse this pending Cash In.',
+                          pendingReview?.transaction_type === 'send_money'
+                              ? 'Enter your Cashier PIN to reverse this pending Send Money.'
+                              : 'Enter your Cashier PIN to reverse this pending Cash In.',
                       )
             "
             :busy="pendingPinBusy"

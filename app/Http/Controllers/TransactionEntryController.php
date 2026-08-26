@@ -11,6 +11,8 @@ use App\Exceptions\InsufficientVaultDenominationException;
 use App\Http\Requests\CashInRequest;
 use App\Http\Requests\CashOutRequest;
 use App\Http\Requests\ExchangeRequest;
+use App\Http\Requests\ReceiveMoneyRequest;
+use App\Http\Requests\SendMoneyRequest;
 use App\Http\Requests\TransferRequest;
 use App\Models\Account;
 use App\Models\CashFloatAssignment;
@@ -64,6 +66,26 @@ class TransactionEntryController extends Controller
         return Inertia::render('transactions/CashOut', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, 'cash_out', 'history'));
     }
 
+    public function sendMoney(Request $request): Response
+    {
+        return Inertia::render('transactions/SendMoney', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'send_money'));
+    }
+
+    public function sendMoneyHistory(Request $request): Response
+    {
+        return Inertia::render('transactions/SendMoney', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'send_money', 'history'));
+    }
+
+    public function receiveMoney(Request $request): Response
+    {
+        return Inertia::render('transactions/ReceiveMoney', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, 'receive_money'));
+    }
+
+    public function receiveMoneyHistory(Request $request): Response
+    {
+        return Inertia::render('transactions/ReceiveMoney', $this->props($request, TransactionFeeCalculator::MODE_CASH_OUT, 'receive_money', 'history'));
+    }
+
     public function transfer(Request $request): Response
     {
         return Inertia::render('transactions/Transfer', $this->props($request, TransactionFeeCalculator::MODE_CASH_IN, 'transfer'));
@@ -111,6 +133,16 @@ class TransactionEntryController extends Controller
         return $this->store($request, fn () => $this->transactions->createCashOut($request->validated(), $request->user()));
     }
 
+    public function sendMoneyStore(SendMoneyRequest $request): RedirectResponse
+    {
+        return $this->store($request, fn () => $this->transactions->createSendMoney($request->validated(), $request->user()));
+    }
+
+    public function receiveMoneyStore(ReceiveMoneyRequest $request): RedirectResponse
+    {
+        return $this->store($request, fn () => $this->transactions->createReceiveMoney($request->validated(), $request->user()));
+    }
+
     public function transferStore(TransferRequest $request): RedirectResponse
     {
         return $this->store($request, fn () => $this->transactions->createTransfer($request->validated(), $request->user()));
@@ -131,12 +163,16 @@ class TransactionEntryController extends Controller
         $operation = match ($transactionType) {
             'cash_in' => 'CashIn',
             'cash_out' => 'CashOut',
+            'send_money' => 'SendMoney',
+            'receive_money' => 'ReceiveMoney',
             'transfer' => 'Transfer',
             'exchange' => 'Exchange',
         };
         $feature = match ($transactionType) {
             'cash_in' => AccountFeature::CashIn,
             'cash_out' => AccountFeature::CashOut,
+            'send_money' => AccountFeature::SendMoney,
+            'receive_money' => AccountFeature::ReceiveMoney,
             'transfer' => AccountFeature::Transfer,
             'exchange' => AccountFeature::Exchange,
         };
@@ -157,7 +193,11 @@ class TransactionEntryController extends Controller
                 : ($float ? $this->floats->getDenominationBalance($float->id) : []),
             'accounts' => $transactionType === 'transfer'
                 ? []
-                : $this->accountProps($this->accounts->activeForFeature($feature)),
+                : $this->accountProps(
+                    in_array($transactionType, ['send_money', 'receive_money'], true)
+                        ? $this->accounts->activePayAgentsForFeature($feature)
+                        : $this->accounts->activeForFeature($feature)
+                ),
             'sendMoneyAccounts' => $transactionType === 'transfer'
                 ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::Transfer))
                 : [],
@@ -165,12 +205,23 @@ class TransactionEntryController extends Controller
                 ? $this->accountProps($this->accounts->activeForFeature(AccountFeature::Transfer))
                 : [],
             'feeAccounts' => $this->accountProps($this->accounts->feeAccounts()),
-            'fee' => $transactionType === 'transfer'
-                ? $this->transferFee($request)
-                : $this->fee($request, $feeMode),
+            'fee' => match ($transactionType) {
+                'transfer' => $this->transferFee($request),
+                'send_money' => $this->sendMoneyQuote($request)['customer_fee'],
+                'receive_money' => $this->receiveMoneyQuote($request)['customer_fee'],
+                default => $this->fee($request, $feeMode),
+            },
+            'sendMoneyQuote' => $transactionType === 'send_money'
+                ? $this->sendMoneyQuote($request)
+                : null,
+            'receiveMoneyQuote' => $transactionType === 'receive_money'
+                ? $this->receiveMoneyQuote($request)
+                : null,
             'commission' => match ($transactionType) {
                 'cash_in' => $this->commission($request, -1),
                 'cash_out' => $this->commission($request, 1),
+                'send_money' => $this->commission($request, -1),
+                'receive_money' => $this->commission($request, 1),
                 'exchange' => $this->exchangeCommission($request),
                 default => '0.00',
             },
@@ -209,7 +260,7 @@ class TransactionEntryController extends Controller
     private function pendingCashIns(): int
     {
         return (int) Transaction::query()
-            ->where('transaction_type', 'cash_in')
+            ->whereIn('transaction_type', ['cash_in', 'send_money'])
             ->where('status', 'PENDING_CASHIER_CONFIRM')
             ->count();
     }
@@ -246,6 +297,8 @@ class TransactionEntryController extends Controller
                 'name' => $account->account_name,
                 'number' => $account->account_identifier,
                 'balance' => Money::normalize($account->balance ?? 0),
+                'account_type' => $account->account_type instanceof \BackedEnum ? $account->account_type->value : (string) $account->account_type,
+                'is_agent' => (bool) $account->is_agent,
             ])
             ->values()
             ->all();
@@ -304,6 +357,44 @@ class TransactionEntryController extends Controller
         }
 
         return $this->fees->resolveFees($account, $amount, $mode)['customer_fee'];
+    }
+
+    /** @return array{principal:string,customer_total:string,customer_fee:string,additional_fee:string} */
+    private function sendMoneyQuote(Request $request): array
+    {
+        $amount = $request->float('amount');
+        $account = $this->accounts->find($request->integer('account_id'));
+
+        if ($amount <= 0 || $account === null || ! $account->is_active) {
+            return [
+                'principal' => Money::normalize(max(0, $amount)),
+                'customer_total' => Money::normalize(max(0, $amount)),
+                'customer_fee' => Money::normalize(0),
+                'additional_fee' => Money::normalize(0),
+            ];
+        }
+
+        $fees = $this->fees->resolveForFeature($account, $amount, AccountFeature::SendMoney);
+
+        return [
+            'principal' => Money::normalize($amount),
+            'customer_total' => Money::normalize($amount + (float) $fees['customer_fee']),
+            ...$fees,
+        ];
+    }
+
+    /** @return array{amount:string,payout:string,customer_total:string,customer_fee:string,additional_fee:string} */
+    private function receiveMoneyQuote(Request $request): array
+    {
+        $amount = max(0, $request->float('amount'));
+
+        return [
+            'amount' => Money::normalize($amount),
+            'payout' => Money::normalize($amount),
+            'customer_total' => Money::normalize($amount),
+            'customer_fee' => Money::normalize(0),
+            'additional_fee' => Money::normalize(0),
+        ];
     }
 
     private function transferFee(Request $request): string
@@ -427,6 +518,8 @@ class TransactionEntryController extends Controller
             'amount' => Money::normalize($transaction->amount ?? 0),
             'currency' => $transaction->currency,
             'fee_amount' => Money::normalize($transaction->customer_fee ?? 0),
+            'customer_total' => Money::normalize($transaction->customer_total ?? $transaction->amount ?? 0),
+            'fee_mode' => $transaction->fee_mode,
             'status' => $transaction->status,
             'created_at' => $transaction->created_at?->toDateTimeString() ?? now()->toDateTimeString(),
             'from_label' => $this->transferSourceLabel($transaction) ?? $this->accountLabel($transaction->account_id) ?? 'Counter float',
@@ -511,6 +604,8 @@ class TransactionEntryController extends Controller
                 'transaction_type' => $transaction->transaction_type,
                 'amount' => Money::normalize($transaction->amount ?? 0),
                 'fee_amount' => Money::normalize($transaction->customer_fee ?? 0),
+                'customer_total' => Money::normalize($transaction->customer_total ?? $transaction->amount ?? 0),
+                'fee_mode' => $transaction->fee_mode,
                 'currency' => $transaction->currency,
                 'exchange_rate' => $transaction->exchange_rate,
                 'status' => $transaction->status,

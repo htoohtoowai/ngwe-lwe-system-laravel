@@ -30,6 +30,8 @@ class CashierController extends Controller
         'teller-entry-history-cash-out',
         'teller-entry-history-transfer',
         'teller-entry-history-exchange',
+        'teller-entry-history-send-money',
+        'teller-entry-history-receive-money',
         'main-vault-audit-log',
     ];
 
@@ -44,6 +46,8 @@ class CashierController extends Controller
         'teller-entry-history-cash-out' => 'cashier/history/CashOut',
         'teller-entry-history-transfer' => 'cashier/history/Transfer',
         'teller-entry-history-exchange' => 'cashier/history/Exchange',
+        'teller-entry-history-send-money' => 'cashier/history/SendMoney',
+        'teller-entry-history-receive-money' => 'cashier/history/ReceiveMoney',
         'main-vault-audit-log' => 'cashier/VaultAuditLog',
     ];
 
@@ -162,18 +166,19 @@ class CashierController extends Controller
     {
         return Transaction::query()
             ->with('creator')
-            ->where('transaction_type', 'cash_in')
+            ->whereIn('transaction_type', ['cash_in', 'send_money'])
             ->where('status', 'PENDING_CASHIER_CONFIRM')
             ->latest('created_at')
             ->limit(100)
             ->get()
             ->map(fn (Transaction $transaction): array => [
                 'id' => $transaction->id,
+                'transaction_type' => $transaction->transaction_type,
                 'amount' => Money::normalize($transaction->amount ?? 0),
                 'customer_name' => $transaction->customer_name,
                 'teller' => $transaction->creator?->full_name ?? $transaction->creator?->username ?? 'Teller',
                 'creator_role' => $transaction->creator?->role,
-                'settlement_amount' => $this->cashInSettlementAmount($transaction),
+                'settlement_amount' => $this->cashCollectionSettlementAmount($transaction),
                 'customer_fee' => Money::normalize($transaction->customer_fee ?? 0),
                 'fee_payment_method' => $transaction->fee_payment_method,
                 'received_denominations' => $transaction->received_denominations ?? [],
@@ -193,14 +198,18 @@ class CashierController extends Controller
             ->select('transaction_id');
 
         return Transaction::query()
-            ->where('transaction_type', 'cash_in')
+            ->whereIn('transaction_type', ['cash_in', 'send_money'])
             ->where('status', 'PENDING_CASHIER_CONFIRM')
             ->whereNotIn('id', $readTransactionIds)
             ->count();
     }
 
-    private function cashInSettlementAmount(Transaction $transaction): string
+    private function cashCollectionSettlementAmount(Transaction $transaction): string
     {
+        if ($transaction->transaction_type === 'send_money') {
+            return Money::normalize($transaction->customer_total ?? $transaction->amount ?? 0);
+        }
+
         $cashFee = $transaction->fee_payment_method === 'cash'
             ? (float) ($transaction->customer_fee ?? 0)
             : 0.0;

@@ -74,11 +74,15 @@ class CashierActionController extends Controller
 
     public function markNotificationRead(Request $request, Transaction $transaction): RedirectResponse
     {
+        $invalidMessage = $transaction->transaction_type === 'send_money'
+            ? 'Only pending Send Money notifications can be marked as read.'
+            : 'Only pending Cash In notifications can be marked as read.';
+
         abort_unless(
-            $transaction->transaction_type === 'cash_in'
+            in_array($transaction->transaction_type, ['cash_in', 'send_money'], true)
                 && $transaction->status === 'PENDING_CASHIER_CONFIRM',
             422,
-            'Only pending Cash In notifications can be marked as read.',
+            $invalidMessage,
         );
 
         TransactionNotificationRead::query()->updateOrCreate(
@@ -122,6 +126,43 @@ class CashierActionController extends Controller
         }
 
         return back()->with('success', 'Cash In cancelled.');
+    }
+
+    public function confirmSendMoney(ConfirmPendingCashInRequest $request, Transaction $transaction): RedirectResponse
+    {
+        $data = $request->validated();
+
+        try {
+            $this->pinVerifier->verify($request->user(), $data['pin']);
+            $this->transactions->confirmPendingSendMoney(
+                $transaction,
+                $request->user(),
+                $data['received_denominations'],
+                $data['change_denominations'] ?? [],
+            );
+        } catch (InvalidArgumentException|RuntimeException $exception) {
+            $this->fail($exception, 'form');
+        }
+
+        return back()->with('success', 'Send Money cash confirmed and posted to the main vault.');
+    }
+
+    public function cancelSendMoney(CancelCashInRequest $request, Transaction $transaction): RedirectResponse
+    {
+        $data = $request->validated();
+
+        try {
+            $this->pinVerifier->verify($request->user(), $data['pin']);
+            $this->transactions->cancelPendingSendMoney(
+                $transaction,
+                $request->user(),
+                $data['note'] ?? null,
+            );
+        } catch (InvalidArgumentException|RuntimeException $exception) {
+            $this->fail($exception, 'pin');
+        }
+
+        return back()->with('success', 'Send Money cancelled.');
     }
 
     public function updatePassword(ChangePasswordRequest $request): RedirectResponse
