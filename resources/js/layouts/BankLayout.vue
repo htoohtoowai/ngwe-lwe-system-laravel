@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Link, router, usePage } from '@inertiajs/vue3';
+import AppMenuIcon from '@/components/ui/AppMenuIcon.vue';
 import {
     computed,
     nextTick,
@@ -9,6 +10,7 @@ import {
     watch,
 } from 'vue';
 import { useLocale } from '@/lib/i18n';
+import type { MenuIconName } from '@/lib/menu-icons';
 import {
     normalizeTransactionType,
     transactionTone,
@@ -43,24 +45,7 @@ const { lang, setLang, t } = useLocale();
 const SIDEBAR_STORAGE_KEY = 'ngwe-lwe:bank-sidebar-collapsed';
 
 type NavSection = 'Banking' | 'Office' | 'Admin';
-type NavIcon =
-    | 'overview'
-    | 'counter'
-    | 'cashIn'
-    | 'cashOut'
-    | 'transfer'
-    | 'accounts'
-    | 'exchange'
-    | 'floats'
-    | 'vault'
-    | 'reconcile'
-    | 'reports'
-    | 'companies'
-    | 'services'
-    | 'fees'
-    | 'users'
-    | 'transactions'
-    | 'settings';
+type NavIcon = MenuIconName;
 type NavChild = {
     label: string;
     labelMm?: string;
@@ -98,7 +83,7 @@ const NAV: NavItem[] = [
         label: 'Pending Cash In',
         labelMm: 'စစ်ဆေးရန်ငွေသွင်း',
         href: '/cashier/teller-entry-notifications',
-        icon: 'transactions',
+        icon: 'cashIn',
         roles: ['cashier'],
         section: 'Banking',
     },
@@ -272,7 +257,7 @@ const NAV: NavItem[] = [
         label: 'Send Money',
         labelMm: 'Agent ငွေလွှဲပို့',
         href: '/transactions/send-money',
-        icon: 'transfer',
+        icon: 'sendMoney',
         roles: ['teller'],
         section: 'Banking',
         children: [
@@ -293,7 +278,7 @@ const NAV: NavItem[] = [
         label: 'Receive Money',
         labelMm: 'Agent ငွေလွှဲထုတ်',
         href: '/transactions/receive-money',
-        icon: 'transfer',
+        icon: 'receiveMoney',
         roles: ['teller'],
         section: 'Banking',
         children: [
@@ -531,68 +516,6 @@ const NAV: NavItem[] = [
         ],
     },
 ];
-const iconPaths: Record<NavIcon, string[]> = {
-    overview: [
-        'M4 5.5A1.5 1.5 0 0 1 5.5 4h5v7h-6.5V5.5Z',
-        'M13.5 4h5A1.5 1.5 0 0 1 20 5.5V9h-6.5V4Z',
-        'M4 13.5h6.5V20h-5A1.5 1.5 0 0 1 4 18.5v-5Z',
-        'M13.5 11.5H20v7a1.5 1.5 0 0 1-1.5 1.5h-5v-8.5Z',
-    ],
-    counter: ['M5 6h14v12H5V6Z', 'M8 10h8', 'M8 14h3', 'M14 14h2'],
-    cashIn: ['M12 5v14', 'M7 10l5-5 5 5', 'M5 19h14'],
-    cashOut: ['M12 19V5', 'M7 14l5 5 5-5', 'M5 5h14'],
-    transfer: ['M7 7h11m0 0-3-3m3 3-3 3', 'M17 17H6m0 0 3 3m-3-3 3-3'],
-    accounts: [
-        'M4 7.5A2.5 2.5 0 0 1 6.5 5H19v14H6.5A2.5 2.5 0 0 1 4 16.5v-9Z',
-        'M4 8h13',
-        'M15 13h4',
-    ],
-    exchange: [
-        'M8 7h8m0 0-2-2m2 2-2 2',
-        'M16 17H8m0 0 2 2m-2-2 2-2',
-        'M12 4v16',
-    ],
-    floats: [
-        'M6 8c0-2 2.7-4 6-4s6 2 6 4-2.7 4-6 4-6-2-6-4Z',
-        'M6 8v5c0 2 2.7 4 6 4s6-2 6-4V8',
-        'M6 13v3c0 2 2.7 4 6 4s6-2 6-4v-3',
-    ],
-    vault: [
-        'M5 8h14v11H5V8Z',
-        'M8 8V5h8v3',
-        'M12 12.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z',
-    ],
-    reconcile: ['M5 7h9', 'M5 12h14', 'M5 17h7', 'M16 6l3 3-3 3'],
-    reports: ['M6 4h9l3 3v13H6V4Z', 'M14 4v4h4', 'M9 13h6', 'M9 17h4'],
-    companies: [
-        'M4 21V7a2 2 0 0 1 2-2h7v16',
-        'M13 9h5a2 2 0 0 1 2 2v10',
-        'M8 9h1',
-        'M8 13h1',
-        'M8 17h1',
-        'M16 13h1',
-        'M16 17h1',
-    ],
-    services: ['M4 7h16', 'M4 17h16', 'M8 11V3', 'M16 21v-8'],
-    fees: ['M5 6h14', 'M5 12h14', 'M5 18h8', 'M16 15l3 3-3 3'],
-    users: [
-        'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2',
-        'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
-        'M22 21v-2a4 4 0 0 0-3-3.87',
-        'M16 3.13a4 4 0 0 1 0 7.75',
-    ],
-    transactions: [
-        'M6 3h12v18l-3-2-3 2-3-2-3 2V3Z',
-        'M9 8h6',
-        'M9 12h6',
-        'M9 16h4',
-    ],
-    settings: [
-        'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z',
-        'M19.4 15a1.8 1.8 0 0 0 .36 1.98l-1.8 3.12a1.8 1.8 0 0 0-1.98.2 1.8 1.8 0 0 0-.76 1.67H8.8a1.8 1.8 0 0 0-.76-1.67 1.8 1.8 0 0 0-1.98-.2l-1.8-3.12A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.4-1.27v-3.46A1.8 1.8 0 0 0 4.6 9a1.8 1.8 0 0 0-.36-1.98l1.8-3.12a1.8 1.8 0 0 0 1.98-.2A1.8 1.8 0 0 0 8.8 2h6.4a1.8 1.8 0 0 0 .76 1.67 1.8 1.8 0 0 0 1.98.2l1.8 3.12A1.8 1.8 0 0 0 19.4 9a1.8 1.8 0 0 0 1.4 1.27v3.46A1.8 1.8 0 0 0 19.4 15Z',
-    ],
-};
-
 const nav = computed(() => NAV.filter((n) => n.roles.includes(props.role)));
 const currentPath = computed(() => page.url.split('?')[0] ?? page.url);
 const homeHref = computed(() => {
@@ -639,33 +562,6 @@ const navChildLabel = (item: NavChild) =>
 const childTransactionType = (child: NavChild): string | null =>
     normalizeTransactionType(child.href);
 
-const navIconTones: Record<NavIcon, string> = {
-    overview: 'bg-sky-600 text-white',
-    counter: 'bg-violet-600 text-white',
-    cashIn: transactionTone('cash_in').sidebarIcon,
-    cashOut: transactionTone('cash_out').sidebarIcon,
-    transfer: transactionTone('transfer').sidebarIcon,
-    accounts: 'bg-indigo-600 text-white',
-    exchange: transactionTone('exchange').sidebarIcon,
-    floats: 'bg-cyan-600 text-white',
-    vault: 'bg-emerald-600 text-white',
-    reconcile: 'bg-teal-600 text-white',
-    reports: 'bg-blue-600 text-white',
-    companies: 'bg-purple-600 text-white',
-    services: 'bg-orange-600 text-white',
-    fees: 'bg-pink-600 text-white',
-    users: 'bg-fuchsia-600 text-white',
-    transactions: 'bg-slate-600 text-white',
-    settings: 'bg-zinc-600 text-white',
-};
-
-const navIconTone = (item: NavItem): string => {
-    if (item.label === 'Pending Cash In') {
-        return transactionTone('cash_in').sidebarIcon;
-    }
-
-    return navIconTones[item.icon];
-};
 const roleLabel = computed(() => t(`role.${props.role}`));
 const displayName = computed(
     () => user.value?.full_name ?? user.value?.username ?? roleLabel.value,
@@ -1104,34 +1000,7 @@ function signOut() {
                                                     : 'bg-transparent'
                                             "
                                         />
-                                        <span
-                                            class="grid size-9 shrink-0 place-items-center rounded-xl transition"
-                                            :class="[
-                                                navIconTone(item),
-                                                isNavItemActive(item)
-                                                    ? 'shadow-sm ring-1 ring-white/20'
-                                                    : 'opacity-90 group-hover:opacity-100',
-                                            ]"
-                                        >
-                                            <svg
-                                                class="size-4"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                stroke-width="1.9"
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                                aria-hidden="true"
-                                            >
-                                                <path
-                                                    v-for="path in iconPaths[
-                                                        item.icon
-                                                    ]"
-                                                    :key="path"
-                                                    :d="path"
-                                                />
-                                            </svg>
-                                        </span>
+                                        <AppMenuIcon :name="item.icon" size="menu" />
                                         <span
                                             v-if="!sidebarCollapsed"
                                             class="min-w-0 flex-1 truncate"
@@ -1293,34 +1162,7 @@ function signOut() {
                                                     : 'text-white/65 hover:bg-white/10 hover:text-white'
                                             "
                                         >
-                                            <span
-                                                class="grid size-8 shrink-0 place-items-center rounded-lg transition"
-                                                :class="[
-                                                    navIconTone(item),
-                                                    isNavItemActive(item)
-                                                        ? 'shadow-sm ring-1 ring-white/20'
-                                                        : 'opacity-90',
-                                                ]"
-                                            >
-                                                <svg
-                                                    class="size-4"
-                                                    viewBox="0 0 24 24"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    stroke-width="1.9"
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                    aria-hidden="true"
-                                                >
-                                                    <path
-                                                        v-for="path in iconPaths[
-                                                            item.icon
-                                                        ]"
-                                                        :key="path"
-                                                        :d="path"
-                                                    />
-                                                </svg>
-                                            </span>
+                                            <AppMenuIcon :name="item.icon" size="menu" />
                                             {{ navLabel(item) }}
                                         </Link>
                                         <ul
