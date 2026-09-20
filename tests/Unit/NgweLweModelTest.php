@@ -39,6 +39,7 @@ class NgweLweModelTest extends TestCase
         $this->assertNotContains('payout_commission_amount', (new Transaction)->getFillable());
         $this->assertContains('feature', (new ProviderFeeTier)->getFillable());
         $this->assertContains('fee_value', (new ProviderFeeTier)->getFillable());
+        $this->assertContains('feature', (new AgentCommissionTier)->getFillable());
         $this->assertContains('out_commission_value', (new AgentCommissionTier)->getFillable());
         $this->assertContains('in_commission_value', (new AgentCommissionTier)->getFillable());
         $this->assertContains('transaction_id', (new AgentCommissionEntry)->getFillable());

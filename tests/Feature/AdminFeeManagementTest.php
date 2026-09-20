@@ -47,6 +47,7 @@ class AdminFeeManagementTest extends TestCase
 
         $this->actingAs($admin)->post('/admin/fees/agent', [
             'company_id' => $company->id,
+            'feature' => 'send_money',
             'amount_from' => 10001,
             'amount_to' => 25000,
             'commission_type' => 'FIXED',
@@ -58,7 +59,7 @@ class AdminFeeManagementTest extends TestCase
         $tier = AgentCommissionTier::query()->firstOrFail();
         $this->assertSame('123.0000', $tier->out_commission_value);
         $this->assertSame('117.0000', $tier->in_commission_value);
-        $this->assertArrayNotHasKey('feature', $tier->getAttributes());
+        $this->assertSame('send_money', $tier->feature);
     }
 
     public function test_bank_provider_cannot_have_agent_commission_tier(): void
@@ -68,6 +69,7 @@ class AdminFeeManagementTest extends TestCase
 
         $this->actingAs($admin)->from('/admin/fees/agent/create')->post('/admin/fees/agent', [
             'company_id' => $bank->id,
+            'feature' => 'cash_out',
             'amount_from' => 1,
             'amount_to' => 10000,
             'commission_type' => 'FIXED',

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\AccountFeature;
 use App\Enums\CalculationType;
 use App\Models\Company;
 use Illuminate\Foundation\Http\FormRequest;
@@ -19,6 +20,10 @@ class AgentCommissionTierRequest extends FormRequest
     {
         if (is_string($this->input('commission_type'))) {
             $this->merge(['commission_type' => strtoupper(trim($this->input('commission_type')))]);
+        }
+
+        if (is_string($this->input('feature'))) {
+            $this->merge(['feature' => strtolower(trim($this->input('feature')))]);
         }
     }
 
@@ -44,6 +49,12 @@ class AgentCommissionTierRequest extends FormRequest
     {
         return [
             'company_id' => ['required', 'integer', 'exists:companies,id'],
+            'feature' => ['required', Rule::in([
+                AccountFeature::CashIn->value,
+                AccountFeature::CashOut->value,
+                AccountFeature::SendMoney->value,
+                AccountFeature::ReceiveMoney->value,
+            ])],
             'amount_from' => ['required', 'numeric', 'min:0'],
             'amount_to' => ['required', 'numeric', 'gt:amount_from'],
             'commission_type' => ['required', Rule::enum(CalculationType::class)],

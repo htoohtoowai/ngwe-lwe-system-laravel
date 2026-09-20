@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\AccountFeature;
 use App\Enums\AccountType;
 use App\Enums\AgentCommissionDirection;
 use App\Models\Account;
@@ -22,7 +23,12 @@ class AgentCommissionCalculator
      *
      * @return array{amount:string,tier:?AgentCommissionTier,direction:?AgentCommissionDirection,configured_value:string}
      */
-    public function resolveForMovement(Account $account, float|string $amount, float|string $principalDelta): array
+    public function resolveForMovement(
+        Account $account,
+        float|string $amount,
+        float|string $principalDelta,
+        AccountFeature|string $transactionFeature,
+    ): array
     {
         $accountType = $account->account_type instanceof AccountType
             ? $account->account_type
@@ -41,7 +47,16 @@ class AgentCommissionCalculator
             ? AgentCommissionDirection::In
             : AgentCommissionDirection::Out;
 
-        $tier = $this->tiers->findForCompany((int) $account->company_id, $amount);
+        $commissionFeature = $this->resolveCommissionFeature($transactionFeature, $delta);
+        if ($commissionFeature === null) {
+            return $this->zero($direction);
+        }
+
+        $tier = $this->tiers->findForCompanyFeature(
+            (int) $account->company_id,
+            $commissionFeature,
+            $amount,
+        );
         if ($tier === null) {
             return $this->zero($direction);
         }
@@ -62,6 +77,27 @@ class AgentCommissionCalculator
             'direction' => $direction,
             'configured_value' => (string) $configuredValue,
         ];
+    }
+
+    private function resolveCommissionFeature(
+        AccountFeature|string $transactionFeature,
+        float $principalDelta,
+    ): ?AccountFeature {
+        $feature = $transactionFeature instanceof AccountFeature
+            ? $transactionFeature
+            : AccountFeature::tryFrom((string) $transactionFeature);
+
+        if ($feature === null) {
+            return null;
+        }
+
+        return match ($feature) {
+            AccountFeature::SendMoney => AccountFeature::SendMoney,
+            AccountFeature::ReceiveMoney => AccountFeature::ReceiveMoney,
+            default => $principalDelta > 0
+                ? AccountFeature::CashIn
+                : AccountFeature::CashOut,
+        };
     }
 
     /** @return array{amount:string,tier:null,direction:?AgentCommissionDirection,configured_value:string} */

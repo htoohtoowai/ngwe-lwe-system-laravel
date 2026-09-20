@@ -101,7 +101,7 @@ class NgweLweSchemaTest extends TestCase
             );
         }
 
-        $this->assertFalse(Schema::hasColumn('agent_commission_tiers', 'feature'));
+        $this->assertTrue(Schema::hasColumn('agent_commission_tiers', 'feature'));
         $this->assertFalse(Schema::hasColumn('agent_commission_entries', 'feature'));
 
         foreach (['account_id', 'feature'] as $column) {

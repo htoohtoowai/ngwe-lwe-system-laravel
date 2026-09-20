@@ -454,15 +454,23 @@ class DatabaseSeeder extends Seeder
                         'is_active' => true,
                     ]);
 
-                    AgentCommissionTier::query()->create([
-                        'company_id' => $company->id,
-                        'amount_from' => number_format($from, 2, '.', ''),
-                        'amount_to' => number_format($to, 2, '.', ''),
-                        'commission_type' => 'FIXED',
-                        'out_commission_value' => number_format($outCommission, 4, '.', ''),
-                        'in_commission_value' => number_format($inCommission, 4, '.', ''),
-                        'is_active' => true,
-                    ]);
+                    foreach ([
+                        AccountFeature::CashIn,
+                        AccountFeature::CashOut,
+                        AccountFeature::SendMoney,
+                        AccountFeature::ReceiveMoney,
+                    ] as $commissionFeature) {
+                        AgentCommissionTier::query()->create([
+                            'company_id' => $company->id,
+                            'feature' => $commissionFeature->value,
+                            'amount_from' => number_format($from, 2, '.', ''),
+                            'amount_to' => number_format($to, 2, '.', ''),
+                            'commission_type' => 'FIXED',
+                            'out_commission_value' => number_format($outCommission, 4, '.', ''),
+                            'in_commission_value' => number_format($inCommission, 4, '.', ''),
+                            'is_active' => true,
+                        ]);
+                    }
                 }
 
                 // Receive Money has no customer-fee source table yet, so no ReceiveMoney ProviderFeeTier is seeded.
@@ -471,15 +479,23 @@ class DatabaseSeeder extends Seeder
 
             if ($commissionTier !== null) {
                 [$commissionType, $outCommissionValue, $inCommissionValue] = $commissionTier;
-                AgentCommissionTier::query()->create([
-                    'company_id' => $company->id,
-                    'amount_from' => '1.00',
-                    'amount_to' => '999999999.00',
-                    'commission_type' => $commissionType,
-                    'out_commission_value' => $outCommissionValue,
-                    'in_commission_value' => $inCommissionValue,
-                    'is_active' => true,
-                ]);
+                foreach ([
+                    AccountFeature::CashIn,
+                    AccountFeature::CashOut,
+                    AccountFeature::SendMoney,
+                    AccountFeature::ReceiveMoney,
+                ] as $commissionFeature) {
+                    AgentCommissionTier::query()->create([
+                        'company_id' => $company->id,
+                        'feature' => $commissionFeature->value,
+                        'amount_from' => '1.00',
+                        'amount_to' => '999999999.00',
+                        'commission_type' => $commissionType,
+                        'out_commission_value' => $outCommissionValue,
+                        'in_commission_value' => $inCommissionValue,
+                        'is_active' => true,
+                    ]);
+                }
             }
         }
     }
@@ -504,8 +520,8 @@ class DatabaseSeeder extends Seeder
     }
 
     /**
-     * Bank accounts never earn agent commission. Pay providers can define one
-     * amount-range row containing OUT / Send and IN / Receive values.
+     * Bank accounts never earn agent commission. Pay providers can define
+     * feature-based amount ranges for Cash In, Cash Out, Send Money and Receive Money.
      *
      * @return array{string,string,string}|null
      */

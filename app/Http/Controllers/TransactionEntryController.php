@@ -218,10 +218,10 @@ class TransactionEntryController extends Controller
                 ? $this->receiveMoneyQuote($request)
                 : null,
             'commission' => match ($transactionType) {
-                'cash_in' => $this->commission($request, -1),
-                'cash_out' => $this->commission($request, 1),
-                'send_money' => $this->commission($request, -1),
-                'receive_money' => $this->commission($request, 1),
+                'cash_in' => $this->commission($request, -1, AccountFeature::CashIn),
+                'cash_out' => $this->commission($request, 1, AccountFeature::CashOut),
+                'send_money' => $this->commission($request, -1, AccountFeature::SendMoney),
+                'receive_money' => $this->commission($request, 1, AccountFeature::ReceiveMoney),
                 'exchange' => $this->exchangeCommission($request),
                 default => '0.00',
             },
@@ -419,7 +419,11 @@ class TransactionEntryController extends Controller
             ->resolve((int) $fromCompanyId, (int) $toCompanyId, $amount)['customer_fee'];
     }
 
-    private function commission(Request $request, int $movementSign): string
+    private function commission(
+        Request $request,
+        int $movementSign,
+        AccountFeature $transactionFeature,
+    ): string
     {
         $amount = $request->float('amount');
         $accountId = $request->integer('account_id');
@@ -434,7 +438,12 @@ class TransactionEntryController extends Controller
             return '0.00';
         }
 
-        return $this->agentCommissions->resolveForMovement($account, $amount, $amount * $movementSign)['amount'];
+        return $this->agentCommissions->resolveForMovement(
+            $account,
+            $amount,
+            $amount * $movementSign,
+            $transactionFeature,
+        )['amount'];
     }
 
     private function commissionForAccount(Request $request, string $accountKey, int $movementSign): string
@@ -449,7 +458,12 @@ class TransactionEntryController extends Controller
         $account = $this->accounts->find($accountId);
 
         return $account !== null && $account->is_active
-            ? $this->agentCommissions->resolveForMovement($account, $amount, $amount * $movementSign)['amount']
+            ? $this->agentCommissions->resolveForMovement(
+                $account,
+                $amount,
+                $amount * $movementSign,
+                AccountFeature::Transfer,
+            )['amount']
             : '0.00';
     }
 
@@ -472,6 +486,7 @@ class TransactionEntryController extends Controller
             $account,
             $mmkAmount,
             $mmkAmount,
+            AccountFeature::Exchange,
         )['amount'];
     }
 

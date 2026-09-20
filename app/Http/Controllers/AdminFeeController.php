@@ -210,6 +210,7 @@ class AdminFeeController extends Controller
             'agentCommissionTiers' => AgentCommissionTier::query()
                 ->with('company:id,name')
                 ->orderBy('company_id')
+                ->orderBy('feature')
                 ->orderBy('amount_from')
                 ->get()
                 ->map(fn (AgentCommissionTier $tier): array => $this->agentTierData($tier))
@@ -248,6 +249,7 @@ class AdminFeeController extends Controller
             'id' => $tier->id,
             'company_id' => $tier->company_id,
             'company_name' => $tier->company?->name,
+            'feature' => $tier->feature,
             'amount_from' => $tier->amount_from,
             'amount_to' => $tier->amount_to,
             'commission_type' => $tier->commission_type->value,
@@ -293,6 +295,7 @@ class AdminFeeController extends Controller
 
         $overlap = AgentCommissionTier::query()
             ->where('company_id', $data['company_id'])
+            ->where('feature', $data['feature'])
             ->where('is_active', true)
             ->when($ignoreId, fn ($query) => $query->where('id', '!=', $ignoreId))
             ->where('amount_from', '<=', $data['amount_to'])
@@ -301,7 +304,7 @@ class AdminFeeController extends Controller
 
         if ($overlap) {
             throw ValidationException::withMessages([
-                'amount_from' => 'This provider already has an active agent commission tier overlapping the amount range.',
+                'amount_from' => 'This provider and feature already has an active agent commission tier overlapping the amount range.',
             ]);
         }
     }

@@ -74,6 +74,7 @@ timestamps
 ```text
 id
 company_id
+feature: cash_in | cash_out | send_money | receive_money
 amount_from DECIMAL(18,2)
 amount_to DECIMAL(18,2)
 commission_type: FIXED | PERCENTAGE
@@ -83,7 +84,7 @@ is_active
 timestamps
 ```
 
-No feature column. One amount-range row stores both provider OUT/Send and IN/Receive values.
+Agent commission tiers are feature-based. `send_money` and `receive_money` use their dedicated feature rows. For other transaction types, money entering an agent account uses the `cash_in` commission feature and money leaving an agent account uses the `cash_out` commission feature.
 
 ## agent_commission_entries
 
@@ -151,9 +152,11 @@ Actual earnings live in `agent_commission_entries`. API/UI convenience totals ar
 ## Agent commission rule
 
 ```text
-PAY + is_agent=true + principal delta < 0 -> OUT value
-PAY + is_agent=true + principal delta > 0 -> IN value
-BANK or non-agent                           -> 0
+PAY + is_agent=true + send_money                    -> send_money feature / OUT value
+PAY + is_agent=true + receive_money                 -> receive_money feature / IN value
+PAY + is_agent=true + other + principal delta > 0  -> cash_in feature / IN value
+PAY + is_agent=true + other + principal delta < 0  -> cash_out feature / OUT value
+BANK or non-agent                                   -> 0
 ```
 
 The principal delta is determined before the earned commission is added.

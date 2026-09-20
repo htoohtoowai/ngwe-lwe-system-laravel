@@ -44,8 +44,8 @@ See `docs/inertia-web-architecture.md` and `docs/final-database-design.md`.
 - Account feature assignments control where an account may be used: Cash In, Cash Out, Send Money, Receive Money, Transfer, Exchange.
 - Customer fees use feature-based `provider_fee_tiers`.
 - Transfer customer fees use route-based `transfer_fee_tiers`.
-- Agent commission tiers are feature-independent and use one amount range with OUT and IN commission values.
-- Agent commission applies only to eligible PAY agent accounts and is selected from the principal balance movement direction.
+- Agent commission tiers use four features: Cash In, Cash Out, Send Money, and Receive Money.
+- Agent commission applies only to eligible PAY agent accounts. Send/Receive Money use their dedicated feature; other transactions use Cash In when principal enters the agent account and Cash Out when principal leaves it.
 - Fee/commission calculation types support `FIXED` and `PERCENTAGE`, with configured values down to `0.0001`.
 - Actual earned/reversed commissions are recorded in `agent_commission_entries`.
 

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'company_id',
+    'feature',
     'amount_from',
     'amount_to',
     'commission_type',

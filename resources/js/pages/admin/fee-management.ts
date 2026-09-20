@@ -38,6 +38,7 @@ export type AgentCommissionTier = {
     id: number;
     company_id: number;
     company_name: string;
+    feature: string;
     amount_from: string;
     amount_to: string;
     commission_type: CalculationType;

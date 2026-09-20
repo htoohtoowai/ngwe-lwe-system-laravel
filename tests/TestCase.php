@@ -111,15 +111,23 @@ abstract class TestCase extends BaseTestCase
             }
         }
 
-        AgentCommissionTier::query()->create([
-            'company_id' => $companyId,
-            'amount_from' => 1,
-            'amount_to' => 999_999_999_999,
-            'commission_type' => 'FIXED',
-            'out_commission_value' => $outCommission,
-            'in_commission_value' => $inCommission,
-            'is_active' => true,
-        ]);
+        foreach ([
+            AccountFeature::CashIn,
+            AccountFeature::CashOut,
+            AccountFeature::SendMoney,
+            AccountFeature::ReceiveMoney,
+        ] as $feature) {
+            AgentCommissionTier::query()->create([
+                'company_id' => $companyId,
+                'feature' => $feature->value,
+                'amount_from' => 1,
+                'amount_to' => 999_999_999_999,
+                'commission_type' => 'FIXED',
+                'out_commission_value' => $outCommission,
+                'in_commission_value' => $inCommission,
+                'is_active' => true,
+            ]);
+        }
 
         return $cashInTier;
     }

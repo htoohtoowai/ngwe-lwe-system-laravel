@@ -46,6 +46,7 @@ const providerForm = ref({
 
 const agentForm = ref({
     company_id: firstAgentCompany,
+    feature: firstFeature,
     amount_from: 1,
     amount_to: 999_999_999,
     commission_type: 'FIXED' as CalculationType,
@@ -96,6 +97,7 @@ watch(
             const tier = currentAgent.value;
             agentForm.value = {
                 company_id: tier.company_id,
+                feature: tier.feature,
                 amount_from: Number(tier.amount_from),
                 amount_to: Number(tier.amount_to),
                 commission_type: tier.commission_type,
@@ -182,6 +184,7 @@ const filteredProviderTiers = computed(() => filterRows(props.providerTiers, (ti
 
 const filteredAgentTiers = computed(() => filterRows(props.agentCommissionTiers, (tier) => [
     tier.company_name,
+    featureLabel(tier.feature),
     tier.amount_from,
     tier.amount_to,
 ]));
@@ -264,7 +267,7 @@ const heading = computed(() => activeKind.value === 'provider'
 const description = computed(() => activeKind.value === 'provider'
     ? 'Customer fee rules by provider, feature and amount range.'
     : activeKind.value === 'agent'
-      ? 'Agent earning rules by provider and amount range. OUT / Send and IN / Receive values share one calculation type.'
+      ? 'Agent earning rules by provider, feature and amount range. Send/Receive use dedicated features; other transactions use Cash In or Cash Out based on account money movement.'
       : 'Customer fee rules by source provider, destination provider and amount range.');
 
 const createHref = computed(() => `/admin/fees/${activeKind.value}/create`);
@@ -349,8 +352,9 @@ const deleteDescription = computed(() => 'This tier will be permanently deleted.
                 <Link :href="listHref" class="bank-button bank-button-secondary px-4 py-2">Cancel</Link>
             </div>
 
-            <div class="mt-4 grid gap-3 md:grid-cols-3">
+            <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 <label><span class="bank-label bank-required">Provider</span><select v-model.number="agentForm.company_id" class="bank-input min-h-13" required><option v-for="company in agentCompanies" :key="company.id" :value="company.id" :disabled="!company.is_active">{{ company.name }}{{ company.is_active ? '' : ' (Inactive)' }}</option></select></label>
+                <label><span class="bank-label bank-required">Feature</span><select v-model="agentForm.feature" class="bank-input min-h-13" required><option v-for="feature in features" :key="feature.value" :value="feature.value">{{ feature.label }}</option></select></label>
                 <label><span class="bank-label bank-required">Amount from</span><input v-model.number="agentForm.amount_from" type="number" min="0" step="0.01" class="bank-input money min-h-13" required /></label>
                 <label><span class="bank-label bank-required">Amount to</span><input v-model.number="agentForm.amount_to" type="number" min="0.01" step="0.01" class="bank-input money min-h-13" required /></label>
             </div>
@@ -405,7 +409,7 @@ const deleteDescription = computed(() => 'This tier will be permanently deleted.
                     <p class="text-xs font-black text-brand uppercase">Tier detail</p>
                     <h2 class="mt-1 text-xl font-black">
                         <template v-if="activeKind === 'provider' && currentProvider">{{ currentProvider.company_name }} / {{ featureLabel(currentProvider.feature) }}</template>
-                        <template v-else-if="activeKind === 'agent' && currentAgent">{{ currentAgent.company_name }}</template>
+                        <template v-else-if="activeKind === 'agent' && currentAgent">{{ currentAgent.company_name }} / {{ featureLabel(currentAgent.feature) }}</template>
                         <template v-else-if="currentTransfer">{{ currentTransfer.company_from_name }} → {{ currentTransfer.company_to_name }}</template>
                     </h2>
                 </div>
@@ -424,7 +428,7 @@ const deleteDescription = computed(() => 'This tier will be permanently deleted.
             </div>
 
             <div v-else-if="activeKind === 'agent'" class="mt-3 overflow-x-auto rounded-field border border-line bg-card">
-                <table class="w-full min-w-[900px] text-left text-sm"><thead class="bg-mist text-xs text-slate uppercase"><tr><th class="px-4 py-3">Provider</th><th class="px-4 py-3">Amount range</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">OUT / Send</th><th class="px-4 py-3">IN / Receive</th><th class="px-4 py-3 text-right">Actions</th></tr></thead><tbody class="divide-y divide-line"><tr v-for="tier in filteredAgentTiers" :key="tier.id"><td class="px-4 py-3"><p class="font-black">{{ tier.company_name }}</p><p class="text-xs font-bold text-slate">{{ tier.is_active ? 'Active' : 'Inactive' }}</p></td><td class="money px-4 py-3">{{ money(tier.amount_from) }} - {{ money(tier.amount_to) }}</td><td class="px-4 py-3 font-bold">{{ tier.commission_type }}</td><td class="money px-4 py-3">{{ money(tier.out_commission_value) }} {{ unit(tier.commission_type) }}</td><td class="money px-4 py-3">{{ money(tier.in_commission_value) }} {{ unit(tier.commission_type) }}</td><td class="px-4 py-3"><div class="flex justify-end gap-2"><Link :href="`/admin/fees/agent/${tier.id}/edit`" class="bank-button bank-button-secondary min-h-9 px-3 py-1.5">Edit</Link><button type="button" class="bank-button bank-button-danger min-h-9 px-3 py-1.5" @click="requestDelete('agent', tier)">Delete</button></div></td></tr></tbody></table>
+                <table class="w-full min-w-[900px] text-left text-sm"><thead class="bg-mist text-xs text-slate uppercase"><tr><th class="px-4 py-3">Provider / Feature</th><th class="px-4 py-3">Amount range</th><th class="px-4 py-3">Type</th><th class="px-4 py-3">OUT / Send</th><th class="px-4 py-3">IN / Receive</th><th class="px-4 py-3 text-right">Actions</th></tr></thead><tbody class="divide-y divide-line"><tr v-for="tier in filteredAgentTiers" :key="tier.id"><td class="px-4 py-3"><p class="font-black">{{ tier.company_name }}</p><p class="text-xs font-bold text-slate">{{ featureLabel(tier.feature) }} · {{ tier.is_active ? 'Active' : 'Inactive' }}</p></td><td class="money px-4 py-3">{{ money(tier.amount_from) }} - {{ money(tier.amount_to) }}</td><td class="px-4 py-3 font-bold">{{ tier.commission_type }}</td><td class="money px-4 py-3">{{ money(tier.out_commission_value) }} {{ unit(tier.commission_type) }}</td><td class="money px-4 py-3">{{ money(tier.in_commission_value) }} {{ unit(tier.commission_type) }}</td><td class="px-4 py-3"><div class="flex justify-end gap-2"><Link :href="`/admin/fees/agent/${tier.id}/edit`" class="bank-button bank-button-secondary min-h-9 px-3 py-1.5">Edit</Link><button type="button" class="bank-button bank-button-danger min-h-9 px-3 py-1.5" @click="requestDelete('agent', tier)">Delete</button></div></td></tr></tbody></table>
             </div>
 
             <div v-else class="mt-3 overflow-x-auto rounded-field border border-line bg-card">

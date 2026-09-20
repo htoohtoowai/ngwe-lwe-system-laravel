@@ -30,7 +30,8 @@ class DatabaseSeederTest extends TestCase
 
         $tier = AgentCommissionTier::query()->first();
         $this->assertNotNull($tier);
-        $this->assertArrayNotHasKey('feature', $tier->getAttributes());
+        $this->assertArrayHasKey('feature', $tier->getAttributes());
+        $this->assertContains($tier->feature, ['cash_in', 'cash_out', 'send_money', 'receive_money']);
         $this->assertArrayHasKey('out_commission_value', $tier->getAttributes());
         $this->assertArrayHasKey('in_commission_value', $tier->getAttributes());
 
@@ -44,6 +45,7 @@ class DatabaseSeederTest extends TestCase
 
         $wave100k = AgentCommissionTier::query()
             ->where('company_id', $wave->id)
+            ->where('feature', 'send_money')
             ->where('amount_from', '50001.00')
             ->where('amount_to', '100000.00')
             ->firstOrFail();
@@ -52,6 +54,7 @@ class DatabaseSeederTest extends TestCase
 
         $kbz100k = AgentCommissionTier::query()
             ->where('company_id', $kbz->id)
+            ->where('feature', 'send_money')
             ->where('amount_from', '50001.00')
             ->where('amount_to', '100000.00')
             ->firstOrFail();

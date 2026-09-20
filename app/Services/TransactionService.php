@@ -77,7 +77,7 @@ class TransactionService
         $this->guardAccountFeature($account, AccountFeature::CashIn, 'Cash In');
 
         $fees = $this->calculator->resolveFees($account, $amount, TransactionFeeCalculator::MODE_CASH_IN);
-        $commissionResult = $this->agentCommissions->resolveForMovement($account, $amount, -((float) $amount));
+        $commissionResult = $this->agentCommissions->resolveForMovement($account, $amount, -((float) $amount), AccountFeature::CashIn);
         $commission = $commissionResult['amount'];
         $feePayment = $this->resolveFeePayment($data, $account, $fees['customer_fee']);
         $fromCompanyId = $account->company_id;
@@ -187,7 +187,7 @@ class TransactionService
         $this->guardAccountFeature($account, AccountFeature::CashOut, 'Cash Out');
 
         $fees = $this->calculator->resolveFees($account, $amount, TransactionFeeCalculator::MODE_CASH_OUT);
-        $commissionResult = $this->agentCommissions->resolveForMovement($account, $amount, (float) $amount);
+        $commissionResult = $this->agentCommissions->resolveForMovement($account, $amount, (float) $amount, AccountFeature::CashOut);
         $commission = $commissionResult['amount'];
         $feePayment = $this->resolveCashOutFeePayment($data, $account, $fees['customer_fee']);
         $fromCompanyId = $account->company_id;
@@ -493,6 +493,7 @@ class TransactionService
             $account,
             $amount,
             -((float) $amount),
+            AccountFeature::SendMoney,
         );
         $commission = $commissionResult['amount'];
 
@@ -608,6 +609,7 @@ class TransactionService
             $account,
             $amount,
             (float) $amount,
+            AccountFeature::ReceiveMoney,
         );
         $commission = $commissionResult['amount'];
 
@@ -745,8 +747,8 @@ class TransactionService
         $sourceCompanyId = $this->companyId($customerTransfer ? $toAccount : $fromAccount);
         $destinationCompanyId = $this->companyId($customerTransfer ? $fromAccount : $toAccount);
         $fees = $this->transferFees->resolve($sourceCompanyId, $destinationCompanyId, $amount);
-        $receiveCommissionResult = $this->agentCommissions->resolveForMovement($toAccount, $amount, (float) $amount);
-        $payoutCommissionResult = $this->agentCommissions->resolveForMovement($fromAccount, $amount, -((float) $amount));
+        $receiveCommissionResult = $this->agentCommissions->resolveForMovement($toAccount, $amount, (float) $amount, AccountFeature::Transfer);
+        $payoutCommissionResult = $this->agentCommissions->resolveForMovement($fromAccount, $amount, -((float) $amount), AccountFeature::Transfer);
         $receiveCommission = $receiveCommissionResult['amount'];
         $payoutCommission = $payoutCommissionResult['amount'];
         $feePayment = $customerTransfer
@@ -952,12 +954,13 @@ class TransactionService
             'customer_fee' => Money::normalize(0),
             'additional_fee' => Money::normalize(0),
         ];
-        // The selected exchange account is credited by the MMK settlement amount,
-        // so agent commission uses the account's IN value regardless of the transaction feature.
+        // Exchange is not a dedicated agent-commission feature. The selected
+        // account is credited, so the movement maps to the Cash In commission tier.
         $commissionResult = $this->agentCommissions->resolveForMovement(
             $account,
             $mmkSettlementAmount,
             (float) $mmkSettlementAmount,
+            AccountFeature::Exchange,
         );
         $commission = $commissionResult['amount'];
         $feePayment = $this->resolveFeePayment($data, $account, $fees['customer_fee']);
