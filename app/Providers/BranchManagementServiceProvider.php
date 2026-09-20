@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Http\Controllers\AdminBranchController;
+use App\Http\Controllers\AdminBranchReportController;
 use App\Http\Controllers\AdminBranchUserController;
 use App\Models\Branch;
 use App\Models\Transaction;
@@ -27,33 +28,79 @@ class BranchManagementServiceProvider extends ServiceProvider
                     return $this->renderBranchPage($request, 'create');
                 })->name('admin.branches.create');
 
-                Route::get('/branches/{branch}/edit', function (Request $request, Branch $branch) {
-                    return $this->renderBranchPage($request, 'edit', $branch->id);
+                Route::get('/branches/{branch}/edit', function (
+                    Request $request,
+                    Branch $branch,
+                ) {
+                    return $this->renderBranchPage(
+                        $request,
+                        'edit',
+                        $branch->id,
+                    );
                 })->name('admin.branches.edit');
 
-                Route::get('/branches/{branch}', function (Request $request, Branch $branch) {
-                    return $this->renderBranchPage($request, 'detail', $branch->id);
+                Route::get('/branches/{branch}', function (
+                    Request $request,
+                    Branch $branch,
+                ) {
+                    return $this->renderBranchPage(
+                        $request,
+                        'detail',
+                        $branch->id,
+                    );
                 })->name('admin.branches.show');
 
                 Route::prefix('branch-management')->group(function (): void {
-                    Route::post('/branches', [AdminBranchController::class, 'store'])
-                        ->name('admin.branch-management.branches.store');
-                    Route::patch('/branches/{branch}', [AdminBranchController::class, 'update'])
-                        ->name('admin.branch-management.branches.update');
-                    Route::patch('/branches/{branch}/status', [AdminBranchController::class, 'toggle'])
-                        ->name('admin.branch-management.branches.status');
+                    Route::post(
+                        '/branches',
+                        [AdminBranchController::class, 'store'],
+                    )->name('admin.branch-management.branches.store');
 
-                    Route::post('/users', [AdminBranchUserController::class, 'store'])
-                        ->name('admin.branch-management.users.store');
-                    Route::patch('/users/{user}', [AdminBranchUserController::class, 'update'])
-                        ->name('admin.branch-management.users.update');
-                    Route::patch('/users/{user}/status', [AdminBranchUserController::class, 'toggle'])
-                        ->name('admin.branch-management.users.status');
-                    Route::post('/users/{user}/reset-password', [AdminBranchUserController::class, 'resetPassword'])
-                        ->name('admin.branch-management.users.reset-password');
-                    Route::post('/users/{user}/pin', [AdminBranchUserController::class, 'setPin'])
-                        ->name('admin.branch-management.users.pin');
+                    Route::patch(
+                        '/branches/{branch}',
+                        [AdminBranchController::class, 'update'],
+                    )->name('admin.branch-management.branches.update');
+
+                    Route::patch(
+                        '/branches/{branch}/status',
+                        [AdminBranchController::class, 'toggle'],
+                    )->name('admin.branch-management.branches.status');
+
+                    Route::post(
+                        '/users',
+                        [AdminBranchUserController::class, 'store'],
+                    )->name('admin.branch-management.users.store');
+
+                    Route::patch(
+                        '/users/{user}',
+                        [AdminBranchUserController::class, 'update'],
+                    )->name('admin.branch-management.users.update');
+
+                    Route::patch(
+                        '/users/{user}/status',
+                        [AdminBranchUserController::class, 'toggle'],
+                    )->name('admin.branch-management.users.status');
+
+                    Route::post(
+                        '/users/{user}/reset-password',
+                        [AdminBranchUserController::class, 'resetPassword'],
+                    )->name('admin.branch-management.users.reset-password');
+
+                    Route::post(
+                        '/users/{user}/pin',
+                        [AdminBranchUserController::class, 'setPin'],
+                    )->name('admin.branch-management.users.pin');
                 });
+
+                Route::prefix('branch-reporting')
+                    ->name('admin.branch-reporting.')
+                    ->controller(AdminBranchReportController::class)
+                    ->group(function (): void {
+                        Route::post('/close-day', 'closeDay')
+                            ->name('close-day');
+                        Route::get('/daily.pdf', 'pdf')
+                            ->name('daily.pdf');
+                    });
             });
     }
 

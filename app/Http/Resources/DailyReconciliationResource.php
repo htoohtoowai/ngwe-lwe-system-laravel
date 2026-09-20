@@ -11,6 +11,11 @@ class DailyReconciliationResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'branch_id' => $this->branch_id !== null
+                ? (int) $this->branch_id
+                : null,
+            'branch_code' => $this->branch?->code,
+            'branch_name' => $this->branch?->name,
             'recon_date' => $this->recon_date?->toDateString(),
             'closed_by' => $this->closed_by,
             'closed_by_name' => $this->closer?->full_name,
@@ -27,11 +32,26 @@ class DailyReconciliationResource extends JsonResource
             'employee_floats_total' => $this->employee_floats_total,
             'total_cash' => $this->total_cash,
             'total_digital' => $this->total_digital,
+            'shared_global_digital_total' => $this->sharedGlobalDigitalTotal(),
             'grand_total' => $this->grand_total,
             'employee_snapshots' => $this->employee_snapshots,
             'account_snapshots' => $this->account_snapshots,
             'vault_snapshot' => $this->vault_snapshot,
             'notes' => $this->notes,
         ];
+    }
+
+    private function sharedGlobalDigitalTotal(): string
+    {
+        $total = collect($this->account_snapshots ?? [])
+            ->filter(
+                fn ($account): bool => is_array($account)
+                    && ($account['scope'] ?? null) === 'shared',
+            )
+            ->sum(
+                fn ($account): float => (float) ($account['balance'] ?? 0),
+            );
+
+        return number_format((float) $total, 2, '.', '');
     }
 }

@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\BranchResource;
 use App\Http\Resources\DailyReconciliationResource;
 use App\Http\Resources\TransactionResource;
+use App\Models\Branch;
 use App\Models\Transaction;
 use App\Repositories\TransactionRepository;
 use App\Repositories\VaultTransactionRepository;
@@ -43,11 +45,19 @@ class AdminReadController extends Controller
 
     public function reconciliations(Request $request): Response
     {
+        $branches = Branch::query()->orderBy('name')->get();
+        $selectedBranch = $this->selectedBranch($request, $branches);
+
         return Inertia::render('admin/reports/Reconciliations', [
             'role' => $request->user()?->role,
             'notificationCount' => $this->notificationCount(),
+            'branches' => BranchResource::collection($branches)->resolve($request),
+            'selectedBranchId' => (int) $selectedBranch->id,
             'rows' => DailyReconciliationResource::collection(
-                $this->reports->reconciliations(perPage: 100)
+                $this->reports->reconciliations(
+                    perPage: 100,
+                    branchId: (int) $selectedBranch->id,
+                )
             )->resolve($request),
         ]);
     }
@@ -71,5 +81,22 @@ class AdminReadController extends Controller
             ->whereIn('transaction_type', ['cash_in', 'send_money'])
             ->where('status', 'PENDING_CASHIER_CONFIRM')
             ->count();
+    }
+
+    private function selectedBranch(Request $request, $branches): Branch
+    {
+        $requestedId = $request->integer('branch_id');
+
+        if ($requestedId > 0) {
+            $selected = $branches->firstWhere('id', $requestedId);
+
+            if ($selected instanceof Branch) {
+                return $selected;
+            }
+        }
+
+        $main = $branches->firstWhere('code', Branch::MAIN_CODE);
+
+        return $main instanceof Branch ? $main : Branch::main();
     }
 }

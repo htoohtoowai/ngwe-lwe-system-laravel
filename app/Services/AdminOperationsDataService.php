@@ -43,21 +43,80 @@ class AdminOperationsDataService
             ->orderBy('name')
             ->get();
 
+        $selectedBranch = $this->selectedBranch($request, $branches);
+
         return [
-            'dailySummary' => $this->reports->summary((string) $request->query('report_date', now()->toDateString())),
+            'selectedBranchId' => (int) $selectedBranch->id,
+            'selectedBranch' => (new BranchResource($selectedBranch))->resolve($request),
+            'dailySummary' => $this->reports->summary(
+                (string) $request->query('report_date', now()->toDateString()),
+                (int) $selectedBranch->id,
+            ),
             'branches' => BranchResource::collection($branches)->resolve($request),
-            'companies' => CompanyResource::collection(Company::query()->orderBy('name')->get())->resolve($request),
-            'accounts' => AccountResource::collection(Account::query()->with(['company', 'featureAssignments', 'branch'])->orderBy('account_name')->get())->resolve($request),
-            'users' => UserResource::collection(User::query()->with('branch')->orderBy('full_name')->get())->resolve($request),
-            'transactions' => TransactionResource::collection(Transaction::query()->with(['agentCommissionEntries.account', 'agentCommissionEntries.company'])->latest()->limit(200)->get())->resolve($request),
+            'companies' => CompanyResource::collection(
+                Company::query()->orderBy('name')->get()
+            )->resolve($request),
+            'accounts' => AccountResource::collection(
+                Account::query()
+                    ->with(['company', 'featureAssignments', 'branch'])
+                    ->orderBy('account_name')
+                    ->get()
+            )->resolve($request),
+            'users' => UserResource::collection(
+                User::query()->with('branch')->orderBy('full_name')->get()
+            )->resolve($request),
+            'transactions' => TransactionResource::collection(
+                Transaction::query()
+                    ->with([
+                        'agentCommissionEntries.account',
+                        'agentCommissionEntries.company',
+                    ])
+                    ->latest()
+                    ->limit(200)
+                    ->get()
+            )->resolve($request),
             // System activity audit is paginated on /admin/audit-logs.
-            // Do not hydrate hundreds of immutable log rows on every admin page.
             'activityLogs' => [],
-            'cashFloats' => CashFloatResource::collection($this->floats->list())->resolve($request),
+            'cashFloats' => CashFloatResource::collection(
+                $this->floats->list()
+            )->resolve($request),
             'vaultInventory' => $this->vaultInventory->inventory(),
-            'exchangeRates' => ExchangeRateResource::collection(ExchangeRate::query()->with('company')->latest('id')->limit(50)->get())->resolve($request),
-            'providerFeeTiers' => ProviderFeeTierResource::collection(ProviderFeeTier::query()->with('company')->orderBy('amount_from')->get())->resolve($request),
-            'agentCommissionTiers' => AgentCommissionTierResource::collection(AgentCommissionTier::query()->with('company')->orderBy('amount_from')->get())->resolve($request),
+            'exchangeRates' => ExchangeRateResource::collection(
+                ExchangeRate::query()
+                    ->with('company')
+                    ->latest('id')
+                    ->limit(50)
+                    ->get()
+            )->resolve($request),
+            'providerFeeTiers' => ProviderFeeTierResource::collection(
+                ProviderFeeTier::query()
+                    ->with('company')
+                    ->orderBy('amount_from')
+                    ->get()
+            )->resolve($request),
+            'agentCommissionTiers' => AgentCommissionTierResource::collection(
+                AgentCommissionTier::query()
+                    ->with('company')
+                    ->orderBy('amount_from')
+                    ->get()
+            )->resolve($request),
         ];
+    }
+
+    private function selectedBranch(Request $request, $branches): Branch
+    {
+        $requestedId = $request->integer('branch_id');
+
+        if ($requestedId > 0) {
+            $selected = $branches->firstWhere('id', $requestedId);
+
+            if ($selected instanceof Branch) {
+                return $selected;
+            }
+        }
+
+        $main = $branches->firstWhere('code', Branch::MAIN_CODE);
+
+        return $main instanceof Branch ? $main : Branch::main();
     }
 }

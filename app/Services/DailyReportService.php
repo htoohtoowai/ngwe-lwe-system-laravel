@@ -4,42 +4,108 @@ namespace App\Services;
 
 use App\Models\Account;
 use App\Models\AgentCommissionEntry;
+use App\Models\Branch;
+use App\Models\CashFloatAssignment;
 use App\Models\DailyReconciliationLog;
 use App\Models\DailySummary;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Repositories\CashDenominationRepository;
-use App\Repositories\CashFloatRepository;
 use App\Support\Money;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class DailyReportService
 {
     public function __construct(
         private readonly CashDenominationRepository $vault,
-        private readonly CashFloatRepository $floats,
     ) {}
 
     /**
+     * Build one branch's daily operating summary.
+     *
+     * Shared/global provider accounts remain visible in the account snapshot,
+     * but their balance is reported separately and is not included in the
+     * branch-owned digital or grand total. This prevents the same shared
+     * digital balance from being counted once for every branch.
+     *
      * @return array<string, mixed>
      */
-    public function summary(string $date): array
+    public function summary(string $date, ?int $branchId = null): array
     {
+        $branch = $this->resolveBranch($branchId);
+
         return [
-            ...$this->transactionSummary($date),
-            ...$this->cashSnapshot(),
+            'branch_id' => (int) $branch->id,
+            'branch_code' => $branch->code,
+            'branch_name' => $branch->name,
+            ...$this->transactionSummary($date, (int) $branch->id),
+            ...$this->cashSnapshot((int) $branch->id),
         ];
     }
 
-    public function close(User $closedBy, string $date, ?string $notes = null): DailyReconciliationLog
-    {
-        $summary = $this->summary($date);
+    public function close(
+        User $closedBy,
+        string $date,
+        ?string $notes = null,
+        ?int $branchId = null,
+    ): DailyReconciliationLog {
+        $branch = $this->resolveBranch($branchId);
 
-        return DB::transaction(function () use ($closedBy, $date, $notes, $summary): DailyReconciliationLog {
-            DailySummary::query()->updateOrCreate(
-                ['summary_date' => $date],
-                [
+        if (! $branch->is_active) {
+            throw ValidationException::withMessages([
+                'branch_id' => 'Only an active branch can be closed.',
+            ]);
+        }
+
+        if (
+            $closedBy->role !== 'admin'
+            && (int) $closedBy->branch_id !== (int) $branch->id
+        ) {
+            throw ValidationException::withMessages([
+                'branch_id' => 'You cannot close another branch.',
+            ]);
+        }
+
+        $summary = $this->summary($date, (int) $branch->id);
+
+        return DB::transaction(function () use (
+            $closedBy,
+            $date,
+            $notes,
+            $summary,
+            $branch,
+        ): DailyReconciliationLog {
+            DailySummary::query()
+                ->withoutGlobalScopes()
+                ->updateOrCreate(
+                    [
+                        'branch_id' => (int) $branch->id,
+                        'summary_date' => $date,
+                    ],
+                    [
+                        'total_cash_in' => $summary['total_cash_in'],
+                        'total_cash_out' => $summary['total_cash_out'],
+                        'total_send_money' => $summary['total_send_money'],
+                        'total_receive_money' => $summary['total_receive_money'],
+                        'total_transfer' => $summary['total_transfer'],
+                        'total_exchange' => $summary['total_exchange'],
+                        'total_commission' => $summary['total_commission'],
+                        'total_customer_fees' => $summary['total_customer_fees'],
+                        'total_profit' => $summary['total_profit'],
+                        'transaction_count' => $summary['transaction_count'],
+                    ],
+                );
+
+            return DailyReconciliationLog::query()
+                ->withoutGlobalScopes()
+                ->create([
+                    'branch_id' => (int) $branch->id,
+                    'recon_date' => $date,
+                    'closed_by' => $closedBy->id,
                     'total_cash_in' => $summary['total_cash_in'],
                     'total_cash_out' => $summary['total_cash_out'],
                     'total_send_money' => $summary['total_send_money'],
@@ -48,32 +114,17 @@ class DailyReportService
                     'total_exchange' => $summary['total_exchange'],
                     'total_commission' => $summary['total_commission'],
                     'total_customer_fees' => $summary['total_customer_fees'],
-                    'total_profit' => $summary['total_profit'],
-                    'transaction_count' => $summary['transaction_count'],
-                ],
-            );
-
-            return DailyReconciliationLog::query()->create([
-                'recon_date' => $date,
-                'closed_by' => $closedBy->id,
-                'total_cash_in' => $summary['total_cash_in'],
-                'total_cash_out' => $summary['total_cash_out'],
-                'total_send_money' => $summary['total_send_money'],
-                'total_receive_money' => $summary['total_receive_money'],
-                'total_transfer' => $summary['total_transfer'],
-                'total_exchange' => $summary['total_exchange'],
-                'total_commission' => $summary['total_commission'],
-                'total_customer_fees' => $summary['total_customer_fees'],
-                'main_vault_total' => $summary['main_vault_total'],
-                'employee_floats_total' => $summary['employee_floats_total'],
-                'total_cash' => $summary['total_cash'],
-                'total_digital' => $summary['total_digital'],
-                'grand_total' => $summary['grand_total'],
-                'employee_snapshots' => $summary['employee_snapshots'],
-                'account_snapshots' => $summary['account_snapshots'],
-                'vault_snapshot' => $summary['vault_snapshot'],
-                'notes' => $notes,
-            ])->load('closer');
+                    'main_vault_total' => $summary['main_vault_total'],
+                    'employee_floats_total' => $summary['employee_floats_total'],
+                    'total_cash' => $summary['total_cash'],
+                    'total_digital' => $summary['total_digital'],
+                    'grand_total' => $summary['grand_total'],
+                    'employee_snapshots' => $summary['employee_snapshots'],
+                    'account_snapshots' => $summary['account_snapshots'],
+                    'vault_snapshot' => $summary['vault_snapshot'],
+                    'notes' => $notes,
+                ])
+                ->load(['closer', 'branch']);
         });
     }
 
@@ -81,11 +132,23 @@ class DailyReportService
         ?string $dateFrom = null,
         ?string $dateTo = null,
         int $perPage = 30,
+        ?int $branchId = null,
     ): LengthAwarePaginator {
         return DailyReconciliationLog::query()
-            ->with('closer')
-            ->when($dateFrom !== null, fn ($query) => $query->whereDate('recon_date', '>=', $dateFrom))
-            ->when($dateTo !== null, fn ($query) => $query->whereDate('recon_date', '<=', $dateTo))
+            ->withoutGlobalScopes()
+            ->with(['closer', 'branch'])
+            ->when(
+                $branchId !== null,
+                fn (Builder $query) => $query->where('branch_id', $branchId),
+            )
+            ->when(
+                $dateFrom !== null,
+                fn (Builder $query) => $query->whereDate('recon_date', '>=', $dateFrom),
+            )
+            ->when(
+                $dateTo !== null,
+                fn (Builder $query) => $query->whereDate('recon_date', '<=', $dateTo),
+            )
             ->orderByDesc('closed_at')
             ->paginate(max(1, min($perPage, 100)));
     }
@@ -93,19 +156,32 @@ class DailyReportService
     /**
      * @return array<string, mixed>
      */
-    private function transactionSummary(string $date): array
+    private function transactionSummary(string $date, int $branchId): array
     {
         $completed = Transaction::query()
+            ->withoutGlobalScopes()
+            ->where('branch_id', $branchId)
             ->whereDate('created_at', $date)
             ->where('status', 'COMPLETED');
 
-        $totalCommission = Money::normalize(AgentCommissionEntry::query()
-            ->where('status', 'EARNED')
-            ->whereHas('transaction', fn ($query) => $query
-                ->whereDate('created_at', $date)
-                ->where('status', 'COMPLETED'))
-            ->sum('commission_amount'));
-        $totalCustomerFees = $this->sumMoney(clone $completed, 'customer_fee');
+        $totalCommission = Money::normalize(
+            AgentCommissionEntry::query()
+                ->where('status', 'EARNED')
+                ->whereHas(
+                    'transaction',
+                    fn (Builder $query) => $query
+                        ->withoutGlobalScopes()
+                        ->where('branch_id', $branchId)
+                        ->whereDate('created_at', $date)
+                        ->where('status', 'COMPLETED'),
+                )
+                ->sum('commission_amount'),
+        );
+
+        $totalCustomerFees = $this->sumMoney(
+            clone $completed,
+            'customer_fee',
+        );
 
         return [
             'summary_date' => $date,
@@ -117,14 +193,20 @@ class DailyReportService
             'total_exchange' => $this->sumType($completed, 'exchange'),
             'total_commission' => $totalCommission,
             'total_customer_fees' => $totalCustomerFees,
-            'total_profit' => Money::normalize((float) $totalCommission + (float) $totalCustomerFees),
+            'total_profit' => Money::normalize(
+                (float) $totalCommission + (float) $totalCustomerFees,
+            ),
             'transaction_count' => (clone $completed)->count(),
             'pending_cash_in_count' => Transaction::query()
+                ->withoutGlobalScopes()
+                ->where('branch_id', $branchId)
                 ->whereDate('created_at', $date)
                 ->where('transaction_type', 'cash_in')
                 ->where('status', 'PENDING_CASHIER_CONFIRM')
                 ->count(),
             'pending_send_money_count' => Transaction::query()
+                ->withoutGlobalScopes()
+                ->where('branch_id', $branchId)
                 ->whereDate('created_at', $date)
                 ->where('transaction_type', 'send_money')
                 ->where('status', 'PENDING_CASHIER_CONFIRM')
@@ -135,24 +217,42 @@ class DailyReportService
     /**
      * @return array<string, mixed>
      */
-    private function cashSnapshot(): array
+    private function cashSnapshot(int $branchId): array
     {
-        $vault = $this->vault->getVaultBalance();
+        $vault = $this->vault->getVaultBalance($branchId);
         $mainVaultTotal = $this->denominationTotal($vault);
-        [$employeeSnapshots, $employeeFloatTotal] = $this->employeeSnapshots();
-        $accountSnapshots = $this->accountSnapshots();
-        $totalDigital = Money::normalize(array_sum(array_map(
-            fn (array $account): float => (float) $account['balance'],
+        [$employeeSnapshots, $employeeFloatTotal] = $this->employeeSnapshots($branchId);
+        $accountSnapshots = $this->accountSnapshots($branchId);
+
+        $branchDigitalTotal = array_sum(array_map(
+            fn (array $account): float => $account['scope'] === 'branch'
+                ? (float) $account['balance']
+                : 0.0,
             $accountSnapshots,
-        )));
+        ));
+
+        $sharedDigitalTotal = array_sum(array_map(
+            fn (array $account): float => $account['scope'] === 'shared'
+                ? (float) $account['balance']
+                : 0.0,
+            $accountSnapshots,
+        ));
+
         $totalCash = Money::normalize($mainVaultTotal + $employeeFloatTotal);
+        $totalDigital = Money::normalize($branchDigitalTotal);
 
         return [
             'main_vault_total' => Money::normalize($mainVaultTotal),
             'employee_floats_total' => Money::normalize($employeeFloatTotal),
             'total_cash' => $totalCash,
             'total_digital' => $totalDigital,
-            'grand_total' => Money::normalize((float) $totalCash + (float) $totalDigital),
+            'shared_global_digital_total' => Money::normalize($sharedDigitalTotal),
+            'visible_digital_total' => Money::normalize(
+                $branchDigitalTotal + $sharedDigitalTotal,
+            ),
+            'grand_total' => Money::normalize(
+                (float) $totalCash + (float) $totalDigital,
+            ),
             'vault_snapshot' => [
                 'denominations' => $this->stringifyKeys($vault),
                 'denomination_rows' => $this->denominationRows($vault),
@@ -165,7 +265,10 @@ class DailyReportService
 
     private function sumType($query, string $type): string
     {
-        return $this->sumMoney((clone $query)->where('transaction_type', $type), 'amount');
+        return $this->sumMoney(
+            (clone $query)->where('transaction_type', $type),
+            'amount',
+        );
     }
 
     private function sumMoney($query, string $column): string
@@ -176,10 +279,18 @@ class DailyReportService
     /**
      * @return array{0: array<int, array<string, mixed>>, 1: int}
      */
-    private function employeeSnapshots(): array
+    private function employeeSnapshots(int $branchId): array
     {
-        $openFloats = $this->floats->list(status: null)
-            ->whereIn('status', ['PENDING_RECEIPT', 'ACTIVE', 'PENDING_RECONCILIATION']);
+        $openFloats = CashFloatAssignment::query()
+            ->withoutGlobalScopes()
+            ->with(['denominations', 'employee', 'issuer'])
+            ->where('branch_id', $branchId)
+            ->whereIn(
+                'status',
+                ['PENDING_RECEIPT', 'ACTIVE', 'PENDING_RECONCILIATION'],
+            )
+            ->orderByDesc('created_at')
+            ->get();
 
         $snapshots = [];
         $employeeTotal = 0;
@@ -189,8 +300,10 @@ class DailyReportService
             foreach (Money::supportedDenominations() as $denom) {
                 $denominations[(string) $denom] = 0;
             }
+
             foreach ($float->denominations as $line) {
-                $denominations[(string) $line->denomination] = (int) $line->quantity;
+                $denominations[(string) $line->denomination] =
+                    (int) $line->quantity;
             }
 
             $denomTotal = $this->denominationTotal($denominations);
@@ -198,10 +311,13 @@ class DailyReportService
 
             $snapshots[] = [
                 'float_id' => $float->id,
+                'branch_id' => (int) $float->branch_id,
                 'employee_id' => $float->employee_id,
                 'employee_name' => $float->employee?->full_name,
                 'status' => $float->status,
-                'current_balance' => Money::normalize($float->current_balance ?? 0),
+                'current_balance' => Money::normalize(
+                    $float->current_balance ?? 0,
+                ),
                 'total_amount' => Money::normalize($float->total_amount),
                 'denomination_balance' => $denominations,
                 'denom_total' => Money::normalize($denomTotal),
@@ -212,17 +328,29 @@ class DailyReportService
     }
 
     /**
+     * Branch-owned accounts and genuinely shared/global accounts are both
+     * snapshotted. The `scope` field makes the ownership explicit.
+     *
      * @return array<int, array<string, mixed>>
      */
-    private function accountSnapshots(): array
+    private function accountSnapshots(int $branchId): array
     {
         return Account::query()
+            ->withoutGlobalScopes()
             ->with(['company', 'featureAssignments'])
             ->where('is_active', true)
+            ->where(function (Builder $query) use ($branchId): void {
+                $query->whereNull('branch_id')
+                    ->orWhere('branch_id', $branchId);
+            })
             ->orderBy('account_name')
             ->get()
             ->map(fn (Account $account): array => [
                 'id' => $account->id,
+                'branch_id' => $account->branch_id !== null
+                    ? (int) $account->branch_id
+                    : null,
+                'scope' => $account->branch_id === null ? 'shared' : 'branch',
                 'account_name' => $account->account_name,
                 'company' => $account->company?->name,
                 'balance' => Money::normalize($account->balance),
@@ -232,12 +360,28 @@ class DailyReportService
             ->all();
     }
 
+    private function resolveBranch(?int $branchId): Branch
+    {
+        if ($branchId !== null) {
+            return Branch::query()->findOrFail($branchId);
+        }
+
+        $user = Auth::user();
+
+        if ($user?->branch_id !== null) {
+            return Branch::query()->findOrFail((int) $user->branch_id);
+        }
+
+        return Branch::main();
+    }
+
     /**
      * @param  array<int|string, int>  $balance
      */
     private function denominationTotal(array $balance): int
     {
         $total = 0;
+
         foreach ($balance as $denom => $qty) {
             $total += ((int) $denom) * ((int) $qty);
         }
@@ -252,6 +396,7 @@ class DailyReportService
     private function stringifyKeys(array $balance): array
     {
         $out = [];
+
         foreach ($balance as $denom => $qty) {
             $out[(string) $denom] = (int) $qty;
         }
@@ -266,6 +411,7 @@ class DailyReportService
     private function denominationRows(array $balance): array
     {
         $rows = [];
+
         foreach ($balance as $denom => $qty) {
             $rows[] = [
                 'denomination' => (int) $denom,
