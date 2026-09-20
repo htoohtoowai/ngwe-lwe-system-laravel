@@ -184,6 +184,18 @@ class DatabaseSeeder extends Seeder
         [900001, 1000000, 7800, 1560, 0],
     ];
 
+    private const BANK_BALANCE_ADJUSTMENT_TIERS = [
+        ['KBZ Bank', null, 'mobile', 'internal', null, 1, 999999999, 'PERCENTAGE', '0.0200', '0.00', null, null, 'KBZ personal mobile internal transfer'],
+        ['KBZ Bank', null, 'mobile', 'fast', null, 1, 999999999, 'PERCENTAGE', '0.0200', '0.00', null, null, 'KBZ personal mobile fast transfer'],
+        ['AYA Bank', null, 'mobile', 'internal', null, 1, 999999999, 'PERCENTAGE', '0.0125', '0.00', '200.00', '10000.00', 'AYA other AYA account transfer'],
+        ['AYA Bank', null, 'mobile', 'interbank', null, 1, 999999999, 'PERCENTAGE', '0.0100', '0.00', '3000.00', null, 'AYA interbank transfer'],
+        ['AYA Bank', null, 'mobile', 'fast_interbank', null, 1, 5000000, 'FIXED', '3000.0000', '0.00', null, null, 'AYA fast interbank transfer'],
+        ['AYA Bank', null, 'mobile', 'fast_interbank', null, 5000001, 10000000, 'FIXED', '5000.0000', '0.00', null, null, 'AYA fast interbank transfer'],
+        ['CB Bank', null, 'branch', 'local_remittance', null, 1, 999999999, 'PERCENTAGE', '0.0500', '500.00', '150.00', null, 'CB local remittance'],
+        ['Yoma Bank', null, 'branch', 'account_transfer', true, 1, 999999999, 'FIXED', '0.0000', '0.00', null, null, 'Yoma account transfer within same township'],
+        ['Yoma Bank', null, 'branch', 'account_transfer', false, 1, 999999999, 'PERCENTAGE', '0.0250', '0.00', null, null, 'Yoma account transfer across different townships'],
+    ];
+
     private const DEMO_OPERATION_PROVIDERS = [
         'KBZPay' => 'Pay',
         'Wave Money' => 'Pay',
@@ -245,6 +257,7 @@ class DatabaseSeeder extends Seeder
         $this->seedProviderOperationAccounts();
         $this->seedDemoPricingTiers();
         $this->seedDemoTransferFees();
+        $this->seedBankBalanceAdjustments();
         $this->seedDemoExchangeRates();
     }
 
@@ -534,6 +547,61 @@ class DatabaseSeeder extends Seeder
                     ],
                 );
             }
+        }
+    }
+
+    private function seedBankBalanceAdjustments(): void
+    {
+        $companyIds = Company::query()
+            ->whereIn('name', collect(self::BANK_BALANCE_ADJUSTMENT_TIERS)->pluck(0)->unique()->all())
+            ->pluck('id', 'name');
+
+        foreach (self::BANK_BALANCE_ADJUSTMENT_TIERS as [
+            $companyName,
+            $destinationCompanyName,
+            $channel,
+            $transferMethod,
+            $isSameLocation,
+            $amountFrom,
+            $amountTo,
+            $adjustmentType,
+            $adjustmentValue,
+            $fixedExtraAmount,
+            $minimumAdjustment,
+            $maximumAdjustment,
+            $sourceNote,
+        ]) {
+            $companyId = $companyIds[$companyName] ?? null;
+            if ($companyId === null) {
+                continue;
+            }
+
+            $destinationCompanyId = $destinationCompanyName === null
+                ? null
+                : Company::query()->where('name', $destinationCompanyName)->value('id');
+
+            DB::table('bank_balance_adjustment_tiers')->updateOrInsert(
+                [
+                    'company_id' => $companyId,
+                    'destination_company_id' => $destinationCompanyId,
+                    'channel' => $channel,
+                    'transfer_method' => $transferMethod,
+                    'is_same_location' => $isSameLocation,
+                    'amount_from' => number_format($amountFrom, 2, '.', ''),
+                    'amount_to' => number_format($amountTo, 2, '.', ''),
+                ],
+                [
+                    'adjustment_type' => $adjustmentType,
+                    'adjustment_value' => $adjustmentValue,
+                    'fixed_extra_amount' => $fixedExtraAmount,
+                    'minimum_adjustment' => $minimumAdjustment,
+                    'maximum_adjustment' => $maximumAdjustment,
+                    'source_note' => $sourceNote,
+                    'is_active' => true,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
+            );
         }
     }
 
