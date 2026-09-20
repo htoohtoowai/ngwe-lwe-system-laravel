@@ -679,7 +679,10 @@ function signOut() {
 </script>
 
 <template>
-    <div class="min-h-screen bg-canvas font-sans text-ink antialiased">
+    <div
+        class="min-h-dvh bg-canvas font-sans text-ink antialiased"
+        style="padding-bottom: env(safe-area-inset-bottom)"
+    >
         <a
             href="#bank-main-content"
             class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[60] focus:rounded-lg focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-bold focus:text-white"
@@ -688,7 +691,10 @@ function signOut() {
         </a>
 
         <!-- ===== Top bar ===== -->
-        <header class="sticky top-0 z-40 border-b border-line bg-card">
+        <header
+            class="sticky top-0 z-40 border-b border-line bg-card"
+            style="padding-top: env(safe-area-inset-top)"
+        >
             <div class="flex h-14 items-center gap-3 px-4 lg:px-6">
                 <!-- hamburger: tablet & mobile -->
                 <button
@@ -889,7 +895,11 @@ function signOut() {
             <!-- ===== Sidebar: desktop ===== -->
             <aside
                 :aria-label="t('common.desktopNavigation')"
-                class="sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 border-r border-white/10 bg-[#2f3035] text-white shadow-[0_14px_32px_-24px_rgba(15,23,42,0.9)] transition-[width] duration-200"
+                class="sticky hidden shrink-0 border-r border-white/10 bg-[#2f3035] text-white shadow-[0_14px_32px_-24px_rgba(15,23,42,0.9)] transition-[width] duration-200"
+                style="
+                    top: calc(3.5rem + env(safe-area-inset-top));
+                    height: calc(100dvh - 3.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+                "
                 :class="[
                     sidebarCollapsed ? 'w-[84px]' : 'w-[260px]',
                     props.role === 'teller' ? 'xl:block' : 'lg:block',
@@ -1119,6 +1129,10 @@ function signOut() {
                     <aside
                         id="mobile-bank-menu"
                         class="absolute inset-y-0 left-0 flex w-[260px] max-w-[85vw] flex-col bg-[#2f3035] text-white shadow-2xl"
+                        style="
+                            padding-top: env(safe-area-inset-top);
+                            padding-bottom: env(safe-area-inset-bottom);
+                        "
                         role="dialog"
                         aria-modal="true"
                         aria-labelledby="mobile-bank-menu-title"
