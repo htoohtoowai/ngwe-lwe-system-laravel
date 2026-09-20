@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasBranchScope;
 use App\Enums\AgentCommissionDirection;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -10,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
+    'branch_id',
     'transaction_type',
     'account_id',
     'to_account_id',
@@ -49,11 +51,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 ])]
 class Transaction extends Model
 {
+    use HasBranchScope;
+
     public const UPDATED_AT = null;
 
     protected function casts(): array
     {
         return [
+            'branch_id' => 'integer',
             'amount' => 'decimal:2',
             'customer_fee' => 'decimal:2',
             'customer_total' => 'decimal:2',
@@ -68,6 +73,11 @@ class Transaction extends Model
             'received_denominations' => 'array',
             'handoff_denominations' => 'array',
         ];
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function account(): BelongsTo

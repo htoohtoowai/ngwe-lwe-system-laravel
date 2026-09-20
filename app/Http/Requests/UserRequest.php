@@ -34,6 +34,12 @@ class UserRequest extends FormRequest
             ],
             'full_name' => [$isUpdate ? 'sometimes' : 'required', 'string', 'max:255'],
             'role' => [$isUpdate ? 'sometimes' : 'required', Rule::in(['admin', 'cashier', 'teller'])],
+            'branch_id' => [
+                'sometimes',
+                'nullable',
+                'integer',
+                Rule::exists('branches', 'id')->where('is_active', true),
+            ],
             'password' => [$isUpdate ? 'sometimes' : 'required', 'string', 'min:8', 'max:255'],
             'pin' => ['sometimes', 'nullable', 'digits_between:4,8'],
             'is_active' => ['sometimes', 'boolean'],

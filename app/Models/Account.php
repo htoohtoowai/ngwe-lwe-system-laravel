@@ -4,17 +4,24 @@ namespace App\Models;
 
 use App\Enums\AccountFeature;
 use App\Enums\AccountType;
+use App\Models\Scopes\SharedBranchScope;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['company_id', 'account_name', 'account_type', 'account_identifier', 'balance', 'is_active', 'is_fee_account', 'is_agent'])]
+#[Fillable(['company_id', 'branch_id', 'account_name', 'account_type', 'account_identifier', 'balance', 'is_active', 'is_fee_account', 'is_agent'])]
 class Account extends Model
 {
+    protected static function booted(): void
+    {
+        static::addGlobalScope(new SharedBranchScope);
+    }
+
     protected function casts(): array
     {
         return [
+            'branch_id' => 'integer',
             'account_type' => AccountType::class,
             'balance' => 'decimal:2',
             'is_active' => 'boolean',
@@ -26,6 +33,11 @@ class Account extends Model
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function featureAssignments(): HasMany

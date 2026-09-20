@@ -3,20 +3,23 @@
 namespace App\Repositories;
 
 use App\Exceptions\InsufficientVaultDenominationException;
+use App\Models\Branch;
+use App\Models\BranchVaultDenominationBalance;
 use App\Models\CashDenominationLog;
 use App\Models\VaultDenominationBalance;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
  * Physical cash denomination ledger.
  *
- * `entry_type` remains the legacy in/out classification used by the main-vault
- * balance engine. `movement_type` + source/destination identify the actual
- * custody movement. Rows with `affects_main_vault = false` are reconciliation
- * mirrors for Teller/customer movements and never change main-vault stock.
+ * Main-vault stock is isolated by branch in
+ * `branch_vault_denomination_balances`. The legacy
+ * `vault_denomination_balances` table is kept as a Main Branch mirror so
+ * existing setup/seeder checks continue to work during the branch migration.
  */
 class CashDenominationRepository
 {
@@ -24,12 +27,11 @@ class CashDenominationRepository
 
     private const DEBIT_ENTRIES = ['vault_out'];
 
+    private ?int $mainBranchId = null;
+
     /**
      * Insert one log row per denomination and, when requested, atomically apply
-     * the delta to `vault_denomination_balances`.
-     *
-     * The returned batch id can be shared with `vault_transactions` so both
-     * immutable ledgers can be reconciled denomination-for-denomination.
+     * the delta to the selected branch vault.
      *
      * @param  array<int, int>  $denominations
      */
@@ -47,13 +49,16 @@ class CashDenominationRepository
         ?string $destinationType = null,
         ?int $destinationId = null,
         bool $affectsMainVault = true,
+        ?int $branchId = null,
     ): string {
         if (! in_array($entryType, array_merge(self::CREDIT_ENTRIES, self::DEBIT_ENTRIES), true)) {
             throw new \InvalidArgumentException("Invalid entry_type: {$entryType}");
         }
 
+        $branchId = $this->resolveBranchId($branchId);
         $batchId ??= (string) Str::uuid();
         $rows = [];
+
         foreach ($denominations as $denom => $qty) {
             $denom = (int) $denom;
             $qty = (int) $qty;
@@ -68,6 +73,7 @@ class CashDenominationRepository
         }
 
         DB::transaction(function () use (
+            $branchId,
             $entryType,
             $rows,
             $createdBy,
@@ -86,6 +92,7 @@ class CashDenominationRepository
 
             foreach ($rows as [$denom, $qty]) {
                 CashDenominationLog::query()->create([
+                    'branch_id' => $branchId,
                     'batch_id' => $batchId,
                     'entry_type' => $entryType,
                     'movement_type' => $movementType,
@@ -106,14 +113,19 @@ class CashDenominationRepository
                     continue;
                 }
 
-                $balance = VaultDenominationBalance::query()->find($denom);
-                if ($balance === null) {
-                    $balance = VaultDenominationBalance::query()->create([
-                        'denomination_id' => $denom,
-                        'quantity' => 0,
-                        'total_value' => 0,
-                    ]);
-                }
+                DB::table('branch_vault_denomination_balances')->insertOrIgnore([
+                    'branch_id' => $branchId,
+                    'denomination_id' => $denom,
+                    'quantity' => 0,
+                    'total_value' => 0,
+                    'last_updated' => now(),
+                ]);
+
+                $balance = BranchVaultDenominationBalance::query()
+                    ->where('branch_id', $branchId)
+                    ->where('denomination_id', $denom)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
                 $delta = $isCredit ? $qty : -$qty;
                 $newQuantity = ((int) $balance->quantity) + $delta;
@@ -130,6 +142,10 @@ class CashDenominationRepository
                 $balance->total_value = $newQuantity * $denom;
                 $balance->last_updated = now();
                 $balance->save();
+
+                if ($branchId === $this->mainBranchId()) {
+                    $this->mirrorLegacyMainBalance($denom, $newQuantity);
+                }
             }
         });
 
@@ -137,22 +153,15 @@ class CashDenominationRepository
     }
 
     /**
-     * Vault net balance from rows that actually affect main-vault stock.
-     * Reconciliation-only Teller/customer mirror rows are intentionally ignored.
-     *
      * @return array<int, int>
      */
-    public function getVaultBalance(): array
+    public function getVaultBalance(?int $branchId = null): array
     {
-        $rows = DB::table('cash_denomination_logs')
-            ->where('affects_main_vault', true)
-            ->selectRaw(
-                'denomination, '
-                ."SUM(CASE WHEN entry_type IN ('vault_in','float_returned','adjustment') THEN quantity "
-                ."WHEN entry_type = 'vault_out' THEN -quantity ELSE 0 END) as net_qty"
-            )
-            ->groupBy('denomination')
-            ->pluck('net_qty', 'denomination');
+        $branchId = $this->resolveBranchId($branchId);
+
+        $rows = BranchVaultDenominationBalance::query()
+            ->where('branch_id', $branchId)
+            ->pluck('quantity', 'denomination_id');
 
         $result = [];
         foreach (Money::supportedDenominations() as $denom) {
@@ -163,16 +172,19 @@ class CashDenominationRepository
     }
 
     /**
-     * Denomination quantities sitting with PENDING_RECEIPT floats. These notes
-     * are already removed from the main vault by the `vault_out` issue log, so
-     * this is diagnostic only and must not be subtracted from availability.
+     * Denomination quantities sitting with PENDING_RECEIPT floats for one
+     * branch. These notes are already removed from that branch vault by the
+     * `vault_out` issue log, so this is diagnostic only.
      *
      * @return array<int, int>
      */
-    public function getPendingReserved(): array
+    public function getPendingReserved(?int $branchId = null): array
     {
+        $branchId = $this->resolveBranchId($branchId);
+
         $rows = DB::table('cash_float_denominations as cfd')
             ->join('cash_float_assignments as cfa', 'cfa.id', '=', 'cfd.float_id')
+            ->where('cfa.branch_id', $branchId)
             ->where('cfa.status', 'PENDING_RECEIPT')
             ->groupBy('cfd.denomination')
             ->selectRaw('cfd.denomination, SUM(cfd.quantity) as total_qty')
@@ -187,17 +199,63 @@ class CashDenominationRepository
     }
 
     /** @return array<int, int> */
-    public function getAvailableBalance(): array
+    public function getAvailableBalance(?int $branchId = null): array
     {
-        return $this->getVaultBalance();
+        return $this->getVaultBalance($branchId);
     }
 
     /** @return Collection<int, CashDenominationLog> */
-    public function recentLogs(int $limit = 100): Collection
+    public function recentLogs(int $limit = 100, ?int $branchId = null): Collection
     {
+        $branchId = $this->resolveBranchId($branchId);
+
         return CashDenominationLog::query()
+            ->where('branch_id', $branchId)
             ->orderByDesc('created_at')
             ->limit(max(1, min($limit, 500)))
             ->get();
+    }
+
+    private function resolveBranchId(?int $branchId = null): int
+    {
+        if ($branchId !== null) {
+            return $branchId;
+        }
+
+        $guard = Auth::guard();
+
+        if (method_exists($guard, 'hasUser') && $guard->hasUser()) {
+            $user = $guard->user();
+            if ($user?->branch_id !== null) {
+                return (int) $user->branch_id;
+            }
+        }
+
+        return $this->mainBranchId();
+    }
+
+    private function mainBranchId(): int
+    {
+        return $this->mainBranchId ??= (int) Branch::query()
+            ->where('code', Branch::MAIN_CODE)
+            ->value('id');
+    }
+
+    private function mirrorLegacyMainBalance(int $denomination, int $quantity): void
+    {
+        $legacy = VaultDenominationBalance::query()->find($denomination);
+
+        if ($legacy === null) {
+            $legacy = VaultDenominationBalance::query()->create([
+                'denomination_id' => $denomination,
+                'quantity' => 0,
+                'total_value' => 0,
+            ]);
+        }
+
+        $legacy->quantity = $quantity;
+        $legacy->total_value = $quantity * $denomination;
+        $legacy->last_updated = now();
+        $legacy->save();
     }
 }

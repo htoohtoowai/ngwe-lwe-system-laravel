@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -41,6 +42,8 @@ class DemoUserSeeder extends Seeder
             throw new RuntimeException('Demo users can only be seeded in local or testing environments.');
         }
 
+        $mainBranch = Branch::main();
+
         foreach (self::DEMO_USERS as $seed) {
             User::query()->updateOrCreate(
                 ['username' => $seed['username']],
@@ -49,6 +52,7 @@ class DemoUserSeeder extends Seeder
                     'email' => $seed['email'],
                     'full_name' => $seed['full_name'],
                     'role' => $seed['role'],
+                    'branch_id' => $seed['role'] === 'admin' ? null : $mainBranch->id,
                     'is_active' => true,
                     'auth_version' => 0,
                     'password' => Hash::make(self::DEMO_PASSWORD),

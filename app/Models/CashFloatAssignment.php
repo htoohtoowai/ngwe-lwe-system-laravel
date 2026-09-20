@@ -2,19 +2,23 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasBranchScope;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['employee_id', 'issued_by', 'status', 'total_amount', 'current_balance', 'return_denominations_json', 'received_at', 'closed_at', 'closing_total', 'note'])]
+#[Fillable(['branch_id', 'employee_id', 'issued_by', 'status', 'total_amount', 'current_balance', 'return_denominations_json', 'received_at', 'closed_at', 'closing_total', 'note'])]
 class CashFloatAssignment extends Model
 {
+    use HasBranchScope;
+
     public const UPDATED_AT = null;
 
     protected function casts(): array
     {
         return [
+            'branch_id' => 'integer',
             'total_amount' => 'decimal:2',
             'current_balance' => 'decimal:2',
             'return_denominations_json' => 'array',
@@ -22,6 +26,11 @@ class CashFloatAssignment extends Model
             'closed_at' => 'datetime',
             'closing_total' => 'decimal:2',
         ];
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function employee(): BelongsTo

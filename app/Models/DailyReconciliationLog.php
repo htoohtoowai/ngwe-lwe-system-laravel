@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasBranchScope;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
+    'branch_id',
     'recon_date',
     'closed_by',
     'total_cash_in',
@@ -29,6 +31,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 ])]
 class DailyReconciliationLog extends Model
 {
+    use HasBranchScope;
+
     protected $table = 'daily_reconciliation_logs';
 
     public const CREATED_AT = 'closed_at';
@@ -38,6 +42,7 @@ class DailyReconciliationLog extends Model
     protected function casts(): array
     {
         return [
+            'branch_id' => 'integer',
             'recon_date' => 'date',
             'closed_at' => 'datetime',
             'total_cash_in' => 'decimal:2',
@@ -57,6 +62,11 @@ class DailyReconciliationLog extends Model
             'account_snapshots' => 'array',
             'vault_snapshot' => 'array',
         ];
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
     }
 
     public function closer(): BelongsTo

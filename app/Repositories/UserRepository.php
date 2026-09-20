@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Models\Branch;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Hash;
@@ -11,16 +12,19 @@ class UserRepository
     public function all(bool $includeInactive = false): Collection
     {
         return User::query()
+            ->with('branch')
             ->when(! $includeInactive, fn ($query) => $query->where('is_active', true))
             ->orderBy('full_name')
             ->get();
     }
 
-    public function activeByRole(string $role): Collection
+    public function activeByRole(string $role, ?int $branchId = null): Collection
     {
         return User::query()
+            ->with('branch')
             ->where('role', $role)
             ->where('is_active', true)
+            ->when($branchId !== null, fn ($query) => $query->where('branch_id', $branchId))
             ->orderBy('full_name')
             ->get();
     }
@@ -28,6 +32,7 @@ class UserRepository
     public function findActive(int $id): ?User
     {
         return User::query()
+            ->with('branch')
             ->where('is_active', true)
             ->find($id);
     }
@@ -35,6 +40,7 @@ class UserRepository
     public function findByUsername(string $username): ?User
     {
         return User::query()
+            ->with('branch')
             ->where('username', $username)
             ->first();
     }
@@ -42,6 +48,7 @@ class UserRepository
     public function findActiveByUsername(string $username): ?User
     {
         return User::query()
+            ->with('branch')
             ->where('username', $username)
             ->where('is_active', true)
             ->first();
@@ -53,6 +60,7 @@ class UserRepository
      *   full_name:string,
      *   role:string,
      *   password:string,
+     *   branch_id?:int|null,
      *   email?:string|null,
      *   pin?:string|null,
      *   is_active?:bool
@@ -60,12 +68,18 @@ class UserRepository
      */
     public function create(array $data): User
     {
+        $role = $data['role'];
+        $branchId = $role === 'admin'
+            ? null
+            : ($data['branch_id'] ?? $this->mainBranchId());
+
         return User::query()->create([
             'name' => $data['full_name'],
             'email' => $data['email'] ?? $data['username'].'@ngwe-lwe.local',
             'username' => $data['username'],
             'full_name' => $data['full_name'],
-            'role' => $data['role'],
+            'role' => $role,
+            'branch_id' => $branchId,
             'is_active' => $data['is_active'] ?? true,
             'auth_version' => 0,
             'password' => Hash::make($data['password']),
@@ -79,6 +93,7 @@ class UserRepository
      *   full_name?:string,
      *   role?:string,
      *   password?:string,
+     *   branch_id?:int|null,
      *   email?:string|null,
      *   pin?:string|null,
      *   is_active?:bool
@@ -87,6 +102,7 @@ class UserRepository
     public function update(User $user, array $data): User
     {
         $authSensitive = false;
+        $finalRole = (string) ($data['role'] ?? $user->role);
 
         if (array_key_exists('full_name', $data)) {
             $user->name = $data['full_name'];
@@ -103,9 +119,24 @@ class UserRepository
             $authSensitive = true;
         }
         if (array_key_exists('role', $data)) {
-            $user->role = $data['role'];
+            $user->role = $finalRole;
             $authSensitive = true;
         }
+
+        $nextBranchId = $user->branch_id;
+        if ($finalRole === 'admin') {
+            $nextBranchId = null;
+        } elseif (array_key_exists('branch_id', $data)) {
+            $nextBranchId = $data['branch_id'] ?? $this->mainBranchId();
+        } elseif ($nextBranchId === null) {
+            $nextBranchId = $this->mainBranchId();
+        }
+
+        if ((int) ($user->branch_id ?? 0) !== (int) ($nextBranchId ?? 0)) {
+            $user->branch_id = $nextBranchId;
+            $authSensitive = true;
+        }
+
         if (array_key_exists('is_active', $data)) {
             $user->is_active = $data['is_active'];
             $authSensitive = true;
@@ -141,5 +172,13 @@ class UserRepository
         return User::query()
             ->whereKey($id)
             ->increment('auth_version') > 0;
+    }
+
+    private function mainBranchId(): int
+    {
+        return Branch::query()
+            ->where('code', Branch::MAIN_CODE)
+            ->value('id')
+            ?? throw new \RuntimeException('Main branch is not configured.');
     }
 }
