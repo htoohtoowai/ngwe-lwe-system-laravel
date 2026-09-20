@@ -14,20 +14,19 @@ use App\Http\Resources\UserResource;
 use App\Models\Account;
 use App\Models\AgentCommissionTier;
 use App\Models\Branch;
+use App\Models\CashFloatAssignment;
 use App\Models\Company;
 use App\Models\ExchangeRate;
 use App\Models\ProviderFeeTier;
 use App\Models\Transaction;
 use App\Models\User;
-use App\Repositories\CashFloatRepository;
 use Illuminate\Http\Request;
 
 class AdminOperationsDataService
 {
     public function __construct(
         private readonly DailyReportService $reports,
-        private readonly CashFloatRepository $floats,
-        private readonly VaultInventoryService $vaultInventory,
+        private readonly BranchVaultInventoryService $vaultInventory,
     ) {}
 
     /** @return array<string, mixed> */
@@ -44,13 +43,35 @@ class AdminOperationsDataService
             ->get();
 
         $selectedBranch = $this->selectedBranch($request, $branches);
+        $branchId = (int) $selectedBranch->id;
+
+        $cashFloats = CashFloatAssignment::query()
+            ->withoutGlobalScopes()
+            ->with(['denominations', 'employee', 'issuer'])
+            ->where('branch_id', $branchId)
+            ->orderByDesc('created_at')
+            ->get();
+
+        $transactions = Transaction::query()
+            ->withoutGlobalScopes()
+            ->with([
+                'agentCommissionEntries.account',
+                'agentCommissionEntries.company',
+            ])
+            ->where('branch_id', $branchId)
+            ->latest()
+            ->limit(200)
+            ->get();
 
         return [
-            'selectedBranchId' => (int) $selectedBranch->id,
+            'selectedBranchId' => $branchId,
             'selectedBranch' => (new BranchResource($selectedBranch))->resolve($request),
             'dailySummary' => $this->reports->summary(
-                (string) $request->query('report_date', now()->toDateString()),
-                (int) $selectedBranch->id,
+                (string) $request->query(
+                    'report_date',
+                    now()->toDateString(),
+                ),
+                $branchId,
             ),
             'branches' => BranchResource::collection($branches)->resolve($request),
             'companies' => CompanyResource::collection(
@@ -66,21 +87,13 @@ class AdminOperationsDataService
                 User::query()->with('branch')->orderBy('full_name')->get()
             )->resolve($request),
             'transactions' => TransactionResource::collection(
-                Transaction::query()
-                    ->with([
-                        'agentCommissionEntries.account',
-                        'agentCommissionEntries.company',
-                    ])
-                    ->latest()
-                    ->limit(200)
-                    ->get()
+                $transactions
             )->resolve($request),
-            // System activity audit is paginated on /admin/audit-logs.
             'activityLogs' => [],
             'cashFloats' => CashFloatResource::collection(
-                $this->floats->list()
+                $cashFloats
             )->resolve($request),
-            'vaultInventory' => $this->vaultInventory->inventory(),
+            'vaultInventory' => $this->vaultInventory->inventory($branchId),
             'exchangeRates' => ExchangeRateResource::collection(
                 ExchangeRate::query()
                     ->with('company')

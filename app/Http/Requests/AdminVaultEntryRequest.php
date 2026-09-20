@@ -28,23 +28,19 @@ class AdminVaultEntryRequest extends FormRequest
         $validator->after(function ($validator): void {
             $denominations = $this->input('denominations', []);
 
-            foreach (array_keys($denominations) as $denomination) {
+            foreach (array_keys(is_array($denominations) ? $denominations : []) as $denomination) {
                 if (! in_array((int) $denomination, Money::supportedDenominations(), true)) {
-                    $validator->errors()->add('denominations', "Unsupported denomination: {$denomination}");
+                    $validator->errors()->add(
+                        'denominations',
+                        "Unsupported denomination: {$denomination}",
+                    );
                 }
             }
 
-            if ($validator->errors()->has('denominations')) {
-                return;
-            }
-
-            $normalized = collect($denominations)
-                ->mapWithKeys(fn ($quantity, $denomination): array => [(int) $denomination => (int) $quantity])
-                ->all();
-
-            if (Money::denominationTotal($normalized) <= 0) {
-                $validator->errors()->add('denominations', 'Enter at least one banknote.');
-            }
+            $validator->errors()->add(
+                'form',
+                'Direct Admin vault mutation is disabled. Submit a Cash adjustment request for Cashier PIN confirmation.',
+            );
         });
     }
 }

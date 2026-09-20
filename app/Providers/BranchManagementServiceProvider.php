@@ -2,9 +2,12 @@
 
 namespace App\Providers;
 
+use App\Http\Controllers\AdminAdjustmentRequestController;
 use App\Http\Controllers\AdminBranchController;
 use App\Http\Controllers\AdminBranchReportController;
 use App\Http\Controllers\AdminBranchUserController;
+use App\Http\Controllers\AdminBranchVaultController;
+use App\Http\Controllers\CashierAdjustmentRequestController;
 use App\Models\Branch;
 use App\Models\Transaction;
 use App\Services\AdminOperationsDataService;
@@ -92,6 +95,21 @@ class BranchManagementServiceProvider extends ServiceProvider
                     )->name('admin.branch-management.users.pin');
                 });
 
+                Route::get(
+                    '/adjustments',
+                    [AdminAdjustmentRequestController::class, 'index'],
+                )->name('admin.adjustments.index');
+
+                Route::post(
+                    '/adjustments',
+                    [AdminAdjustmentRequestController::class, 'store'],
+                )->name('admin.adjustments.store');
+
+                Route::post(
+                    '/branch-vault/entries',
+                    [AdminBranchVaultController::class, 'store'],
+                )->name('admin.branch-vault.entries.store');
+
                 Route::prefix('branch-reporting')
                     ->name('admin.branch-reporting.')
                     ->controller(AdminBranchReportController::class)
@@ -101,6 +119,25 @@ class BranchManagementServiceProvider extends ServiceProvider
                         Route::get('/daily.pdf', 'pdf')
                             ->name('daily.pdf');
                     });
+            });
+
+        Route::middleware(['web', 'auth', 'role:cashier'])
+            ->prefix('cashier')
+            ->name('cashier.')
+            ->controller(CashierAdjustmentRequestController::class)
+            ->group(function (): void {
+                Route::get('/admin-requests', 'index')
+                    ->name('admin-requests.index');
+
+                Route::post(
+                    '/admin-requests/{adjustmentRequest}/confirm',
+                    'confirm',
+                )->name('admin-requests.confirm');
+
+                Route::post(
+                    '/admin-requests/{adjustmentRequest}/reject',
+                    'reject',
+                )->name('admin-requests.reject');
             });
     }
 
@@ -115,6 +152,7 @@ class BranchManagementServiceProvider extends ServiceProvider
             'resourceId' => $resourceId,
             'announcement' => 'Manage branches and branch staffing.',
             'notificationCount' => Transaction::query()
+                ->withoutGlobalScopes()
                 ->whereIn('transaction_type', ['cash_in', 'send_money'])
                 ->where('status', 'PENDING_CASHIER_CONFIRM')
                 ->count(),

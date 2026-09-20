@@ -1,0 +1,264 @@
+<?php
+
+namespace App\Services;
+
+use App\Models\CashDenominationLog;
+use App\Models\VaultTransaction;
+use Illuminate\Support\Collection;
+
+class BranchVaultReadService
+{
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function groupedLog(int $branchId, int $limit = 200): array
+    {
+        $limit = max(1, min($limit, 500));
+
+        /** @var Collection<int, VaultTransaction> $ledgerRows */
+        $ledgerRows = VaultTransaction::query()
+            ->withoutGlobalScopes()
+            ->with(['performer', 'verifier'])
+            ->where('branch_id', $branchId)
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit($limit * 20)
+            ->get();
+
+        $batchIds = $ledgerRows
+            ->pluck('batch_id')
+            ->filter(fn ($id) => is_string($id) && $id !== '')
+            ->unique()
+            ->values();
+
+        $cashByBatch = $batchIds->isEmpty()
+            ? collect()
+            : CashDenominationLog::query()
+                ->withoutGlobalScopes()
+                ->where('branch_id', $branchId)
+                ->whereIn('batch_id', $batchIds->all())
+                ->orderByDesc('denomination')
+                ->get()
+                ->groupBy('batch_id');
+
+        return $ledgerRows
+            ->groupBy(fn (VaultTransaction $row): string => $this->groupKey($row))
+            ->take($limit)
+            ->map(function (Collection $group) use ($cashByBatch): array {
+                /** @var VaultTransaction $first */
+                $first = $group->first();
+                $details = $this->vaultDetails($group);
+
+                /** @var Collection<int, CashDenominationLog> $cashRows */
+                $cashRows = $first->batch_id
+                    ? ($cashByBatch->get($first->batch_id) ?? collect())
+                    : collect();
+
+                $cashDetails = $this->cashDetails($cashRows);
+
+                [$status, $issues] = $this->reconcile(
+                    $first,
+                    $details,
+                    $cashRows,
+                    $cashDetails,
+                );
+
+                return [
+                    'id' => $first->id,
+                    'branch_id' => (int) $first->branch_id,
+                    'batch_id' => $first->batch_id,
+                    'txn_type' => $first->txn_type,
+                    'movement_type' => $first->movement_type,
+                    'source_type' => $first->source_type,
+                    'source_id' => $first->source_id,
+                    'destination_type' => $first->destination_type,
+                    'destination_id' => $first->destination_id,
+                    'float_id' => $first->float_id,
+                    'transaction_id' => $first->transaction_id,
+                    'performed_by' => $first->performed_by,
+                    'performed_by_name' => $first->performer?->full_name
+                        ?? $first->performer?->username,
+                    'verified_by' => $first->verified_by,
+                    'verified_by_name' => $first->verifier?->full_name
+                        ?? $first->verifier?->username,
+                    'note' => $first->note,
+                    'created_at' => $first->created_at?->toISOString(),
+                    'total_amount' => (int) $details->sum('amount'),
+                    'denomination_count' => $details->count(),
+                    'details' => $details->all(),
+                    'cash_total_amount' => (int) $cashDetails->sum('amount'),
+                    'cash_log_count' => $cashRows->count(),
+                    'cash_details' => $cashDetails->all(),
+                    'reconciliation_status' => $status,
+                    'reconciliation_issues' => $issues,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    private function groupKey(VaultTransaction $row): string
+    {
+        if ($row->batch_id !== null && $row->batch_id !== '') {
+            return 'batch:'.$row->batch_id;
+        }
+
+        return 'legacy:'.hash('sha256', implode('|', [
+            $row->txn_type,
+            (string) ($row->float_id ?? ''),
+            (string) ($row->transaction_id ?? ''),
+            (string) $row->performed_by,
+            (string) ($row->verified_by ?? ''),
+            (string) ($row->note ?? ''),
+            $row->created_at?->format('Y-m-d H:i:s') ?? '',
+        ]));
+    }
+
+    /** @return Collection<int, array{id:int, denomination:int, quantity:int, amount:int}> */
+    private function vaultDetails(Collection $group): Collection
+    {
+        return $group
+            ->groupBy(
+                fn (VaultTransaction $row): int => (int) $row->denomination,
+            )
+            ->map(function (
+                Collection $rows,
+                int|string $denomination,
+            ): array {
+                /** @var VaultTransaction $first */
+                $first = $rows->first();
+                $quantity = (int) $rows->sum(
+                    fn (VaultTransaction $row): int => (int) $row->quantity,
+                );
+                $denomination = (int) $denomination;
+
+                return [
+                    'id' => $first->id,
+                    'denomination' => $denomination,
+                    'quantity' => $quantity,
+                    'amount' => $denomination * $quantity,
+                ];
+            })
+            ->sortByDesc('denomination')
+            ->values();
+    }
+
+    /** @return Collection<int, array{id:int, denomination:int, quantity:int, amount:int, affects_main_vault:bool}> */
+    private function cashDetails(Collection $rows): Collection
+    {
+        return $rows
+            ->groupBy(
+                fn (CashDenominationLog $row): string => implode('|', [
+                    (string) (int) $row->denomination,
+                    $row->affects_main_vault ? '1' : '0',
+                ]),
+            )
+            ->map(function (Collection $group): array {
+                /** @var CashDenominationLog $first */
+                $first = $group->first();
+                $denomination = (int) $first->denomination;
+                $quantity = (int) $group->sum(
+                    fn (CashDenominationLog $row): int => (int) $row->quantity,
+                );
+
+                return [
+                    'id' => $first->id,
+                    'denomination' => $denomination,
+                    'quantity' => $quantity,
+                    'amount' => $denomination * $quantity,
+                    'affects_main_vault' => (bool) $first->affects_main_vault,
+                ];
+            })
+            ->sortByDesc('denomination')
+            ->values();
+    }
+
+    /** @return array{0:string,1:array<int,string>} */
+    private function reconcile(
+        VaultTransaction $vault,
+        Collection $vaultDetails,
+        Collection $cashRows,
+        Collection $cashDetails,
+    ): array {
+        $movementType = (string) ($vault->movement_type ?? '');
+
+        if (str_starts_with($movementType, 'verification_')) {
+            return ['not_applicable', []];
+        }
+
+        if ($movementType === '') {
+            return [
+                'legacy_unlinked',
+                ['This record predates shared cash movement references.'],
+            ];
+        }
+
+        if ($cashRows->isEmpty()) {
+            return [
+                'missing_cash_log',
+                ['No cash_denomination_logs rows share this batch id.'],
+            ];
+        }
+
+        /** @var CashDenominationLog $cashFirst */
+        $cashFirst = $cashRows->first();
+        $issues = [];
+
+        foreach ([
+            'movement_type' => [$vault->movement_type, $cashFirst->movement_type],
+            'source_type' => [$vault->source_type, $cashFirst->source_type],
+            'source_id' => [$vault->source_id, $cashFirst->source_id],
+            'destination_type' => [
+                $vault->destination_type,
+                $cashFirst->destination_type,
+            ],
+            'destination_id' => [
+                $vault->destination_id,
+                $cashFirst->destination_id,
+            ],
+            'float_id' => [$vault->float_id, $cashFirst->float_id],
+            'transaction_id' => [
+                $vault->transaction_id,
+                $cashFirst->transaction_id,
+            ],
+        ] as $field => [$vaultValue, $cashValue]) {
+            if ((string) ($vaultValue ?? '') !== (string) ($cashValue ?? '')) {
+                $issues[] = "{$field} does not match.";
+            }
+        }
+
+        if (
+            $this->denominationMap($vaultDetails)
+            !== $this->denominationMap($cashDetails)
+        ) {
+            $issues[] = 'Denomination quantities do not match.';
+        }
+
+        if (
+            (int) $vaultDetails->sum('amount')
+            !== (int) $cashDetails->sum('amount')
+        ) {
+            $issues[] = 'Total amount does not match.';
+        }
+
+        return $issues === []
+            ? ['matched', []]
+            : ['mismatch', $issues];
+    }
+
+    /** @return array<int, int> */
+    private function denominationMap(Collection $details): array
+    {
+        $map = [];
+
+        foreach ($details as $detail) {
+            $denomination = (int) $detail['denomination'];
+            $map[$denomination] =
+                ($map[$denomination] ?? 0) + (int) $detail['quantity'];
+        }
+
+        krsort($map);
+
+        return $map;
+    }
+}

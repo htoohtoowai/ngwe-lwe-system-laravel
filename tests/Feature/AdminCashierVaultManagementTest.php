@@ -2,8 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Models\BalanceAdjustmentRequest;
+use App\Models\Branch;
 use App\Models\User;
+use App\Repositories\CashDenominationRepository;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class AdminCashierVaultManagementTest extends TestCase
@@ -16,111 +20,90 @@ class AdminCashierVaultManagementTest extends TestCase
         parent::setUp();
     }
 
-    public function test_admin_can_deposit_and_withdraw_cashier_vault_with_audit_logs(): void
+    public function test_legacy_direct_admin_vault_mutation_is_blocked(): void
     {
-        $admin = User::factory()->create(['role' => 'admin', 'full_name' => 'Owner Admin']);
-        $cashier = User::factory()->create(['role' => 'cashier', 'full_name' => 'Main Cashier']);
+        $admin = User::factory()->create(['role' => 'admin']);
+        User::factory()->create([
+            'role' => 'cashier',
+            'branch_id' => Branch::main()->id,
+        ]);
 
-        $this->actingAs($admin)->post('/admin/actions/vault/entries', [
-            'entry_type' => 'vault_in',
-            'denominations' => [10000 => 5, 5000 => 2],
-            'note' => 'Opening owner deposit.',
-        ])->assertRedirect();
+        $this->actingAs($admin)
+            ->post('/admin/actions/vault/entries', [
+                'entry_type' => 'vault_in',
+                'denominations' => [10000 => 1],
+            ])
+            ->assertSessionHasErrors('form');
 
-        $this->assertDatabaseHas('vault_denomination_balances', [
-            'denomination_id' => 10000,
-            'quantity' => 5,
+        $this->assertSame(
+            0,
+            app(CashDenominationRepository::class)
+                ->getVaultBalance(Branch::main()->id)[10000],
+        );
+    }
+
+    public function test_admin_cash_request_is_applied_only_after_cashier_pin(): void
+    {
+        $branch = Branch::main();
+        $admin = User::factory()->create(['role' => 'admin']);
+        $cashier = User::factory()->create([
+            'role' => 'cashier',
+            'branch_id' => $branch->id,
+            'pin_hash' => Hash::make('2222'),
         ]);
-        $this->assertDatabaseHas('cash_denomination_logs', [
-            'entry_type' => 'vault_in',
-            'denomination' => 10000,
-            'quantity' => 5,
-            'created_by' => $admin->id,
-        ]);
-        $this->assertDatabaseHas('activity_logs', [
-            'user_id' => $admin->id,
-            'action' => 'cashier_vault_deposit',
-            'entity_type' => 'cashier_vault',
-            'entity_id' => $cashier->id,
-        ]);
+
+        $this->actingAs($admin)
+            ->post('/admin/branch-vault/entries', [
+                'branch_id' => $branch->id,
+                'entry_type' => 'vault_in',
+                'denominations' => [10000 => 5, 5000 => 2],
+                'note' => 'Opening owner deposit request.',
+            ])
+            ->assertRedirect();
+
+        $adjustment = BalanceAdjustmentRequest::query()
+            ->withoutGlobalScopes()
+            ->firstOrFail();
+
+        $this->assertSame(
+            0,
+            app(CashDenominationRepository::class)
+                ->getVaultBalance($branch->id)[10000],
+        );
+
+        $this->actingAs($cashier)
+            ->post("/cashier/admin-requests/{$adjustment->id}/confirm", [
+                'pin' => '2222',
+            ])
+            ->assertRedirect();
+
+        $vault = app(CashDenominationRepository::class)
+            ->getVaultBalance($branch->id);
+
+        $this->assertSame(5, $vault[10000]);
+        $this->assertSame(2, $vault[5000]);
+
         $this->assertDatabaseHas('vault_transactions', [
+            'branch_id' => $branch->id,
             'txn_type' => 'adjustment',
-            'denomination' => 10000,
-            'quantity' => 5,
-            'performed_by' => $admin->id,
-        ]);
-
-        $batchIds = \App\Models\VaultTransaction::query()
-            ->where('txn_type', 'adjustment')
-            ->where('performed_by', $admin->id)
-            ->pluck('batch_id')
-            ->unique();
-        $this->assertCount(1, $batchIds);
-        $this->assertNotNull($batchIds->first());
-        $this->assertDatabaseHas('cash_denomination_logs', [
-            'batch_id' => $batchIds->first(),
             'movement_type' => 'admin_to_cashier',
-            'source_type' => 'admin',
-            'destination_type' => 'cashier_vault',
-            'affects_main_vault' => true,
-        ]);
-        $this->assertDatabaseHas('vault_transactions', [
-            'batch_id' => $batchIds->first(),
-            'movement_type' => 'admin_to_cashier',
-            'source_type' => 'admin',
-            'destination_type' => 'cashier_vault',
-        ]);
-
-        $this->actingAs($admin)->get('/admin/vault/log')
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('admin/vault/Log')
-                ->has('rows', 1)
-                ->where('rows.0.denomination_count', 2)
-                ->where('rows.0.total_amount', 60000)
-                ->has('rows.0.details', 2)
-                ->where('rows.0.reconciliation_status', 'matched')
-                ->where('rows.0.cash_total_amount', 60000)
-                ->has('rows.0.cash_details', 2)
-            );
-
-        $this->actingAs($cashier)->get('/cashier/main-vault-audit-log')
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('cashier/VaultAuditLog')
-                ->has('vaultLogs', 1)
-                ->where('vaultLogs.0.denomination_count', 2)
-                ->where('vaultLogs.0.total_amount', 60000)
-                ->has('vaultLogs.0.details', 2)
-                ->where('vaultLogs.0.reconciliation_status', 'matched')
-            );
-
-        $this->actingAs($admin)->post('/admin/actions/vault/entries', [
-            'entry_type' => 'vault_out',
-            'denominations' => [10000 => 2],
-            'note' => 'Owner cash collection.',
-        ])->assertRedirect();
-
-        $this->assertDatabaseHas('vault_denomination_balances', [
-            'denomination_id' => 10000,
-            'quantity' => 3,
-        ]);
-        $this->assertDatabaseHas('activity_logs', [
-            'user_id' => $admin->id,
-            'action' => 'cashier_vault_withdraw',
-            'entity_type' => 'cashier_vault',
-            'entity_id' => $cashier->id,
+            'verified_by' => $cashier->id,
         ]);
     }
 
     public function test_cashier_cannot_manually_mutate_main_vault(): void
     {
-        $cashier = User::factory()->create(['role' => 'cashier']);
+        $cashier = User::factory()->create([
+            'role' => 'cashier',
+            'branch_id' => Branch::main()->id,
+        ]);
 
-        $this->actingAs($cashier)->post('/cashier/vault/entries', [
-            'entry_type' => 'vault_in',
-            'denominations' => [10000 => 1],
-        ])->assertNotFound();
+        $this->actingAs($cashier)
+            ->post('/cashier/vault/entries', [
+                'entry_type' => 'vault_in',
+                'denominations' => [10000 => 1],
+            ])
+            ->assertNotFound();
 
         $this->assertDatabaseMissing('cash_denomination_logs', [
             'entry_type' => 'vault_in',
@@ -128,59 +111,25 @@ class AdminCashierVaultManagementTest extends TestCase
         ]);
     }
 
-    public function test_only_one_active_cashier_can_exist_through_admin_actions(): void
+    public function test_withdraw_request_cannot_exceed_current_branch_stock(): void
     {
+        $branch = Branch::main();
         $admin = User::factory()->create(['role' => 'admin']);
+
         User::factory()->create([
             'role' => 'cashier',
-            'is_active' => true,
-            'username' => 'cashierone',
-            'email' => 'cashierone@example.test',
+            'branch_id' => $branch->id,
+            'pin_hash' => Hash::make('2222'),
         ]);
 
-        $this->actingAs($admin)->post('/admin/actions/users', [
-            'username' => 'cashiertwo',
-            'email' => 'cashiertwo@example.test',
-            'full_name' => 'Cashier Two',
-            'role' => 'cashier',
-            'password' => 'password123',
-            'pin' => '3333',
-            'is_active' => true,
-        ])->assertSessionHasErrors('role');
+        $this->actingAs($admin)
+            ->post('/admin/branch-vault/entries', [
+                'branch_id' => $branch->id,
+                'entry_type' => 'vault_out',
+                'denominations' => [10000 => 2],
+            ])
+            ->assertSessionHasErrors('denominations');
 
-        $this->assertDatabaseMissing('users', ['username' => 'cashiertwo']);
-
-        $this->actingAs($admin)->post('/admin/actions/users', [
-            'username' => 'cashierinactive',
-            'email' => 'cashierinactive@example.test',
-            'full_name' => 'Inactive Cashier Two',
-            'role' => 'cashier',
-            'password' => 'password123',
-            'pin' => '4444',
-            'is_active' => false,
-        ])->assertSessionHasErrors('role');
-
-        $this->assertDatabaseMissing('users', ['username' => 'cashierinactive']);
-    }
-
-    public function test_admin_withdraw_cannot_exceed_denomination_stock(): void
-    {
-        $admin = User::factory()->create(['role' => 'admin']);
-        User::factory()->create(['role' => 'cashier', 'is_active' => true]);
-
-        $this->actingAs($admin)->post('/admin/actions/vault/entries', [
-            'entry_type' => 'vault_in',
-            'denominations' => [10000 => 1],
-        ])->assertRedirect();
-
-        $this->actingAs($admin)->post('/admin/actions/vault/entries', [
-            'entry_type' => 'vault_out',
-            'denominations' => [10000 => 2],
-        ])->assertSessionHasErrors('denominations');
-
-        $this->assertDatabaseHas('vault_denomination_balances', [
-            'denomination_id' => 10000,
-            'quantity' => 1,
-        ]);
+        $this->assertDatabaseCount('balance_adjustment_requests', 0);
     }
 }

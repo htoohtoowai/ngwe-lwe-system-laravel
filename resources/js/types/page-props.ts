@@ -8,8 +8,16 @@ export type AdminOperationPageProps = {
     notificationCount?: number;
 };
 
+export type AdminBranchOption = {
+    id: number;
+    code: string;
+    name: string;
+    is_active: boolean;
+};
+
 export type AdminTransactionRow = {
     id: number;
+    branch_id?: number | null;
     transaction_type: string;
     customer_name: string | null;
     customer_phone?: string | null;
@@ -25,6 +33,8 @@ export type AdminTransactionPageProps = {
     announcement?: string | null;
     notificationCount?: number;
     rows: AdminTransactionRow[];
+    branches: AdminBranchOption[];
+    selectedBranchId: number;
 };
 
 export type CashierDenoms = Record<number, number>;

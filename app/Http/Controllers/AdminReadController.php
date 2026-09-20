@@ -7,8 +7,7 @@ use App\Http\Resources\DailyReconciliationResource;
 use App\Http\Resources\TransactionResource;
 use App\Models\Branch;
 use App\Models\Transaction;
-use App\Repositories\TransactionRepository;
-use App\Repositories\VaultTransactionRepository;
+use App\Services\BranchVaultReadService;
 use App\Services\DailyReportService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -17,29 +16,54 @@ use Inertia\Response;
 class AdminReadController extends Controller
 {
     public function __construct(
-        private readonly TransactionRepository $transactions,
-        private readonly VaultTransactionRepository $vaultTransactions,
+        private readonly BranchVaultReadService $vaultLogs,
         private readonly DailyReportService $reports,
     ) {}
 
     public function transactions(Request $request, ?string $type = null): Response
     {
+        $branches = Branch::query()->orderBy('name')->get();
+        $selectedBranch = $this->selectedBranch($request, $branches);
+
+        $rows = Transaction::query()
+            ->withoutGlobalScopes()
+            ->with([
+                'agentCommissionEntries.account',
+                'agentCommissionEntries.company',
+            ])
+            ->where('branch_id', $selectedBranch->id)
+            ->when(
+                $type !== null,
+                fn ($query) => $query->where('transaction_type', $type),
+            )
+            ->orderByDesc('created_at')
+            ->limit(1000)
+            ->get();
+
         return Inertia::render($this->transactionComponent($type), [
             'role' => $request->user()?->role,
-            'announcement' => 'Admin transaction records.',
+            'announcement' => 'Admin branch transaction records.',
             'notificationCount' => $this->notificationCount(),
-            'rows' => TransactionResource::collection(
-                $this->transactions->filter(type: $type, limit: 1000)
-            )->resolve($request),
+            'branches' => BranchResource::collection($branches)->resolve($request),
+            'selectedBranchId' => (int) $selectedBranch->id,
+            'rows' => TransactionResource::collection($rows)->resolve($request),
         ]);
     }
 
     public function vaultLog(Request $request): Response
     {
+        $branches = Branch::query()->orderBy('name')->get();
+        $selectedBranch = $this->selectedBranch($request, $branches);
+
         return Inertia::render('admin/vault/Log', [
             'role' => $request->user()?->role,
             'notificationCount' => $this->notificationCount(),
-            'rows' => $this->vaultTransactions->groupedLog(limit: 200),
+            'branches' => BranchResource::collection($branches)->resolve($request),
+            'selectedBranchId' => (int) $selectedBranch->id,
+            'rows' => $this->vaultLogs->groupedLog(
+                branchId: (int) $selectedBranch->id,
+                limit: 200,
+            ),
         ]);
     }
 
@@ -78,6 +102,7 @@ class AdminReadController extends Controller
     private function notificationCount(): int
     {
         return Transaction::query()
+            ->withoutGlobalScopes()
             ->whereIn('transaction_type', ['cash_in', 'send_money'])
             ->where('status', 'PENDING_CASHIER_CONFIRM')
             ->count();
