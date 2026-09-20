@@ -3,11 +3,11 @@
 namespace App\Providers;
 
 use App\Http\Controllers\AdminAdjustmentRequestController;
+use App\Http\Controllers\AdminBalanceController;
 use App\Http\Controllers\AdminBranchController;
 use App\Http\Controllers\AdminBranchReportController;
 use App\Http\Controllers\AdminBranchUserController;
 use App\Http\Controllers\AdminBranchVaultController;
-use App\Http\Controllers\AdminBalanceController;
 use App\Http\Controllers\CashierAdjustmentRequestController;
 use App\Http\Controllers\CashierTellerController;
 use App\Models\Branch;
@@ -107,6 +107,9 @@ class BranchManagementServiceProvider extends ServiceProvider
                     [AdminAdjustmentRequestController::class, 'store'],
                 )->name('admin.adjustments.store');
 
+                // Legacy decision endpoints are retained so historical
+                // Cashier-origin rows can still be resolved if any exist.
+                // New Cashier-origin adjustment creation is disabled.
                 Route::post(
                     '/adjustments/{adjustmentRequest}/approve',
                     [AdminAdjustmentRequestController::class, 'approve'],
@@ -151,9 +154,6 @@ class BranchManagementServiceProvider extends ServiceProvider
             ->group(function (): void {
                 Route::get('/admin-requests', 'index')
                     ->name('admin-requests.index');
-
-                Route::post('/adjustments', 'store')
-                    ->name('adjustments.store');
 
                 Route::post(
                     '/admin-requests/{adjustmentRequest}/confirm',

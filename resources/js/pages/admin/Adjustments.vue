@@ -42,14 +42,13 @@ type AdjustmentRow = {
     assigned_cashier_name: string | null;
     requested_by_name: string | null;
     requester_role: string | null;
-    approver_id: number | null;
-    approver_name: string | null;
-    approver_role: string | null;
+    confirmed_by_name?: string | null;
+    rejected_by_name?: string | null;
     created_at: string | null;
 };
 
 type AssetType = 'cash' | 'pay' | 'bank';
-type WorkflowTab = 'new' | 'review' | 'waiting' | 'history';
+type WorkflowTab = 'new' | 'waiting' | 'history';
 
 const props = defineProps<{
     role: 'admin';
@@ -76,9 +75,6 @@ const providerId = ref<number | null>(preselectedAccount?.company?.id ?? null);
 const cashRequestedTotal = ref(0);
 const reviewing = ref(false);
 const activeTab = ref<WorkflowTab>('new');
-const selectedDecision = ref<AdjustmentRow | null>(null);
-const decisionAction = ref<'approve' | 'reject'>('approve');
-const decisionForm = useForm({ note: '' });
 const notes = [20000, 10000, 5000, 1000, 500, 200, 100, 50];
 
 const form = useForm({
@@ -166,38 +162,16 @@ const accountAfter = computed(() => {
 });
 
 const directionRows = computed(() =>
-    props.rows.filter((row) => row.direction === props.selectedDirection),
-);
-
-const toReview = computed(() =>
-    directionRows.value.filter(
+    props.rows.filter(
         (row) =>
-            row.status === 'PENDING' &&
-            row.approver_role === 'admin',
-    ),
-);
-
-const waitingForCashier = computed(() =>
-    directionRows.value.filter(
-        (row) =>
-            row.status === 'PENDING' &&
+            row.direction === props.selectedDirection &&
             row.requester_role === 'admin',
     ),
 );
 
-const handoverWaiting = computed(() =>
-    directionRows.value.filter(
-        (row) =>
-            row.status === 'APPROVED' &&
-            row.requester_role === 'cashier' &&
-            row.target_type === 'cash',
-    ),
+const waiting = computed(() =>
+    directionRows.value.filter((row) => row.status === 'PENDING'),
 );
-
-const waitingRows = computed(() => [
-    ...waitingForCashier.value,
-    ...handoverWaiting.value,
-]);
 
 const history = computed(() =>
     directionRows.value.filter(
@@ -295,35 +269,6 @@ function targetLabel(row: AdjustmentRow): string {
         .join(' · ');
 }
 
-function waitingLabel(row: AdjustmentRow): string {
-    if (row.status === 'APPROVED') {
-        return 'Waiting for Cashier handover confirmation';
-    }
-
-    return 'Waiting for Cashier approval';
-}
-
-function rowAfterBalance(row: AdjustmentRow): number {
-    const current = Number(row.account_balance ?? 0);
-    const amount = Number(row.amount ?? 0);
-
-    return row.direction === 'deposit'
-        ? current + amount
-        : current - amount;
-}
-
-function denominationEntries(
-    row: AdjustmentRow,
-): Array<[string, number]> {
-    return Object.entries(row.denominations ?? {})
-        .map(
-            ([denomination, quantity]) =>
-                [denomination, Number(quantity)] as [string, number],
-        )
-        .filter(([, quantity]) => quantity > 0)
-        .sort((a, b) => Number(b[0]) - Number(a[0]));
-}
-
 function directionHref(
     direction: 'deposit' | 'withdraw',
 ): string {
@@ -350,44 +295,6 @@ function loadBranch(): void {
             preserveScroll: true,
             preserveState: false,
             replace: true,
-        },
-    );
-}
-
-function openDecision(
-    row: AdjustmentRow,
-    nextAction: 'approve' | 'reject',
-): void {
-    selectedDecision.value = row;
-    decisionAction.value = nextAction;
-    decisionForm.reset();
-    decisionForm.clearErrors();
-}
-
-function closeDecision(): void {
-    if (!decisionForm.processing) {
-        selectedDecision.value = null;
-        decisionForm.reset();
-        decisionForm.clearErrors();
-    }
-}
-
-function submitDecision(): void {
-    if (!selectedDecision.value) {
-        return;
-    }
-
-    decisionForm.post(
-        `/admin/adjustments/${selectedDecision.value.id}/${decisionAction.value}`,
-        {
-            preserveScroll: true,
-            onSuccess: () => {
-                closeDecision();
-                activeTab.value =
-                    decisionAction.value === 'approve'
-                        ? 'waiting'
-                        : 'history';
-            },
         },
     );
 }
@@ -429,14 +336,14 @@ function submit(): void {
                 <p
                     class="text-xs font-black tracking-[0.16em] text-slate uppercase"
                 >
-                    Admin ↔ Cashier
+                    Admin → Cashier
                 </p>
                 <h1 class="mt-1 text-2xl font-black text-ink">
                     {{ directionTitle() }}
                 </h1>
                 <p class="mt-1 text-sm font-semibold text-slate">
-                    Create {{ directionTitle().toLowerCase() }} requests,
-                    review Cashier requests, and track the approval flow.
+                    Admin creates the request. The selected branch Cashier
+                    reviews and confirms it with PIN before any balance changes.
                 </p>
 
                 <div class="mt-4 flex flex-wrap gap-2">
@@ -466,12 +373,12 @@ function submit(): void {
             </header>
 
             <nav
-                class="grid grid-cols-4 overflow-hidden rounded-2xl border border-line bg-card p-1 shadow-sm"
+                class="grid grid-cols-3 overflow-hidden rounded-2xl border border-line bg-card p-1 shadow-sm"
                 aria-label="Adjustment workflow"
             >
                 <button
                     type="button"
-                    class="relative min-h-12 rounded-xl px-2 py-2 text-xs font-black transition sm:text-sm"
+                    class="min-h-12 rounded-xl px-2 py-2 text-xs font-black transition sm:text-sm"
                     :class="
                         activeTab === 'new'
                             ? 'bg-brand text-white shadow-sm'
@@ -483,25 +390,7 @@ function submit(): void {
                 </button>
                 <button
                     type="button"
-                    class="relative min-h-12 rounded-xl px-2 py-2 text-xs font-black transition sm:text-sm"
-                    :class="
-                        activeTab === 'review'
-                            ? 'bg-brand text-white shadow-sm'
-                            : 'text-slate hover:bg-mist hover:text-ink'
-                    "
-                    @click="activeTab = 'review'"
-                >
-                    To Review
-                    <span
-                        v-if="toReview.length"
-                        class="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]"
-                    >
-                        {{ toReview.length }}
-                    </span>
-                </button>
-                <button
-                    type="button"
-                    class="relative min-h-12 rounded-xl px-2 py-2 text-xs font-black transition sm:text-sm"
+                    class="min-h-12 rounded-xl px-2 py-2 text-xs font-black transition sm:text-sm"
                     :class="
                         activeTab === 'waiting'
                             ? 'bg-brand text-white shadow-sm'
@@ -511,15 +400,15 @@ function submit(): void {
                 >
                     Waiting
                     <span
-                        v-if="waitingRows.length"
+                        v-if="waiting.length"
                         class="ml-1 inline-flex min-w-5 items-center justify-center rounded-full bg-white/20 px-1.5 py-0.5 text-[10px]"
                     >
-                        {{ waitingRows.length }}
+                        {{ waiting.length }}
                     </span>
                 </button>
                 <button
                     type="button"
-                    class="relative min-h-12 rounded-xl px-2 py-2 text-xs font-black transition sm:text-sm"
+                    class="min-h-12 rounded-xl px-2 py-2 text-xs font-black transition sm:text-sm"
                     :class="
                         activeTab === 'history'
                             ? 'bg-brand text-white shadow-sm'
@@ -584,9 +473,7 @@ function submit(): void {
                                 @click="assetType = 'cash'"
                             >
                                 <AppMenuIcon name="vault" size="launcher" />
-                                <span
-                                    class="mt-2 block text-sm font-black"
-                                >
+                                <span class="mt-2 block text-sm font-black">
                                     Cash
                                 </span>
                             </button>
@@ -600,13 +487,8 @@ function submit(): void {
                                 "
                                 @click="assetType = 'pay'"
                             >
-                                <AppMenuIcon
-                                    name="accounts"
-                                    size="launcher"
-                                />
-                                <span
-                                    class="mt-2 block text-sm font-black"
-                                >
+                                <AppMenuIcon name="accounts" size="launcher" />
+                                <span class="mt-2 block text-sm font-black">
                                     Pay
                                 </span>
                             </button>
@@ -620,13 +502,8 @@ function submit(): void {
                                 "
                                 @click="assetType = 'bank'"
                             >
-                                <AppMenuIcon
-                                    name="companies"
-                                    size="launcher"
-                                />
-                                <span
-                                    class="mt-2 block text-sm font-black"
-                                >
+                                <AppMenuIcon name="companies" size="launcher" />
+                                <span class="mt-2 block text-sm font-black">
                                     Bank
                                 </span>
                             </button>
@@ -657,9 +534,7 @@ function submit(): void {
                             class="grid grid-cols-3 gap-3 rounded-xl bg-mist p-4 text-sm"
                         >
                             <div>
-                                <p class="text-xs font-bold text-slate">
-                                    Total
-                                </p>
+                                <p class="text-xs font-bold text-slate">Total</p>
                                 <p class="money mt-1 font-black">
                                     {{ money(cashRequestedTotal) }}
                                 </p>
@@ -700,11 +575,7 @@ function submit(): void {
                             >
                                 <option :value="null" disabled>
                                     Select
-                                    {{
-                                        assetType === 'pay'
-                                            ? 'Pay'
-                                            : 'Bank'
-                                    }}
+                                    {{ assetType === 'pay' ? 'Pay' : 'Bank' }}
                                     provider
                                 </option>
                                 <option
@@ -749,8 +620,7 @@ function submit(): void {
                                     Current Balance
                                 </p>
                                 <p class="money mt-1 font-black">
-                                    {{ money(selectedAccount.balance) }}
-                                    MMK
+                                    {{ money(selectedAccount.balance) }} MMK
                                 </p>
                             </div>
                             <div>
@@ -893,31 +763,9 @@ function submit(): void {
                         </div>
                     </div>
 
-                    <div
-                        v-if="selectedAccount"
-                        class="grid grid-cols-2 gap-3 rounded-xl border border-line p-4 text-sm"
-                    >
-                        <div>
-                            <p class="text-xs font-bold text-slate">
-                                Current Balance
-                            </p>
-                            <p class="money mt-1 font-black">
-                                {{ money(selectedAccount.balance) }} MMK
-                            </p>
-                        </div>
-                        <div>
-                            <p class="text-xs font-bold text-slate">
-                                After Confirmation
-                            </p>
-                            <p class="money mt-1 font-black">
-                                {{ money(accountAfter) }} MMK
-                            </p>
-                        </div>
-                    </div>
-
                     <p class="text-xs font-semibold leading-5 text-slate">
-                        This request does not change the balance now.
-                        The assigned branch Cashier must confirm it with PIN.
+                        No balance changes now. The branch Cashier must confirm
+                        this request with PIN.
                     </p>
 
                     <div class="flex justify-end gap-2">
@@ -946,95 +794,6 @@ function submit(): void {
             </template>
 
             <section
-                v-else-if="activeTab === 'review'"
-                class="rounded-2xl border border-line bg-card p-5 shadow-sm"
-            >
-                <div class="flex items-center justify-between gap-3">
-                    <div>
-                        <p
-                            class="text-xs font-black tracking-[0.12em] text-slate uppercase"
-                        >
-                            Action Required
-                        </p>
-                        <h2 class="mt-1 text-lg font-black text-ink">
-                            Cashier Requests
-                        </h2>
-                    </div>
-                    <span
-                        class="rounded-full bg-mist px-3 py-1 text-xs font-black"
-                    >
-                        {{ toReview.length }}
-                    </span>
-                </div>
-
-                <div class="mt-4 grid gap-3">
-                    <article
-                        v-for="row in toReview"
-                        :key="row.id"
-                        class="rounded-2xl border border-line bg-card p-4 shadow-sm"
-                    >
-                        <div
-                            class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
-                        >
-                            <div class="min-w-0">
-                                <p
-                                    class="text-xs font-black tracking-[0.12em] text-slate uppercase"
-                                >
-                                    Cashier Request #{{ row.id }}
-                                </p>
-                                <h3 class="mt-1 font-black text-ink">
-                                    {{ targetLabel(row) }}
-                                </h3>
-                                <p
-                                    class="mt-1 text-xs font-semibold text-slate"
-                                >
-                                    {{
-                                        row.requested_by_name ??
-                                        'Cashier'
-                                    }}
-                                    · {{ dateTime(row.created_at) }}
-                                </p>
-                                <p
-                                    class="mt-2 text-sm font-semibold text-ink"
-                                >
-                                    {{ row.note }}
-                                </p>
-                            </div>
-                            <p
-                                class="money shrink-0 text-xl font-black text-ink"
-                            >
-                                {{ money(row.amount) }} MMK
-                            </p>
-                        </div>
-
-                        <div class="mt-4 flex justify-end gap-2">
-                            <button
-                                type="button"
-                                class="bank-button bank-button-danger"
-                                @click="openDecision(row, 'reject')"
-                            >
-                                Reject
-                            </button>
-                            <button
-                                type="button"
-                                class="bank-button bank-button-primary"
-                                @click="openDecision(row, 'approve')"
-                            >
-                                Approve
-                            </button>
-                        </div>
-                    </article>
-
-                    <div
-                        v-if="!toReview.length"
-                        class="rounded-xl border border-dashed border-line px-5 py-10 text-center text-sm font-semibold text-slate"
-                    >
-                        No Cashier requests need your review.
-                    </div>
-                </div>
-            </section>
-
-            <section
                 v-else-if="activeTab === 'waiting'"
                 class="rounded-2xl border border-line bg-card p-5 shadow-sm"
             >
@@ -1043,7 +802,7 @@ function submit(): void {
                         <p
                             class="text-xs font-black tracking-[0.12em] text-slate uppercase"
                         >
-                            In Progress
+                            Sent by Admin
                         </p>
                         <h2 class="mt-1 text-lg font-black text-ink">
                             Waiting for Cashier
@@ -1052,51 +811,31 @@ function submit(): void {
                     <span
                         class="rounded-full bg-mist px-3 py-1 text-xs font-black"
                     >
-                        {{ waitingRows.length }}
+                        {{ waiting.length }}
                     </span>
                 </div>
 
                 <div class="mt-4 grid gap-3">
                     <article
-                        v-for="row in waitingRows"
+                        v-for="row in waiting"
                         :key="row.id"
                         class="rounded-2xl border border-line p-4"
                     >
                         <div
                             class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
                         >
-                            <div class="min-w-0">
-                                <div
-                                    class="flex flex-wrap items-center gap-2"
-                                >
-                                    <p class="font-black text-ink">
-                                        #{{ row.id }} ·
-                                        {{ targetLabel(row) }}
-                                    </p>
-                                    <span
-                                        class="rounded-full bg-mist px-2.5 py-1 text-[10px] font-black text-slate uppercase"
-                                    >
-                                        {{ row.status }}
-                                    </span>
-                                </div>
-                                <p
-                                    class="mt-2 text-xs font-black text-brand"
-                                >
-                                    {{ waitingLabel(row) }}
+                            <div>
+                                <p class="font-black text-ink">
+                                    #{{ row.id }} · {{ targetLabel(row) }}
                                 </p>
-                                <p
-                                    class="mt-1 text-sm font-semibold text-slate"
-                                >
+                                <p class="mt-1 text-xs font-black text-brand">
+                                    Waiting for Cashier PIN confirmation
+                                </p>
+                                <p class="mt-2 text-sm font-semibold text-slate">
                                     {{ row.note }}
                                 </p>
-                                <p
-                                    class="mt-2 text-xs font-semibold text-slate"
-                                >
-                                    Cashier:
-                                    {{
-                                        row.assigned_cashier_name ??
-                                        '-'
-                                    }}
+                                <p class="mt-2 text-xs font-semibold text-slate">
+                                    {{ row.assigned_cashier_name ?? 'Cashier' }}
                                     · {{ dateTime(row.created_at) }}
                                 </p>
                             </div>
@@ -1109,10 +848,10 @@ function submit(): void {
                     </article>
 
                     <div
-                        v-if="!waitingRows.length"
+                        v-if="!waiting.length"
                         class="rounded-xl border border-dashed border-line px-5 py-10 text-center text-sm font-semibold text-slate"
                     >
-                        No requests are waiting for the Cashier.
+                        No requests are waiting for Cashier confirmation.
                     </div>
                 </div>
             </section>
@@ -1148,13 +887,10 @@ function submit(): void {
                         <div
                             class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
                         >
-                            <div class="min-w-0">
-                                <div
-                                    class="flex flex-wrap items-center gap-2"
-                                >
+                            <div>
+                                <div class="flex flex-wrap items-center gap-2">
                                     <p class="font-black text-ink">
-                                        #{{ row.id }} ·
-                                        {{ targetLabel(row) }}
+                                        #{{ row.id }} · {{ targetLabel(row) }}
                                     </p>
                                     <span
                                         class="rounded-full px-2.5 py-1 text-[10px] font-black uppercase"
@@ -1167,14 +903,10 @@ function submit(): void {
                                         {{ row.status }}
                                     </span>
                                 </div>
-                                <p
-                                    class="mt-2 text-sm font-semibold text-slate"
-                                >
+                                <p class="mt-2 text-sm font-semibold text-slate">
                                     {{ row.note }}
                                 </p>
-                                <p
-                                    class="mt-2 text-xs font-semibold text-slate"
-                                >
+                                <p class="mt-2 text-xs font-semibold text-slate">
                                     {{ dateTime(row.created_at) }}
                                 </p>
                             </div>
@@ -1195,173 +927,5 @@ function submit(): void {
                 </div>
             </section>
         </div>
-
-        <Teleport to="body">
-            <div
-                v-if="selectedDecision"
-                class="fixed inset-0 z-[100] grid place-items-center bg-ink/60 p-4 backdrop-blur-sm"
-                @click.self="closeDecision"
-            >
-                <section
-                    class="w-full max-w-md rounded-2xl border border-line bg-card p-5 shadow-2xl"
-                >
-                    <h2 class="text-lg font-black text-ink">
-                        {{
-                            decisionAction === 'approve'
-                                ? 'Approve Cashier Request'
-                                : 'Reject Cashier Request'
-                        }}
-                    </h2>
-                    <p class="mt-2 text-sm font-semibold text-slate">
-                        #{{ selectedDecision.id }} ·
-                        {{ targetLabel(selectedDecision) }} ·
-                        {{ money(selectedDecision.amount) }} MMK
-                    </p>
-
-                    <p
-                        class="mt-3 rounded-lg bg-mist p-3 text-sm font-semibold text-ink"
-                    >
-                        {{ selectedDecision.note }}
-                    </p>
-
-                    <p
-                        v-if="
-                            decisionAction === 'approve' &&
-                            selectedDecision.target_type === 'cash' &&
-                            selectedDecision.requester_role === 'cashier'
-                        "
-                        class="mt-3 text-xs font-semibold leading-5 text-slate"
-                    >
-                        Admin approval does not change the vault yet.
-                        The requesting Cashier must confirm the physical
-                        cash handover with PIN.
-                    </p>
-
-                    <div
-                        v-if="selectedDecision.target_type === 'account'"
-                        class="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-line p-3 text-sm"
-                    >
-                        <div>
-                            <p class="text-xs font-bold text-slate">
-                                Current Balance
-                            </p>
-                            <p class="money mt-1 font-black">
-                                {{
-                                    money(
-                                        selectedDecision.account_balance,
-                                    )
-                                }}
-                                MMK
-                            </p>
-                        </div>
-                        <div>
-                            <p class="text-xs font-bold text-slate">
-                                After Approval
-                            </p>
-                            <p class="money mt-1 font-black">
-                                {{
-                                    money(
-                                        rowAfterBalance(
-                                            selectedDecision,
-                                        ),
-                                    )
-                                }}
-                                MMK
-                            </p>
-                        </div>
-                    </div>
-
-                    <div
-                        v-else-if="
-                            denominationEntries(selectedDecision).length
-                        "
-                        class="mt-3 rounded-lg border border-line p-3 text-sm"
-                    >
-                        <p class="text-xs font-bold text-slate">
-                            Denominations
-                        </p>
-                        <div class="mt-2 grid grid-cols-2 gap-2">
-                            <div
-                                v-for="[denomination, quantity] in denominationEntries(
-                                    selectedDecision,
-                                )"
-                                :key="denomination"
-                                class="flex justify-between gap-2 rounded-lg bg-mist px-3 py-2"
-                            >
-                                <span class="money font-bold">
-                                    {{ money(denomination) }}
-                                </span>
-                                <span class="font-black">
-                                    × {{ quantity }}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <form
-                        class="mt-5 grid gap-4"
-                        @submit.prevent="submitDecision"
-                    >
-                        <label v-if="decisionAction === 'reject'">
-                            <span class="bank-label">
-                                Reject Reason
-                            </span>
-                            <textarea
-                                v-model.trim="decisionForm.note"
-                                rows="3"
-                                class="bank-input resize-none"
-                            />
-                        </label>
-
-                        <div
-                            v-if="
-                                Object.keys(decisionForm.errors).length
-                            "
-                            class="rounded-lg border border-brand/20 bg-brand-soft p-3 text-sm font-bold text-brand"
-                        >
-                            {{
-                                Object.values(
-                                    decisionForm.errors,
-                                )[0]
-                            }}
-                        </div>
-
-                        <div class="flex justify-end gap-2">
-                            <button
-                                type="button"
-                                class="bank-button bank-button-secondary"
-                                :disabled="decisionForm.processing"
-                                @click="closeDecision"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                class="bank-button"
-                                :class="
-                                    decisionAction === 'approve'
-                                        ? 'bank-button-primary'
-                                        : 'bank-button-danger'
-                                "
-                                :disabled="decisionForm.processing"
-                            >
-                                {{
-                                    decisionForm.processing
-                                        ? 'Saving…'
-                                        : decisionAction === 'approve'
-                                          ? selectedDecision?.target_type ===
-                                                'cash' &&
-                                            selectedDecision?.requester_role ===
-                                                'cashier'
-                                              ? 'Approve Handover'
-                                              : 'Approve'
-                                          : 'Reject'
-                                }}
-                            </button>
-                        </div>
-                    </form>
-                </section>
-            </div>
-        </Teleport>
     </BankLayout>
 </template>

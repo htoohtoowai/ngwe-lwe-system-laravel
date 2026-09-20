@@ -40,10 +40,6 @@ type AdminData = {
     selectedBranch?: Branch | null;
     branches: Branch[];
     accounts?: Account[];
-    adjustmentCounts?: {
-        deposit: number;
-        withdraw: number;
-    };
 };
 
 const props = defineProps<{
@@ -67,116 +63,114 @@ const groups = computed<LauncherGroup[]>(() => [
         titleMm: 'ငွေရွှေ့ပြောင်းမှု',
         actions: [
             {
-                icon: 'cashIn' as MenuIconName,
+                icon: 'cashIn',
                 labelEn: 'Deposit',
                 labelMm: 'ငွေသွင်း',
                 href: branchHref('/admin/adjustments?direction=deposit'),
-                badge: props.adminData.adjustmentCounts?.deposit ?? 0,
             },
             {
-                icon: 'cashOut' as MenuIconName,
+                icon: 'cashOut',
                 labelEn: 'Withdraw',
                 labelMm: 'ငွေထုတ်',
                 href: branchHref('/admin/adjustments?direction=withdraw'),
-                badge: props.adminData.adjustmentCounts?.withdraw ?? 0,
             },
-        ] satisfies LauncherAction[],
+        ],
     },
     {
         titleEn: 'Balances',
         titleMm: 'လက်ကျန်များ',
         actions: [
             {
-                icon: 'vault' as MenuIconName,
+                icon: 'vault',
                 labelEn: 'Cash',
                 labelMm: 'ငွေသား',
                 href: branchHref('/admin/vault'),
             },
             {
-                icon: 'accounts' as MenuIconName,
+                icon: 'accounts',
                 labelEn: 'Pay',
                 labelMm: 'Pay',
                 href: branchHref('/admin/balances/pay'),
             },
             {
-                icon: 'companies' as MenuIconName,
+                icon: 'companies',
                 labelEn: 'Bank',
                 labelMm: 'ဘဏ်',
                 href: branchHref('/admin/balances/bank'),
             },
-        ] satisfies LauncherAction[],
+        ],
     },
     {
         titleEn: 'Operations',
         titleMm: 'လုပ်ငန်းများ',
         actions: [
             {
-                icon: 'transactions' as MenuIconName,
+                icon: 'transactions',
                 labelEn: 'Transactions',
                 labelMm: 'ငွေလုပ်ငန်းများ',
                 href: branchHref('/admin/transactions'),
             },
             {
-                icon: 'reconcile' as MenuIconName,
+                icon: 'reconcile',
                 labelEn: 'Reconcile',
                 labelMm: 'စာရင်းညှိ',
                 href: branchHref('/admin/reports/reconciliations'),
             },
             {
-                icon: 'reports' as MenuIconName,
+                icon: 'reports',
                 labelEn: 'Reports',
                 labelMm: 'အစီရင်ခံစာ',
                 href: branchHref('/admin/reports'),
             },
-        ] satisfies LauncherAction[],
+        ],
     },
     {
         titleEn: 'Management',
         titleMm: 'စီမံခန့်ခွဲမှု',
         actions: [
             {
-                icon: 'companies' as MenuIconName,
+                icon: 'companies',
                 labelEn: 'Branches',
                 labelMm: 'ဆိုင်ခွဲများ',
                 href: '/admin/branches',
             },
             {
-                icon: 'users' as MenuIconName,
+                icon: 'users',
                 labelEn: 'Staff',
                 labelMm: 'ဝန်ထမ်းများ',
                 href: branchHref('/admin/users'),
             },
             {
-                icon: 'services' as MenuIconName,
+                icon: 'services',
                 labelEn: 'Providers',
                 labelMm: 'Provider များ',
                 href: '/admin/companies',
             },
             {
-                icon: 'accounts' as MenuIconName,
+                icon: 'accounts',
                 labelEn: 'Accounts',
                 labelMm: 'အကောင့်များ',
                 href: branchHref('/admin/accounts'),
             },
             {
-                icon: 'fees' as MenuIconName,
+                icon: 'fees',
                 labelEn: 'Fee Rules',
                 labelMm: 'ဝန်ဆောင်ခ',
                 href: '/admin/fees',
             },
             {
-                icon: 'exchange' as MenuIconName,
+                icon: 'exchange',
                 labelEn: 'Exchange Rates',
                 labelMm: 'ငွေလဲနှုန်း',
                 href: '/admin/exchange-rates',
             },
             {
-                icon: 'settings' as MenuIconName,
+                icon: 'settings',
                 labelEn: 'Audit Logs',
                 labelMm: 'စစ်ဆေးမှတ်တမ်း',
                 href: '/admin/audit-logs',
             },
-        ] satisfies LauncherAction[],
+        ],
     },
 ]);
 
@@ -184,7 +178,7 @@ function label(action: LauncherAction): string {
     return lang.value === 'mm' ? action.labelMm : action.labelEn;
 }
 
-function groupTitle(group: { titleEn: string; titleMm: string }): string {
+function groupTitle(group: LauncherGroup): string {
     return lang.value === 'mm' ? group.titleMm : group.titleEn;
 }
 
@@ -211,9 +205,7 @@ function loadBranch(): void {
             <header
                 class="flex items-center justify-between gap-3 px-1 py-1 sm:px-4"
             >
-                <p
-                    class="shrink-0 text-sm font-black tracking-tight text-ink"
-                >
+                <p class="shrink-0 text-sm font-black tracking-tight text-ink">
                     Admin
                 </p>
 
@@ -258,15 +250,7 @@ function loadBranch(): void {
                         :href="action.href"
                         class="group relative flex min-h-32 min-w-0 flex-col items-center justify-center rounded-[1.65rem] px-2 py-4 text-center outline-none transition duration-200 hover:bg-white/80 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:ring-offset-2 active:scale-[0.98] sm:min-h-36"
                     >
-                        <span class="relative">
-                            <AppMenuIcon :name="action.icon" size="launcher" />
-                            <span
-                                v-if="(action.badge ?? 0) > 0"
-                                class="absolute -top-2 -right-3 grid min-w-6 place-items-center rounded-full bg-brand px-1.5 py-1 text-[10px] font-black leading-none text-white shadow"
-                            >
-                                {{ action.badge }}
-                            </span>
-                        </span>
+                        <AppMenuIcon :name="action.icon" size="launcher" />
                         <span
                             class="mt-3 w-full truncate text-sm font-bold tracking-tight text-ink sm:text-[15px]"
                         >
