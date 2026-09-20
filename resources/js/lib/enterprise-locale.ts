@@ -203,9 +203,9 @@ const mm: Record<string, string> = {
     Agent: 'ကိုယ်စားလှယ်',
     'Agent Account': 'ကိုယ်စားလှယ်အကောင့်',
     'Agent Commissions': 'ကိုယ်စားလှယ်ကော်မရှင်များ',
+    'Agent commission rules by provider, commission purpose and amount range.':
+        'ဝန်ဆောင်မှုပေးသူ၊ ကော်မရှင်အမျိုးအစားနှင့် ပမာဏအပိုင်းအခြားအလိုက် ကိုယ်စားလှယ်ကော်မရှင် သတ်မှတ်ချက်များ။',
     'Commission For': 'ကော်မရှင်အမျိုးအစား',
-    'Money In': 'ငွေဝင်',
-    'Money Out': 'ငွေထွက်',
     'Agent account': 'ကိုယ်စားလှယ်အကောင့်',
     'Agent commission': 'ကိုယ်စားလှယ်ကော်မရှင်',
     'Agent commission entries': 'ကိုယ်စားလှယ်ကော်မရှင်စာရင်းများ',
@@ -275,8 +275,8 @@ const mm: Record<string, string> = {
     'Company not found.': 'ကုမ္ပဏီ မတွေ့ပါ။',
     'Company to credit': 'ငွေဝင်မည့်ကုမ္ပဏီ',
     'Completed / other': 'ပြီးမြောက် / အခြား',
-    'Configure agent commission by Money In, Money Out, Send Money and Receive Money.':
-        'ငွေဝင်၊ ငွေထွက်၊ ငွေပို့နှင့် ငွေလက်ခံအလိုက် ကိုယ်စားလှယ်ကော်မရှင် သတ်မှတ်ပါ။',
+    'Configure agent commission for Cash In, Cash Out, Send Money and Receive Money by amount range.':
+        'ငွေသွင်း၊ ငွေထုတ်၊ ငွေပို့နှင့် ငွေလက်ခံအလိုက် ကိုယ်စားလှယ်ကော်မရှင်ကို ပမာဏအပိုင်းအခြားဖြင့် သတ်မှတ်ပါ။',
     'Confirm Cash In': 'ငွေသွင်းအတည်ပြုမည်',
     'Confirm PIN': 'PIN အတည်ပြုမည်',
     'Confirm Teller return': 'ငွေကိုင်ဝန်ထမ်း ပြန်အပ်ငွေ အတည်ပြုမည်',

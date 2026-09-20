@@ -133,8 +133,8 @@ function featureLabel(value: string): string {
 
 function agentCommissionForLabel(value: string): string {
     return {
-        cash_in: 'Money In',
-        cash_out: 'Money Out',
+        cash_in: 'Cash In',
+        cash_out: 'Cash Out',
         send_money: 'Send Money',
         receive_money: 'Receive Money',
     }[value] ?? value;
@@ -278,7 +278,7 @@ const heading = computed(() => activeKind.value === 'provider'
 const description = computed(() => activeKind.value === 'provider'
     ? 'Customer fee rules by provider, fee category and amount range.'
     : activeKind.value === 'agent'
-      ? 'Agent commission rules by provider, commission purpose and amount range. Money In and Money Out follow the agent account balance movement.'
+      ? 'Agent commission rules by provider, commission purpose and amount range.'
       : 'Customer fee rules by source provider, destination provider and amount range.');
 
 const createHref = computed(() => `/admin/fees/${activeKind.value}/create`);
@@ -358,7 +358,7 @@ const deleteDescription = computed(() => 'This tier will be permanently deleted.
             <div class="flex items-start justify-between gap-4 border-b border-line pb-4">
                 <div>
                     <h2 class="text-lg font-black">{{ mode === 'edit' ? 'Edit agent commission tier' : 'New agent commission tier' }}</h2>
-                    <p class="mt-1 text-xs text-slate">Configure agent commission for Money In, Money Out, Send Money and Receive Money by amount range.</p>
+                    <p class="mt-1 text-xs text-slate">Configure agent commission for Cash In, Cash Out, Send Money and Receive Money by amount range.</p>
                 </div>
                 <Link :href="listHref" class="bank-button bank-button-secondary px-4 py-2">Cancel</Link>
             </div>
