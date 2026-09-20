@@ -43,6 +43,9 @@ const mobileCloseButton = ref<HTMLButtonElement | null>(null);
 const sidebarCollapsed = ref(false);
 const { lang, setLang, t } = useLocale();
 const SIDEBAR_STORAGE_KEY = 'ngwe-lwe:bank-sidebar-collapsed';
+const desktopBreakpoint = computed(() =>
+    props.role === 'teller' ? 1280 : 1024,
+);
 
 type NavSection = 'Banking' | 'Office' | 'Admin';
 type NavIcon = MenuIconName;
@@ -641,7 +644,14 @@ const isNavItemActive = (item: NavItem) =>
 onMounted(() => {
     sidebarCollapsed.value =
         window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === '1';
+    window.addEventListener('resize', closeDrawerAtDesktop);
 });
+
+function closeDrawerAtDesktop(): void {
+    if (drawer.value && window.innerWidth >= desktopBreakpoint.value) {
+        drawer.value = false;
+    }
+}
 
 watch(drawer, async (isOpen) => {
     document.body.style.overflow = isOpen ? 'hidden' : '';
@@ -656,6 +666,7 @@ watch(drawer, async (isOpen) => {
 
 onBeforeUnmount(() => {
     document.body.style.overflow = '';
+    window.removeEventListener('resize', closeDrawerAtDesktop);
 });
 
 watch(sidebarCollapsed, (collapsed) => {
@@ -683,7 +694,10 @@ function signOut() {
                 <button
                     ref="mobileMenuButton"
                     type="button"
-                    class="grid size-9 place-items-center rounded-full text-slate transition hover:bg-mist hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none lg:hidden"
+                    class="grid size-9 place-items-center rounded-full text-slate transition hover:bg-mist hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:outline-none"
+                    :class="
+                        props.role === 'teller' ? 'xl:hidden' : 'lg:hidden'
+                    "
                     :aria-label="t('common.openMenu')"
                     aria-controls="mobile-bank-menu"
                     :aria-expanded="drawer"
@@ -875,8 +889,11 @@ function signOut() {
             <!-- ===== Sidebar: desktop ===== -->
             <aside
                 :aria-label="t('common.desktopNavigation')"
-                class="sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 border-r border-white/10 bg-[#2f3035] text-white shadow-[0_14px_32px_-24px_rgba(15,23,42,0.9)] transition-[width] duration-200 lg:block"
-                :class="sidebarCollapsed ? 'w-[84px]' : 'w-[260px]'"
+                class="sticky top-14 hidden h-[calc(100vh-3.5rem)] shrink-0 border-r border-white/10 bg-[#2f3035] text-white shadow-[0_14px_32px_-24px_rgba(15,23,42,0.9)] transition-[width] duration-200"
+                :class="[
+                    sidebarCollapsed ? 'w-[84px]' : 'w-[260px]',
+                    props.role === 'teller' ? 'xl:block' : 'lg:block',
+                ]"
                 :data-desktop-drawer="
                     sidebarCollapsed ? 'collapsed' : 'expanded'
                 "
@@ -1087,7 +1104,10 @@ function signOut() {
             <Teleport to="body">
                 <div
                     v-if="drawer"
-                    class="fixed inset-0 z-50 lg:hidden"
+                    class="fixed inset-0 z-50"
+                    :class="
+                        props.role === 'teller' ? 'xl:hidden' : 'lg:hidden'
+                    "
                     @keydown.esc="drawer = false"
                 >
                     <button
