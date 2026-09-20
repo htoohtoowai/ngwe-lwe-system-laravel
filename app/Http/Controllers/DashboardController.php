@@ -36,6 +36,9 @@ class DashboardController extends Controller
                 'role' => 'teller',
                 'announcement' => null,
                 'notificationCount' => $this->notificationCount($user),
+                'pendingCashInCount' => $this->pendingCashInCount($user),
+                'floats' => $this->floats($user),
+                'recent' => $this->recent($user),
             ]);
         }
 
@@ -74,6 +77,15 @@ class DashboardController extends Controller
 
         return (int) Transaction::query()
             ->whereIn('transaction_type', ['cash_in', 'send_money'])
+            ->where('status', 'PENDING_CASHIER_CONFIRM')
+            ->count();
+    }
+
+    private function pendingCashInCount(User $user): int
+    {
+        return (int) Transaction::query()
+            ->where('created_by', $user->id)
+            ->where('transaction_type', 'cash_in')
             ->where('status', 'PENDING_CASHIER_CONFIRM')
             ->count();
     }
