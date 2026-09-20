@@ -1,13 +1,13 @@
 {
   "id": "/dashboard",
-  "name": "Ngwe Lwe System",
-  "short_name": "Ngwe Lwe",
-  "description": "Secure teller operations for Ngwe Lwe System.",
+  "name": "Doctor Phone",
+  "short_name": "Doctor Phone",
+  "description": "Secure teller operations for Doctor Phone.",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f6f7fb",
-  "theme_color": "#2f3035",
+  "theme_color": "#ffffff",
   "orientation": "any",
   "icons": [
     {

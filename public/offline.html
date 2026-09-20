@@ -2,9 +2,9 @@
 <html lang="en">
     <head>
         <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="theme-color" content="#2f3035">
-        <title>Offline - Ngwe Lwe System</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        <meta name="theme-color" content="#ffffff">
+        <title>Offline - Doctor Phone</title>
         <style>
             :root {
                 color-scheme: light;
@@ -18,11 +18,15 @@
             }
 
             body {
-                min-height: 100vh;
+                min-height: 100dvh;
                 margin: 0;
                 display: grid;
                 place-items: center;
-                padding: 24px;
+                padding:
+                    max(24px, env(safe-area-inset-top))
+                    max(24px, env(safe-area-inset-right))
+                    max(24px, env(safe-area-inset-bottom))
+                    max(24px, env(safe-area-inset-left));
                 background: #f6f7fb;
             }
 
@@ -43,7 +47,7 @@
                 display: grid;
                 place-items: center;
                 border-radius: 18px;
-                background: #2f3035;
+                background: #b31b2c;
                 color: #ffffff;
                 font-weight: 800;
             }
@@ -78,7 +82,7 @@
             <div class="mark" aria-hidden="true">DP</div>
             <h1>You're offline</h1>
             <p>
-                Ngwe Lwe requires a secure network connection for teller,
+                Doctor Phone requires a secure network connection for teller,
                 account, float and transaction operations. No financial action
                 is queued while offline.
             </p>

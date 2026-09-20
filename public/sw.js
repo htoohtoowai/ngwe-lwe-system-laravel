@@ -1,8 +1,10 @@
-const CACHE_NAME = 'ngwe-lwe-static-v1';
+const CACHE_PREFIX = 'ngwe-lwe-static-';
+const CACHE_NAME = `${CACHE_PREFIX}v2`;
 const OFFLINE_URL = '/offline.html';
 
 const APP_SHELL = [
     OFFLINE_URL,
+    '/manifest.webmanifest',
     '/favicon.svg',
     '/apple-touch-icon.png',
     '/pwa-icon-192.png',
@@ -24,7 +26,11 @@ self.addEventListener('activate', (event) => {
             .then((keys) =>
                 Promise.all(
                     keys
-                        .filter((key) => key !== CACHE_NAME)
+                        .filter(
+                            (key) =>
+                                key.startsWith(CACHE_PREFIX) &&
+                                key !== CACHE_NAME,
+                        )
                         .map((key) => caches.delete(key)),
                 ),
             )
@@ -55,7 +61,7 @@ self.addEventListener('fetch', (event) => {
         return;
     }
 
-    // Only immutable Vite build assets and explicitly public app-shell assets
+    // Only immutable Vite build assets and explicit public app-shell assets
     // are cacheable. Runtime business/data requests are intentionally excluded.
     const isBuildAsset = url.pathname.startsWith('/build/assets/');
     const isShellAsset = APP_SHELL.includes(url.pathname);
