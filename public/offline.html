@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#2f3035">
+        <title>Offline - Ngwe Lwe System</title>
+        <style>
+            :root {
+                color-scheme: light;
+                font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                background: #f6f7fb;
+                color: #171923;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+
+            body {
+                min-height: 100vh;
+                margin: 0;
+                display: grid;
+                place-items: center;
+                padding: 24px;
+                background: #f6f7fb;
+            }
+
+            main {
+                width: min(100%, 460px);
+                border: 1px solid #e4e7ec;
+                border-radius: 24px;
+                background: #ffffff;
+                padding: 28px;
+                text-align: center;
+                box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
+            }
+
+            .mark {
+                width: 64px;
+                height: 64px;
+                margin: 0 auto 18px;
+                display: grid;
+                place-items: center;
+                border-radius: 18px;
+                background: #2f3035;
+                color: #ffffff;
+                font-weight: 800;
+            }
+
+            h1 {
+                margin: 0;
+                font-size: 22px;
+            }
+
+            p {
+                margin: 12px 0 0;
+                line-height: 1.6;
+                color: #667085;
+            }
+
+            button {
+                min-height: 44px;
+                margin-top: 22px;
+                border: 0;
+                border-radius: 999px;
+                background: #b31b2c;
+                color: #ffffff;
+                padding: 0 22px;
+                font: inherit;
+                font-weight: 700;
+                cursor: pointer;
+            }
+        </style>
+    </head>
+    <body>
+        <main>
+            <div class="mark" aria-hidden="true">DP</div>
+            <h1>You're offline</h1>
+            <p>
+                Ngwe Lwe requires a secure network connection for teller,
+                account, float and transaction operations. No financial action
+                is queued while offline.
+            </p>
+            <p lang="my">
+                ငွေလုပ်ငန်းများ ဆောင်ရွက်ရန် အင်တာနက်ချိတ်ဆက်မှု လိုအပ်ပါသည်။
+                Offline အချိန်တွင် ငွေလုပ်ငန်းတစ်ခုမျှ သိမ်းဆည်းပြီး နောက်မှ
+                ပို့ခြင်း မပြုလုပ်ပါ။
+            </p>
+            <button type="button" onclick="window.location.reload()">
+                Try again
+            </button>
+        </main>
+    </body>
+</html>
