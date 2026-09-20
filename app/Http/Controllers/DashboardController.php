@@ -217,7 +217,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * @return array<int, array{id:int,type:string,label:string,amount:string,direction:string,time:string}>
+     * @return array<int, array{id:int,type:string,label:string,amount:string,direction:string,time:string,created_at:string}>
      */
     private function recent(User $user): array
     {
@@ -232,6 +232,7 @@ class DashboardController extends Controller
                 'amount' => Money::normalize($transaction->amount ?? 0),
                 'direction' => in_array($transaction->transaction_type, ['cash_in', 'send_money'], true) ? 'in' : 'out',
                 'time' => $transaction->created_at?->diffForHumans() ?? '',
+                'created_at' => $transaction->created_at?->toISOString() ?? '',
             ])
             ->values()
             ->all();

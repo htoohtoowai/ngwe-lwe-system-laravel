@@ -37,6 +37,7 @@ type RecentEntry = {
     amount: string;
     direction: 'in' | 'out';
     time: string;
+    created_at: string;
 };
 
 const props = defineProps<{
@@ -118,6 +119,8 @@ const copy = computed(() =>
               active: 'အသုံးပြုနေသည်',
               pendingReceipt: 'လက်ခံရန် စောင့်ဆိုင်း',
               pendingReconciliation: 'ပြန်အပ်စာရင်းစစ်ရန် စောင့်ဆိုင်း',
+              recentHistory: 'နောက်ဆုံးလုပ်ငန်းမှတ်တမ်း',
+              noRecentHistory: 'လုပ်ငန်းမှတ်တမ်း မရှိသေးပါ။',
           }
         : {
               availableCash: 'Available Counter Cash',
@@ -133,6 +136,8 @@ const copy = computed(() =>
               active: 'Active',
               pendingReceipt: 'Pending receipt',
               pendingReconciliation: 'Pending reconciliation',
+              recentHistory: 'Recent History',
+              noRecentHistory: 'No recent transactions yet.',
           },
 );
 
@@ -141,6 +146,28 @@ const activeFloat = computed(
 );
 const visibleFloat = computed(() => activeFloat.value ?? props.floats[0] ?? null);
 const availableCounterCash = computed(() => activeFloat.value?.amount ?? '0.00');
+const recentHistory = computed(() => props.recent.slice(0, 5));
+
+const transactionLabels: Record<
+    string,
+    { en: string; mm: string }
+> = {
+    cash_in: { en: 'Cash In', mm: 'ငွေသွင်း' },
+    cash_out: { en: 'Cash Out', mm: 'ငွေထုတ်' },
+    send_money: { en: 'Send Money', mm: 'ငွေပို့' },
+    receive_money: { en: 'Receive Money', mm: 'ငွေလက်ခံ' },
+    transfer: { en: 'Transfer', mm: 'ငွေလွှဲ' },
+    exchange: { en: 'Exchange', mm: 'ငွေလဲ' },
+};
+
+const transactionHistoryRoutes: Record<string, string> = {
+    cash_in: '/transactions/cash-in/history',
+    cash_out: '/transactions/cash-out/history',
+    send_money: '/transactions/send-money/history',
+    receive_money: '/transactions/receive-money/history',
+    transfer: '/transactions/transfer/history',
+    exchange: '/transactions/exchange/history',
+};
 
 function actionLabel(action: LauncherAction): string {
     return lang.value === 'mm' ? action.labelMm : action.labelEn;
@@ -150,6 +177,44 @@ function mmk(value: string | number): string {
     const amount = Number(value);
 
     return Number.isFinite(amount) ? amount.toLocaleString() : '0';
+}
+
+function normalizeTransactionType(type: string): string {
+    return type.trim().toLowerCase().replaceAll('-', '_').replaceAll(' ', '_');
+}
+
+function transactionTypeLabel(type: string): string {
+    const normalized = normalizeTransactionType(type);
+    const labels = transactionLabels[normalized];
+
+    if (!labels) {
+        return type;
+    }
+
+    return lang.value === 'mm' ? labels.mm : labels.en;
+}
+
+function transactionHistoryHref(type: string): string {
+    return transactionHistoryRoutes[normalizeTransactionType(type)] ?? '/teller';
+}
+
+function historyTime(entry: RecentEntry): string {
+    if (!entry.created_at) {
+        return entry.time;
+    }
+
+    const date = new Date(entry.created_at);
+
+    if (Number.isNaN(date.getTime())) {
+        return entry.time;
+    }
+
+    return new Intl.DateTimeFormat(lang.value === 'mm' ? 'my-MM' : 'en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    }).format(date);
 }
 
 function floatStatusLabel(status: string): string {
@@ -336,7 +401,7 @@ onBeforeUnmount(() => {
             </section>
 
             <!-- My Float -->
-            <section class="mt-6 pb-8 sm:mt-7">
+            <section class="mt-6 sm:mt-7">
                 <div class="flex items-center justify-between gap-4">
                     <h2 class="text-lg font-black tracking-tight text-ink">
                         {{ copy.myFloat }}
@@ -419,6 +484,82 @@ onBeforeUnmount(() => {
                     <p class="text-sm font-semibold text-slate">
                         {{ copy.noFloats }}
                     </p>
+                </div>
+            </section>
+
+            <!-- Recent History: maximum 5 rows -->
+            <section class="mt-6 pb-8 sm:mt-7">
+                <h2 class="text-lg font-black tracking-tight text-ink">
+                    {{ copy.recentHistory }}
+                </h2>
+
+                <div
+                    class="mt-3 overflow-hidden rounded-3xl border border-line bg-card shadow-sm"
+                >
+                    <Link
+                        v-for="entry in recentHistory"
+                        :key="entry.id"
+                        :href="transactionHistoryHref(entry.type)"
+                        :headers="authHeaders()"
+                        class="flex min-h-[72px] items-center gap-3 border-b border-line px-4 py-3 transition last:border-b-0 hover:bg-mist/60 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand/70 focus-visible:outline-none sm:px-5"
+                    >
+                        <span
+                            class="size-2.5 shrink-0 rounded-full"
+                            :class="
+                                entry.direction === 'in'
+                                    ? 'bg-credit'
+                                    : 'bg-debit'
+                            "
+                            aria-hidden="true"
+                        />
+
+                        <div class="min-w-0 flex-1">
+                            <div class="flex min-w-0 items-center gap-2">
+                                <p
+                                    class="truncate text-sm font-black text-ink"
+                                >
+                                    {{ transactionTypeLabel(entry.type) }}
+                                </p>
+                                <span
+                                    class="shrink-0 text-[10px] font-bold text-slate"
+                                >
+                                    #{{ entry.id }}
+                                </span>
+                            </div>
+
+                            <p
+                                class="mt-0.5 truncate text-xs font-semibold text-slate"
+                            >
+                                {{ entry.label }}
+                            </p>
+
+                            <p class="mt-1 text-[11px] font-medium text-slate/80">
+                                {{ historyTime(entry) }}
+                            </p>
+                        </div>
+
+                        <p
+                            class="money shrink-0 text-right text-sm font-black sm:text-base"
+                            :class="
+                                entry.direction === 'in'
+                                    ? 'text-credit'
+                                    : 'text-debit'
+                            "
+                        >
+                            {{ entry.direction === 'in' ? '+' : '−'
+                            }}{{ mmk(entry.amount) }}
+                            <span class="text-[10px]">MMK</span>
+                        </p>
+                    </Link>
+
+                    <div
+                        v-if="recentHistory.length === 0"
+                        class="px-5 py-8 text-center"
+                    >
+                        <p class="text-sm font-semibold text-slate">
+                            {{ copy.noRecentHistory }}
+                        </p>
+                    </div>
                 </div>
             </section>
         </div>
