@@ -2,6 +2,7 @@
 
 namespace App\Repositories;
 
+use App\Models\Branch;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
@@ -13,12 +14,16 @@ class TransactionRepository
      */
     public function create(array $data): Transaction
     {
+        $data = $this->withBranchSnapshot($data);
+
         return Transaction::query()->create($data)->refresh();
     }
 
     public function find(int $id): ?Transaction
     {
-        return Transaction::query()->with(['agentCommissionEntries.account', 'agentCommissionEntries.company'])->find($id);
+        return Transaction::query()
+            ->with(['agentCommissionEntries.account', 'agentCommissionEntries.company'])
+            ->find($id);
     }
 
     /**
@@ -105,8 +110,11 @@ class TransactionRepository
         return $affected > 0 ? $transaction->refresh() : null;
     }
 
-    public function cancelPendingCashIn(Transaction $transaction, int $cashierId, ?string $note = null): ?Transaction
-    {
+    public function cancelPendingCashIn(
+        Transaction $transaction,
+        int $cashierId,
+        ?string $note = null,
+    ): ?Transaction {
         $update = [
             'status' => 'CANCELLED',
             'vault_impact' => 'none',
@@ -126,7 +134,6 @@ class TransactionRepository
 
         return $affected > 0 ? $transaction->refresh() : null;
     }
-
 
     /**
      * Complete one pending Send Money transaction after the Cashier counts the
@@ -162,8 +169,11 @@ class TransactionRepository
         return $affected > 0 ? $transaction->refresh() : null;
     }
 
-    public function cancelPendingSendMoney(Transaction $transaction, int $cashierId, ?string $note = null): ?Transaction
-    {
+    public function cancelPendingSendMoney(
+        Transaction $transaction,
+        int $cashierId,
+        ?string $note = null,
+    ): ?Transaction {
         $update = [
             'status' => 'CANCELLED',
             'vault_impact' => 'none',
@@ -184,8 +194,10 @@ class TransactionRepository
         return $affected > 0 ? $transaction->refresh() : null;
     }
 
-    public function approveIfUnapproved(Transaction $transaction, int $cashierId): ?Transaction
-    {
+    public function approveIfUnapproved(
+        Transaction $transaction,
+        int $cashierId,
+    ): ?Transaction {
         $affected = Transaction::query()
             ->where('id', $transaction->id)
             ->whereNull('cash_approved_by')
@@ -195,5 +207,39 @@ class TransactionRepository
             ]);
 
         return $affected > 0 ? $transaction->refresh() : null;
+    }
+
+    /**
+     * Transaction branch is a historical snapshot. Never trust a branch id
+     * supplied by a client when a creator is known.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function withBranchSnapshot(array $data): array
+    {
+        $creatorId = (int) ($data['created_by'] ?? 0);
+
+        if ($creatorId <= 0) {
+            return $data;
+        }
+
+        $creator = User::query()
+            ->withoutGlobalScopes()
+            ->find($creatorId);
+
+        if ($creator === null) {
+            return $data;
+        }
+
+        if ($creator->branch_id !== null) {
+            $data['branch_id'] = (int) $creator->branch_id;
+
+            return $data;
+        }
+
+        $data['branch_id'] ??= Branch::main()->id;
+
+        return $data;
     }
 }

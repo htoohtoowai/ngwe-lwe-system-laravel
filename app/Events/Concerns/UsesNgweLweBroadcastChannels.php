@@ -18,6 +18,11 @@ trait UsesNgweLweBroadcastChannels
         );
     }
 
+    protected function branchRoleChannel(int $branchId, string $role): PrivateChannel
+    {
+        return new PrivateChannel("branch.{$branchId}.{$role}");
+    }
+
     protected function userChannel(int $userId): PrivateChannel
     {
         return new PrivateChannel('user.'.$userId);

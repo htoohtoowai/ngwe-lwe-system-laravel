@@ -15,11 +15,25 @@ class NewTransaction implements ShouldBroadcastNow
     /**
      * @param  array<string, mixed>  $transaction
      */
-    public function __construct(public readonly array $transaction) {}
+    public function __construct(
+        public readonly array $transaction,
+        public readonly ?int $branchId = null,
+    ) {}
 
     public function broadcastOn(): array
     {
-        return $this->roleChannels(['admin', 'cashier', 'teller']);
+        $channels = $this->roleChannels(['admin']);
+
+        if ($this->branchId !== null) {
+            $channels[] = $this->branchRoleChannel($this->branchId, 'cashier');
+        }
+
+        $creatorId = (int) ($this->transaction['created_by'] ?? 0);
+        if ($creatorId > 0) {
+            $channels[] = $this->userChannel($creatorId);
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string

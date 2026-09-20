@@ -12,6 +12,7 @@ class AccountResource extends JsonResource
         return [
             'id' => $this->id,
             'company_id' => $this->company_id,
+            'branch_id' => $this->branch_id !== null ? (int) $this->branch_id : null,
             'account_name' => $this->account_name,
             'account_type' => $this->account_type instanceof \BackedEnum ? $this->account_type->value : $this->account_type,
             'account_identifier' => $this->account_identifier,

@@ -12,6 +12,7 @@ class TransactionResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'branch_id' => $this->branch_id !== null ? (int) $this->branch_id : null,
             'transaction_type' => $this->transaction_type,
             'account_id' => $this->account_id,
             'to_account_id' => $this->to_account_id,

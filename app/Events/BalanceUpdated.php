@@ -15,11 +15,21 @@ class BalanceUpdated implements ShouldBroadcastNow
     /**
      * @param  array<int, array<string, mixed>>  $accounts
      */
-    public function __construct(public readonly array $accounts) {}
+    public function __construct(
+        public readonly array $accounts,
+        public readonly ?int $branchId = null,
+    ) {}
 
     public function broadcastOn(): array
     {
-        return $this->roleChannels(['admin', 'cashier', 'teller']);
+        $channels = $this->roleChannels(['admin']);
+
+        if ($this->branchId !== null) {
+            $channels[] = $this->branchRoleChannel($this->branchId, 'cashier');
+            $channels[] = $this->branchRoleChannel($this->branchId, 'teller');
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string

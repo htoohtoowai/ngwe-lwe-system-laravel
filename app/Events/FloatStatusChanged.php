@@ -18,14 +18,21 @@ class FloatStatusChanged implements ShouldBroadcastNow
     public function __construct(
         public readonly array $cashFloat,
         public readonly int $employeeId,
+        public readonly ?int $branchId = null,
     ) {}
 
     public function broadcastOn(): array
     {
-        return [
-            ...$this->roleChannels(['admin', 'cashier']),
+        $channels = [
+            ...$this->roleChannels(['admin']),
             $this->userChannel($this->employeeId),
         ];
+
+        if ($this->branchId !== null) {
+            $channels[] = $this->branchRoleChannel($this->branchId, 'cashier');
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string

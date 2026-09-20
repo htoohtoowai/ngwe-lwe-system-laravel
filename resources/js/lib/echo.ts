@@ -46,7 +46,9 @@ export function createNgweLweEcho(): NgweLweEcho | null {
     activeEcho?.disconnect();
     window.Pusher = Pusher;
 
-    const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '';
+    const csrfToken =
+        document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+            ?.content ?? '';
 
     activeEcho = new Echo({
         broadcaster: 'reverb',
@@ -140,7 +142,17 @@ export function subscribeToRoleChannel(
     role: RealtimeRole,
     handlers: RealtimeHandlers,
 ): () => void {
-    return subscribe(echo, role, handlers);
+    if (role === 'admin') {
+        return subscribe(echo, 'admin', handlers);
+    }
+
+    const branchId = currentBranchId();
+
+    if (branchId === null) {
+        return () => undefined;
+    }
+
+    return subscribe(echo, `branch.${branchId}.${role}`, handlers);
 }
 
 export function subscribeToUserChannel(
@@ -149,6 +161,15 @@ export function subscribeToUserChannel(
     handlers: RealtimeHandlers,
 ): () => void {
     return subscribe(echo, `user.${userId}`, handlers);
+}
+
+function currentBranchId(): number | null {
+    const raw =
+        document.querySelector<HTMLMetaElement>('meta[name="branch-id"]')
+            ?.content ?? '';
+    const branchId = Number(raw);
+
+    return Number.isInteger(branchId) && branchId > 0 ? branchId : null;
 }
 
 function subscribe(

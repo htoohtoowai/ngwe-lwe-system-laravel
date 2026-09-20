@@ -11,6 +11,7 @@ class CashFloatResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'branch_id' => $this->branch_id !== null ? (int) $this->branch_id : null,
             'employee_id' => $this->employee_id,
             'employee_name' => $this->employee?->full_name,
             'issued_by' => $this->issued_by,

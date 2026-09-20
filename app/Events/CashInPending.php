@@ -15,11 +15,20 @@ class CashInPending implements ShouldBroadcastNow
     /**
      * @param  array<string, mixed>  $transaction
      */
-    public function __construct(public readonly array $transaction) {}
+    public function __construct(
+        public readonly array $transaction,
+        public readonly ?int $branchId = null,
+    ) {}
 
     public function broadcastOn(): array
     {
-        return $this->roleChannels(['cashier']);
+        if ($this->branchId === null) {
+            return [];
+        }
+
+        return [
+            $this->branchRoleChannel($this->branchId, 'cashier'),
+        ];
     }
 
     public function broadcastAs(): string
