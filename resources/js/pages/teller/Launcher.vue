@@ -70,43 +70,35 @@ function actionLabel(action: LauncherAction): string {
         :announcement="props.announcement"
         :notification-count="props.notificationCount"
     >
-        <div class="mx-auto w-full max-w-7xl">
-            <section
-                class="relative overflow-hidden rounded-[2rem] border border-white/10 bg-[#101523] px-4 py-8 text-white shadow-xl sm:px-8 sm:py-12"
+        <section
+            class="mx-auto w-full max-w-4xl px-1 pt-2 pb-8 sm:px-4 sm:pt-6 lg:pt-8"
+            aria-label="Teller actions"
+        >
+            <div
+                class="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 sm:gap-x-8 sm:gap-y-10 md:gap-x-12"
             >
-                <div
-                    class="pointer-events-none absolute -top-28 -left-24 size-72 rounded-full bg-cyan-500/10 blur-3xl"
-                />
-                <div
-                    class="pointer-events-none absolute -right-24 -bottom-32 size-80 rounded-full bg-violet-500/10 blur-3xl"
-                />
-
-                <div
-                    class="relative mx-auto grid max-w-3xl grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 sm:gap-x-10 sm:gap-y-10"
+                <Link
+                    v-for="action in actions"
+                    :key="action.href"
+                    :href="action.href"
+                    class="group flex min-w-0 min-h-36 flex-col items-center justify-center rounded-[1.75rem] px-3 py-4 text-center outline-none transition duration-200 hover:bg-white/75 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-brand/70 focus-visible:ring-offset-2 active:scale-[0.98] sm:min-h-40"
                 >
-                    <Link
-                        v-for="action in actions"
-                        :key="action.href"
-                        :href="action.href"
-                        class="group flex min-w-0 flex-col items-center rounded-3xl px-2 py-3 text-center outline-none transition duration-200 hover:bg-white/5 focus-visible:ring-2 focus-visible:ring-white/70"
+                    <span
+                        class="transition duration-200 group-hover:-translate-y-1 group-hover:scale-[1.04]"
                     >
-                        <span
-                            class="transition duration-200 group-hover:-translate-y-1 group-hover:scale-[1.04] group-active:scale-[0.98]"
-                        >
-                            <AppMenuIcon
-                                :name="action.icon"
-                                size="launcher"
-                            />
-                        </span>
+                        <AppMenuIcon
+                            :name="action.icon"
+                            size="launcher"
+                        />
+                    </span>
 
-                        <span
-                            class="mt-3 w-full truncate text-sm font-bold tracking-tight text-white sm:text-[15px]"
-                        >
-                            {{ actionLabel(action) }}
-                        </span>
-                    </Link>
-                </div>
-            </section>
-        </div>
+                    <span
+                        class="mt-3 w-full truncate text-sm font-bold tracking-tight text-ink sm:text-[15px]"
+                    >
+                        {{ actionLabel(action) }}
+                    </span>
+                </Link>
+            </div>
+        </section>
     </BankLayout>
 </template>
