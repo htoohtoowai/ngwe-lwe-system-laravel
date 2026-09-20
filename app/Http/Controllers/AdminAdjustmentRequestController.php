@@ -40,6 +40,16 @@ class AdminAdjustmentRequestController extends Controller
             ->orderBy('account_name')
             ->get();
 
+        $selectedAccountId = $request->integer('account_id');
+        if (
+            $selectedAccountId <= 0
+            || ! $accounts->contains(
+                fn (Account $account): bool => (int) $account->id === $selectedAccountId,
+            )
+        ) {
+            $selectedAccountId = null;
+        }
+
         $rows = BalanceAdjustmentRequest::query()
             ->withoutGlobalScopes()
             ->with([
@@ -59,6 +69,7 @@ class AdminAdjustmentRequestController extends Controller
             'role' => 'admin',
             'branches' => BranchResource::collection($branches)->resolve($request),
             'selectedBranchId' => $branchId,
+            'selectedAccountId' => $selectedAccountId,
             'accounts' => AccountResource::collection($accounts)->resolve($request),
             'rows' => BalanceAdjustmentRequestResource::collection($rows)->resolve($request),
         ]);

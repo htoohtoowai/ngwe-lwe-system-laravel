@@ -47,6 +47,7 @@ const props = defineProps<{
     role: 'admin';
     branches: Branch[];
     selectedBranchId: number;
+    selectedAccountId?: number | null;
     accounts: Account[];
     rows: AdjustmentRow[];
 }>();
@@ -56,8 +57,10 @@ const notes = [20000, 10000, 5000, 1000, 500, 200, 100, 50];
 
 const form = useForm({
     branch_id: props.selectedBranchId,
-    target_type: 'cash' as 'cash' | 'account',
-    account_id: null as number | null,
+    target_type: (props.selectedAccountId ? 'account' : 'cash') as
+        | 'cash'
+        | 'account',
+    account_id: props.selectedAccountId ?? null,
     direction: 'deposit' as 'deposit' | 'withdraw',
     amount: 0,
     denominations: {} as Record<number, number>,

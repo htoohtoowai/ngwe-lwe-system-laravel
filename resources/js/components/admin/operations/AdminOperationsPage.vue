@@ -30,6 +30,7 @@ type Company = {
 type Account = {
     id: number;
     company_id?: number | null;
+    branch_id?: number | null;
     account_name: string;
     account_type: 'PAY' | 'BANK';
     account_identifier: string;
@@ -380,11 +381,6 @@ watch(
     },
 );
 
-const adjustForm = ref({
-    account_id: null as number | null,
-    amount: 0,
-    remark: '',
-});
 const userForm = ref({
     username: '',
     email: '',
@@ -529,6 +525,23 @@ const currentAccount = computed(
         accounts.value.find((account) => account.id === resourceId.value) ??
         null,
 );
+const adjustmentRequestHref = computed(() => {
+    const account = currentAccount.value;
+
+    if (!account) {
+        return '/admin/adjustments';
+    }
+
+    const params = new URLSearchParams({
+        account_id: String(account.id),
+    });
+
+    if (account.branch_id !== null && account.branch_id !== undefined) {
+        params.set('branch_id', String(account.branch_id));
+    }
+
+    return `/admin/adjustments?${params.toString()}`;
+});
 const currentUser = computed(
     () => users.value.find((user) => user.id === resourceId.value) ?? null,
 );
@@ -880,9 +893,7 @@ function syncFormsFromRoute(): void {
     }
 
     if (activeMode.value === 'detail') {
-        if (activeTab.value === 'accounts' && currentAccount.value) {
-            adjustForm.value.account_id = currentAccount.value.id;
-        } else if (activeTab.value === 'users' && currentUser.value) {
+        if (activeTab.value === 'users' && currentUser.value) {
             credentialForm.value.user_id = currentUser.value.id;
         }
 
@@ -1246,33 +1257,6 @@ async function confirmAccountDelete(): Promise<void> {
     });
 }
 
-async function adjustAccountBalance(): Promise<void> {
-    if (adjustForm.value.account_id === null) {
-        error.value = 'Select an account first.';
-
-        return;
-    }
-
-    await runAction('Account balance adjusted.', async () => {
-        await inertiaVisit(
-            `/admin/actions/accounts/${adjustForm.value.account_id}/balance-adjust`,
-            {
-                method: 'POST',
-                body: {
-                    amount: adjustForm.value.amount,
-                    remark:
-                        adjustForm.value.remark ||
-                        'Admin console balance adjustment.',
-                },
-            },
-        );
-        adjustForm.value = {
-            account_id: adjustForm.value.account_id,
-            amount: 0,
-            remark: '',
-        };
-    });
-}
 
 function openVaultEntry(mode: 'deposit' | 'withdraw'): void {
     if (activeCashier.value === null) {
@@ -2698,57 +2682,34 @@ async function sendBroadcastTest(): Promise<void> {
                         class="rounded-xl border border-line bg-card p-5 shadow-sm"
                     >
                         <h2 class="text-lg font-black text-ink">
-                            Balance Adjust
+                            Balance Adjustment
                         </h2>
-                        <form
-                            class="mt-4 grid gap-3"
-                            @submit.prevent="adjustAccountBalance"
+                        <p
+                            class="mt-2 text-sm leading-6 font-semibold text-slate"
                         >
-                            <label>
-                                <span class="bank-label">Account</span>
-                                <select
-                                    v-model.number="adjustForm.account_id"
-                                    class="bank-input"
-                                    required
-                                >
-                                    <option :value="null" disabled>
-                                        Select account
-                                    </option>
-                                    <option
-                                        v-for="account in selectableAccounts"
-                                        :key="account.id"
-                                        :value="account.id"
-                                    >
-                                        {{ accountLabel(account) }}
-                                    </option>
-                                </select>
-                            </label>
-                            <label>
-                                <span class="bank-label">Signed Amount</span>
-                                <input
-                                    v-model.number="adjustForm.amount"
-                                    type="number"
-                                    step="0.01"
-                                    class="bank-input"
-                                    required
-                                />
-                            </label>
-                            <label>
-                                <span class="bank-label">Remark</span>
-                                <input
-                                    v-model.trim="adjustForm.remark"
-                                    class="bank-input"
-                                    placeholder="Reason for audit log"
-                                />
-                            </label>
-                            <button
-                                type="submit"
-                                class="bank-button bank-button-danger"
-                                :disabled="busy !== ''"
-                            >
-                                Apply Adjustment
-                            </button>
-                        </form>
+                            Direct Admin balance changes are disabled. Create a
+                            Deposit or Withdraw request and let the assigned
+                            branch Cashier verify it with their PIN.
+                        </p>
+                        <div
+                            class="mt-4 rounded-lg border border-line bg-mist p-4 text-sm"
+                        >
+                            <p class="font-bold text-ink">
+                                {{ currentAccount?.account_name }}
+                            </p>
+                            <p class="mt-1 text-xs font-semibold text-slate">
+                                Current balance:
+                                <span class="money font-black text-ink">
+                                    {{ money(currentAccount?.balance ?? 0) }}
+                                </span>
+                            </p>
+                        </div>
+                        <Link
+                            :href="adjustmentRequestHref"
+                            class="bank-button bank-button-primary mt-4 inline-flex"
+                        >
+                            Request Deposit / Withdraw
+                        </Link>
                     </div>
                 </div>
 
