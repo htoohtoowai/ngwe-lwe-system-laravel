@@ -30,6 +30,15 @@ class DashboardController extends Controller
         if ($user->role === 'cashier') {
             return redirect()->route('cashier');
         }
+
+        if ($user->role === 'teller') {
+            return Inertia::render('teller/Launcher', [
+                'role' => 'teller',
+                'announcement' => null,
+                'notificationCount' => $this->notificationCount($user),
+            ]);
+        }
+
         $range = $this->range($request);
 
         return Inertia::render('Dashboard', [
