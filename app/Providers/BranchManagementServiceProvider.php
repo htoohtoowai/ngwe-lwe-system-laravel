@@ -7,7 +7,9 @@ use App\Http\Controllers\AdminBranchController;
 use App\Http\Controllers\AdminBranchReportController;
 use App\Http\Controllers\AdminBranchUserController;
 use App\Http\Controllers\AdminBranchVaultController;
+use App\Http\Controllers\AdminBalanceController;
 use App\Http\Controllers\CashierAdjustmentRequestController;
+use App\Http\Controllers\CashierTellerController;
 use App\Models\Branch;
 use App\Models\Transaction;
 use App\Services\AdminOperationsDataService;
@@ -106,6 +108,23 @@ class BranchManagementServiceProvider extends ServiceProvider
                 )->name('admin.adjustments.store');
 
                 Route::post(
+                    '/adjustments/{adjustmentRequest}/approve',
+                    [AdminAdjustmentRequestController::class, 'approve'],
+                )->name('admin.adjustments.approve');
+
+                Route::post(
+                    '/adjustments/{adjustmentRequest}/reject',
+                    [AdminAdjustmentRequestController::class, 'reject'],
+                )->name('admin.adjustments.reject');
+
+                Route::get(
+                    '/balances/{type}',
+                    AdminBalanceController::class,
+                )
+                    ->whereIn('type', ['pay', 'bank'])
+                    ->name('admin.balances.show');
+
+                Route::post(
                     '/branch-vault/entries',
                     [AdminBranchVaultController::class, 'store'],
                 )->name('admin.branch-vault.entries.store');
@@ -122,12 +141,19 @@ class BranchManagementServiceProvider extends ServiceProvider
             });
 
         Route::middleware(['web', 'auth', 'role:cashier'])
+            ->get('/cashier/tellers', CashierTellerController::class)
+            ->name('cashier.tellers');
+
+        Route::middleware(['web', 'auth', 'role:cashier'])
             ->prefix('cashier')
             ->name('cashier.')
             ->controller(CashierAdjustmentRequestController::class)
             ->group(function (): void {
                 Route::get('/admin-requests', 'index')
                     ->name('admin-requests.index');
+
+                Route::post('/adjustments', 'store')
+                    ->name('adjustments.store');
 
                 Route::post(
                     '/admin-requests/{adjustmentRequest}/confirm',

@@ -127,6 +127,7 @@ class AdminCashierVaultManagementTest extends TestCase
                 'branch_id' => $branch->id,
                 'entry_type' => 'vault_out',
                 'denominations' => [10000 => 2],
+                'note' => 'Owner withdrawal request',
             ])
             ->assertSessionHasErrors('denominations');
 

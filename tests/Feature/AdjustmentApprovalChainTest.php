@@ -119,6 +119,7 @@ class AdjustmentApprovalChainTest extends TestCase
                 'account_id' => $account->id,
                 'direction' => 'withdraw',
                 'amount' => 7000,
+                'note' => 'Pay withdrawal request',
             ])
             ->assertRedirect();
 
@@ -166,6 +167,7 @@ class AdjustmentApprovalChainTest extends TestCase
                 'target_type' => 'cash',
                 'direction' => 'deposit',
                 'denominations' => ['1000' => 1],
+                'note' => 'Branch cash request',
             ])
             ->assertRedirect();
 
@@ -203,6 +205,7 @@ class AdjustmentApprovalChainTest extends TestCase
                 'target_type' => 'cash',
                 'direction' => 'deposit',
                 'denominations' => ['1000' => 3],
+                'note' => 'Cash deposit request',
             ])
             ->assertRedirect();
 

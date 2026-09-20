@@ -84,6 +84,7 @@ class AdminBranchVaultActionTest extends TestCase
                 'branch_id' => $branchTwo->id,
                 'entry_type' => 'vault_in',
                 'denominations' => ['1000' => 1],
+                'note' => 'Branch vault request',
             ])
             ->assertSessionHasErrors('branch_id');
     }

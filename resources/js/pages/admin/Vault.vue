@@ -497,11 +497,12 @@ const vaultLogHref = computed(
                         />
 
                         <label>
-                            <span class="bank-label">Audit Note</span>
+                            <span class="bank-label">Remark *</span>
                             <textarea
                                 v-model.trim="form.note"
                                 rows="3"
                                 class="bank-input resize-none"
+                                required
                             />
                         </label>
 
@@ -532,7 +533,7 @@ const vaultLogHref = computed(
                                 type="button"
                                 class="bank-button bank-button-primary"
                                 :disabled="
-                                    form.processing || entryTotal <= 0
+                                    form.processing || entryTotal <= 0 || form.note.trim() === ''
                                 "
                                 @click="saveEntry"
                             >

@@ -18,6 +18,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'status',
     'requested_by',
     'assigned_cashier_id',
+    'approver_id',
+    'approved_at',
     'confirmed_by',
     'confirmed_at',
     'rejected_by',
@@ -29,6 +31,7 @@ class BalanceAdjustmentRequest extends Model
     use HasBranchScope;
 
     public const STATUS_PENDING = 'PENDING';
+    public const STATUS_APPROVED = 'APPROVED';
     public const STATUS_CONFIRMED = 'CONFIRMED';
     public const STATUS_REJECTED = 'REJECTED';
 
@@ -47,6 +50,8 @@ class BalanceAdjustmentRequest extends Model
             'denominations_json' => 'array',
             'requested_by' => 'integer',
             'assigned_cashier_id' => 'integer',
+            'approver_id' => 'integer',
+            'approved_at' => 'datetime',
             'confirmed_by' => 'integer',
             'confirmed_at' => 'datetime',
             'rejected_by' => 'integer',
@@ -72,6 +77,11 @@ class BalanceAdjustmentRequest extends Model
     public function assignedCashier(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_cashier_id');
+    }
+
+    public function approver(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approver_id');
     }
 
     public function confirmer(): BelongsTo

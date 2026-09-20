@@ -50,6 +50,14 @@ class AdminAdjustmentRequestController extends Controller
             $selectedAccountId = null;
         }
 
+        $selectedDirection = $request->query('direction', BalanceAdjustmentRequest::DIRECTION_DEPOSIT);
+        if (! in_array($selectedDirection, [
+            BalanceAdjustmentRequest::DIRECTION_DEPOSIT,
+            BalanceAdjustmentRequest::DIRECTION_WITHDRAW,
+        ], true)) {
+            $selectedDirection = BalanceAdjustmentRequest::DIRECTION_DEPOSIT;
+        }
+
         $rows = BalanceAdjustmentRequest::query()
             ->withoutGlobalScopes()
             ->with([
@@ -57,6 +65,7 @@ class AdminAdjustmentRequestController extends Controller
                 'account.company',
                 'requester',
                 'assignedCashier',
+                'approver',
                 'confirmer',
                 'rejecter',
             ])
@@ -70,6 +79,7 @@ class AdminAdjustmentRequestController extends Controller
             'branches' => BranchResource::collection($branches)->resolve($request),
             'selectedBranchId' => $branchId,
             'selectedAccountId' => $selectedAccountId,
+            'selectedDirection' => $selectedDirection,
             'accounts' => AccountResource::collection($accounts)->resolve($request),
             'rows' => BalanceAdjustmentRequestResource::collection($rows)->resolve($request),
         ]);
@@ -97,7 +107,7 @@ class AdminAdjustmentRequestController extends Controller
             'amount' => ['nullable', 'numeric', 'min:0'],
             'denominations' => ['nullable', 'array'],
             'denominations.*' => ['integer', 'min:0'],
-            'note' => ['nullable', 'string', 'max:2000'],
+            'note' => ['required', 'string', 'max:2000'],
         ]);
 
         $this->adjustments->create($request->user(), $data);
@@ -106,6 +116,41 @@ class AdminAdjustmentRequestController extends Controller
             'success',
             'Adjustment request sent to the branch Cashier for PIN confirmation.',
         );
+    }
+
+
+    public function approve(
+        Request $request,
+        BalanceAdjustmentRequest $adjustmentRequest,
+    ): RedirectResponse {
+        $approved = $this->adjustments->approveByAdmin(
+            $request->user(),
+            $adjustmentRequest,
+        );
+
+        return back()->with(
+            'success',
+            $approved->status === BalanceAdjustmentRequest::STATUS_APPROVED
+                ? 'Cash request approved. Waiting for the Cashier to confirm the physical handover with PIN.'
+                : 'Cashier request approved and balance updated.',
+        );
+    }
+
+    public function reject(
+        Request $request,
+        BalanceAdjustmentRequest $adjustmentRequest,
+    ): RedirectResponse {
+        $data = $request->validate([
+            'note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $this->adjustments->rejectByAdmin(
+            $request->user(),
+            $adjustmentRequest,
+            $data['note'] ?? null,
+        );
+
+        return back()->with('success', 'Cashier request rejected.');
     }
 
     private function selectedBranch(Request $request, $branches): Branch

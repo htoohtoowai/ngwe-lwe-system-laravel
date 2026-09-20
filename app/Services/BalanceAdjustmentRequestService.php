@@ -14,8 +14,6 @@ use App\Support\Money;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
-use InvalidArgumentException;
-use RuntimeException;
 
 class BalanceAdjustmentRequestService
 {
@@ -25,16 +23,12 @@ class BalanceAdjustmentRequestService
         private readonly RealtimeBroadcastService $broadcasts,
     ) {}
 
-    /**
-     * Admin creates an adjustment request. No balance is changed here.
-     *
-     * @param  array<string, mixed>  $data
-     */
-    public function create(User $admin, array $data): BalanceAdjustmentRequest
+    /** @param array<string, mixed> $data */
+    public function create(User $requester, array $data): BalanceAdjustmentRequest
     {
-        if ($admin->role !== 'admin') {
+        if (! in_array($requester->role, ['admin', 'cashier'], true)) {
             throw ValidationException::withMessages([
-                'form' => 'Admin only.',
+                'form' => 'Only Admin or Cashier can create balance requests.',
             ]);
         }
 
@@ -43,6 +37,15 @@ class BalanceAdjustmentRequestService
         if (! $branch->is_active) {
             throw ValidationException::withMessages([
                 'branch_id' => 'Select an active branch.',
+            ]);
+        }
+
+        if (
+            $requester->role === 'cashier'
+            && (int) $requester->branch_id !== (int) $branch->id
+        ) {
+            throw ValidationException::withMessages([
+                'branch_id' => 'Cashier can request changes only for their own branch.',
             ]);
         }
 
@@ -59,34 +62,52 @@ class BalanceAdjustmentRequestService
             ]);
         }
 
+        if (
+            $requester->role === 'cashier'
+            && (int) $cashier->id !== (int) $requester->id
+        ) {
+            throw ValidationException::withMessages([
+                'form' => 'Only the responsible branch Cashier can create this request.',
+            ]);
+        }
+
+        $approver = $requester->role === 'admin'
+            ? $cashier
+            : User::query()
+                ->withoutGlobalScopes()
+                ->where('role', 'admin')
+                ->where('is_active', true)
+                ->first();
+
+        if ($approver === null) {
+            throw ValidationException::withMessages([
+                'form' => 'No active approver is available.',
+            ]);
+        }
+
         $targetType = (string) $data['target_type'];
         $direction = (string) $data['direction'];
+        $note = trim((string) ($data['note'] ?? ''));
 
-        if (
-            ! in_array(
-                $targetType,
-                [
-                    BalanceAdjustmentRequest::TARGET_CASH,
-                    BalanceAdjustmentRequest::TARGET_ACCOUNT,
-                ],
-                true,
-            )
-        ) {
+        if ($note === '') {
+            throw ValidationException::withMessages([
+                'note' => 'Remark is required.',
+            ]);
+        }
+
+        if (! in_array($targetType, [
+            BalanceAdjustmentRequest::TARGET_CASH,
+            BalanceAdjustmentRequest::TARGET_ACCOUNT,
+        ], true)) {
             throw ValidationException::withMessages([
                 'target_type' => 'Invalid adjustment target.',
             ]);
         }
 
-        if (
-            ! in_array(
-                $direction,
-                [
-                    BalanceAdjustmentRequest::DIRECTION_DEPOSIT,
-                    BalanceAdjustmentRequest::DIRECTION_WITHDRAW,
-                ],
-                true,
-            )
-        ) {
+        if (! in_array($direction, [
+            BalanceAdjustmentRequest::DIRECTION_DEPOSIT,
+            BalanceAdjustmentRequest::DIRECTION_WITHDRAW,
+        ], true)) {
             throw ValidationException::withMessages([
                 'direction' => 'Invalid adjustment direction.',
             ]);
@@ -108,15 +129,9 @@ class BalanceAdjustmentRequestService
                 ]);
             }
 
-            if (
-                ! in_array(
-                    $account->account_type,
-                    [AccountType::Bank, AccountType::Pay],
-                    true,
-                )
-            ) {
+            if (! in_array($account->account_type, [AccountType::Bank, AccountType::Pay], true)) {
                 throw ValidationException::withMessages([
-                    'account_id' => 'Only Bank and Pay accounts can use this adjustment workflow.',
+                    'account_id' => 'Only Bank and Pay accounts can use this workflow.',
                 ]);
             }
 
@@ -152,7 +167,6 @@ class BalanceAdjustmentRequestService
             $denominations = $this->normalizeDenominations(
                 $data['denominations'] ?? [],
             );
-
             $total = Money::denominationTotal($denominations);
 
             if ($total <= 0) {
@@ -167,9 +181,7 @@ class BalanceAdjustmentRequestService
                 );
 
                 foreach ($denominations as $denomination => $quantity) {
-                    if (
-                        $quantity > (int) ($available[$denomination] ?? 0)
-                    ) {
+                    if ($quantity > (int) ($available[$denomination] ?? 0)) {
                         throw ValidationException::withMessages([
                             'denominations' => "Not enough {$denomination} MMK notes in the selected branch vault.",
                         ]);
@@ -189,14 +201,15 @@ class BalanceAdjustmentRequestService
                 'direction' => $direction,
                 'amount' => $amount,
                 'denominations_json' => $denominations,
-                'note' => trim((string) ($data['note'] ?? '')) ?: null,
+                'note' => $note,
                 'status' => BalanceAdjustmentRequest::STATUS_PENDING,
-                'requested_by' => $admin->id,
+                'requested_by' => $requester->id,
                 'assigned_cashier_id' => $cashier->id,
+                'approver_id' => $approver->id,
             ]);
 
         ActivityLog::query()->create([
-            'user_id' => $admin->id,
+            'user_id' => $requester->id,
             'action' => 'adjustment_request_created',
             'entity_type' => 'balance_adjustment_request',
             'entity_id' => $adjustment->id,
@@ -207,15 +220,13 @@ class BalanceAdjustmentRequestService
                 'direction' => $direction,
                 'amount' => $amount,
                 'assigned_cashier_id' => $cashier->id,
+                'approver_id' => $approver->id,
             ],
         ]);
 
         return $this->loadRelations($adjustment);
     }
 
-    /**
-     * Cashier PIN confirmation is the only point where the balance changes.
-     */
     public function confirm(
         User $cashier,
         BalanceAdjustmentRequest $adjustment,
@@ -223,6 +234,158 @@ class BalanceAdjustmentRequestService
     ): BalanceAdjustmentRequest {
         $this->pinVerifier->verify($cashier, $pin);
 
+        $status = BalanceAdjustmentRequest::query()
+            ->withoutGlobalScopes()
+            ->whereKey($adjustment->id)
+            ->value('status');
+
+        if ($status === BalanceAdjustmentRequest::STATUS_APPROVED) {
+            return $this->completeApprovedCash($cashier, $adjustment);
+        }
+
+        return $this->approve($cashier, $adjustment);
+    }
+
+    public function approveByAdmin(
+        User $admin,
+        BalanceAdjustmentRequest $adjustment,
+    ): BalanceAdjustmentRequest {
+        if ($admin->role !== 'admin' || ! $admin->is_active) {
+            throw ValidationException::withMessages([
+                'request' => 'Admin approval is required.',
+            ]);
+        }
+
+        return $this->approve($admin, $adjustment);
+    }
+
+    public function reject(
+        User $cashier,
+        BalanceAdjustmentRequest $adjustment,
+        string $pin,
+        ?string $note = null,
+    ): BalanceAdjustmentRequest {
+        $this->pinVerifier->verify($cashier, $pin);
+
+        return $this->rejectDecision($cashier, $adjustment, $note);
+    }
+
+    public function rejectByAdmin(
+        User $admin,
+        BalanceAdjustmentRequest $adjustment,
+        ?string $note = null,
+    ): BalanceAdjustmentRequest {
+        if ($admin->role !== 'admin' || ! $admin->is_active) {
+            throw ValidationException::withMessages([
+                'request' => 'Admin approval is required.',
+            ]);
+        }
+
+        return $this->rejectDecision($admin, $adjustment, $note);
+    }
+
+    private function approve(
+        User $approver,
+        BalanceAdjustmentRequest $adjustment,
+    ): BalanceAdjustmentRequest {
+        $result = DB::transaction(function () use (
+            $approver,
+            $adjustment,
+        ): array {
+            $locked = BalanceAdjustmentRequest::query()
+                ->withoutGlobalScopes()
+                ->whereKey($adjustment->id)
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            $this->guardApprover($approver, $locked);
+
+            if ($locked->status !== BalanceAdjustmentRequest::STATUS_PENDING) {
+                throw ValidationException::withMessages([
+                    'request' => 'This request is no longer pending.',
+                ]);
+            }
+
+            $requester = User::query()
+                ->withoutGlobalScopes()
+                ->findOrFail((int) $locked->requested_by);
+
+            $locked->approved_at = now();
+
+            // Physical cash requested by a Cashier uses a two-step handover:
+            // Admin approves first, then the requesting Cashier confirms the
+            // actual handover with PIN before the branch vault is mutated.
+            if (
+                $approver->role === 'admin'
+                && $requester->role === 'cashier'
+                && $locked->target_type === BalanceAdjustmentRequest::TARGET_CASH
+            ) {
+                $locked->status = BalanceAdjustmentRequest::STATUS_APPROVED;
+                $locked->save();
+
+                ActivityLog::query()->create([
+                    'user_id' => $approver->id,
+                    'action' => 'adjustment_request_approved',
+                    'entity_type' => 'balance_adjustment_request',
+                    'entity_id' => $locked->id,
+                    'details' => [
+                        'branch_id' => (int) $locked->branch_id,
+                        'requested_by' => (int) $locked->requested_by,
+                        'approver_id' => (int) $locked->approver_id,
+                        'target_type' => $locked->target_type,
+                        'direction' => $locked->direction,
+                        'amount' => Money::normalize($locked->amount),
+                        'next_step' => 'cashier_pin_handover_confirmation',
+                    ],
+                ]);
+
+                return [$locked, false];
+            }
+
+            if ($locked->target_type === BalanceAdjustmentRequest::TARGET_ACCOUNT) {
+                $this->applyAccountAdjustment($locked);
+            } else {
+                $this->applyCashAdjustment($approver, $locked);
+            }
+
+            $locked->status = BalanceAdjustmentRequest::STATUS_CONFIRMED;
+            $locked->confirmed_by = $approver->id;
+            $locked->confirmed_at = now();
+            $locked->save();
+
+            ActivityLog::query()->create([
+                'user_id' => $approver->id,
+                'action' => 'adjustment_request_confirmed',
+                'entity_type' => 'balance_adjustment_request',
+                'entity_id' => $locked->id,
+                'details' => [
+                    'branch_id' => (int) $locked->branch_id,
+                    'requested_by' => (int) $locked->requested_by,
+                    'approver_id' => (int) ($locked->approver_id ?? $approver->id),
+                    'target_type' => $locked->target_type,
+                    'account_id' => $locked->account_id,
+                    'direction' => $locked->direction,
+                    'amount' => Money::normalize($locked->amount),
+                ],
+            ]);
+
+            return [$locked, true];
+        });
+
+        /** @var BalanceAdjustmentRequest $request */
+        [$request, $balanceChanged] = $result;
+
+        if ($balanceChanged) {
+            $this->broadcasts->balanceUpdated((int) $request->branch_id);
+        }
+
+        return $this->loadRelations($request);
+    }
+
+    private function completeApprovedCash(
+        User $cashier,
+        BalanceAdjustmentRequest $adjustment,
+    ): BalanceAdjustmentRequest {
         $confirmed = DB::transaction(function () use (
             $cashier,
             $adjustment,
@@ -233,19 +396,17 @@ class BalanceAdjustmentRequestService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $this->guardCashier($cashier, $locked);
-
-            if ($locked->status !== BalanceAdjustmentRequest::STATUS_PENDING) {
+            if (
+                $locked->status !== BalanceAdjustmentRequest::STATUS_APPROVED
+                || $locked->target_type !== BalanceAdjustmentRequest::TARGET_CASH
+            ) {
                 throw ValidationException::withMessages([
-                    'request' => 'This adjustment request is no longer pending.',
+                    'request' => 'This cash request is not ready for handover confirmation.',
                 ]);
             }
 
-            if ($locked->target_type === BalanceAdjustmentRequest::TARGET_ACCOUNT) {
-                $this->applyAccountAdjustment($locked);
-            } else {
-                $this->applyCashAdjustment($cashier, $locked);
-            }
+            $this->guardRequestingCashier($cashier, $locked);
+            $this->applyCashAdjustment($cashier, $locked);
 
             $locked->status = BalanceAdjustmentRequest::STATUS_CONFIRMED;
             $locked->confirmed_by = $cashier->id;
@@ -254,16 +415,16 @@ class BalanceAdjustmentRequestService
 
             ActivityLog::query()->create([
                 'user_id' => $cashier->id,
-                'action' => 'adjustment_request_confirmed',
+                'action' => 'adjustment_request_cash_handover_confirmed',
                 'entity_type' => 'balance_adjustment_request',
                 'entity_id' => $locked->id,
                 'details' => [
                     'branch_id' => (int) $locked->branch_id,
                     'requested_by' => (int) $locked->requested_by,
-                    'target_type' => $locked->target_type,
-                    'account_id' => $locked->account_id,
+                    'approver_id' => (int) $locked->approver_id,
                     'direction' => $locked->direction,
                     'amount' => Money::normalize($locked->amount),
+                    'confirmed_by' => $cashier->id,
                 ],
             ]);
 
@@ -275,16 +436,13 @@ class BalanceAdjustmentRequestService
         return $this->loadRelations($confirmed);
     }
 
-    public function reject(
-        User $cashier,
+    private function rejectDecision(
+        User $actor,
         BalanceAdjustmentRequest $adjustment,
-        string $pin,
-        ?string $note = null,
+        ?string $note,
     ): BalanceAdjustmentRequest {
-        $this->pinVerifier->verify($cashier, $pin);
-
         $rejected = DB::transaction(function () use (
-            $cashier,
+            $actor,
             $adjustment,
             $note,
         ): BalanceAdjustmentRequest {
@@ -294,28 +452,34 @@ class BalanceAdjustmentRequestService
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            $this->guardCashier($cashier, $locked);
-
-            if ($locked->status !== BalanceAdjustmentRequest::STATUS_PENDING) {
+            if ($locked->status === BalanceAdjustmentRequest::STATUS_PENDING) {
+                $this->guardApprover($actor, $locked);
+            } elseif (
+                $locked->status === BalanceAdjustmentRequest::STATUS_APPROVED
+                && $locked->target_type === BalanceAdjustmentRequest::TARGET_CASH
+            ) {
+                $this->guardRequestingCashier($actor, $locked);
+            } else {
                 throw ValidationException::withMessages([
-                    'request' => 'This adjustment request is no longer pending.',
+                    'request' => 'This request can no longer be rejected.',
                 ]);
             }
 
             $locked->status = BalanceAdjustmentRequest::STATUS_REJECTED;
-            $locked->rejected_by = $cashier->id;
+            $locked->rejected_by = $actor->id;
             $locked->rejected_at = now();
             $locked->rejection_note = trim((string) $note) ?: null;
             $locked->save();
 
             ActivityLog::query()->create([
-                'user_id' => $cashier->id,
+                'user_id' => $actor->id,
                 'action' => 'adjustment_request_rejected',
                 'entity_type' => 'balance_adjustment_request',
                 'entity_id' => $locked->id,
                 'details' => [
                     'branch_id' => (int) $locked->branch_id,
                     'requested_by' => (int) $locked->requested_by,
+                    'approver_id' => (int) ($locked->approver_id ?? 0),
                     'rejection_note' => $locked->rejection_note,
                 ],
             ]);
@@ -371,7 +535,7 @@ class BalanceAdjustmentRequestService
     }
 
     private function applyCashAdjustment(
-        User $cashier,
+        User $approver,
         BalanceAdjustmentRequest $adjustment,
     ): void {
         $denominations = $this->normalizeDenominations(
@@ -401,30 +565,48 @@ class BalanceAdjustmentRequestService
             }
         }
 
+        $cashier = User::query()
+            ->withoutGlobalScopes()
+            ->findOrFail((int) $adjustment->assigned_cashier_id);
+        $requester = User::query()
+            ->withoutGlobalScopes()
+            ->findOrFail((int) $adjustment->requested_by);
+        $adminId = $requester->role === 'admin'
+            ? (int) $requester->id
+            : ($approver->role === 'admin'
+                ? (int) $approver->id
+                : (int) User::query()
+                    ->withoutGlobalScopes()
+                    ->where('role', 'admin')
+                    ->value('id'));
+
+        if ($adminId <= 0) {
+            throw ValidationException::withMessages([
+                'request' => 'Admin account is unavailable for this cash movement.',
+            ]);
+        }
+
+        $verifiedBy = (int) ($adjustment->approver_id ?? $approver->id);
         $batchId = (string) Str::uuid();
         $entryType = $isDeposit ? 'vault_in' : 'vault_out';
         $movementType = $isDeposit
             ? 'admin_to_cashier'
             : 'cashier_to_admin';
         $sourceType = $isDeposit ? 'admin' : 'cashier_vault';
-        $sourceId = $isDeposit
-            ? (int) $adjustment->requested_by
-            : (int) $cashier->id;
+        $sourceId = $isDeposit ? $adminId : (int) $cashier->id;
         $destinationType = $isDeposit ? 'cashier_vault' : 'admin';
-        $destinationId = $isDeposit
-            ? (int) $cashier->id
-            : (int) $adjustment->requested_by;
-
+        $destinationId = $isDeposit ? (int) $cashier->id : $adminId;
         $note = sprintf(
-            'Admin adjustment request #%d confirmed by Cashier #%d.',
+            'Balance request #%d completed by user #%d after approval by user #%d.',
             $adjustment->id,
-            $cashier->id,
+            $approver->id,
+            $verifiedBy,
         );
 
         $this->vault->recordBulk(
             entryType: $entryType,
             denominations: $denominations,
-            createdBy: $cashier->id,
+            createdBy: $approver->id,
             note: $note,
             batchId: $batchId,
             movementType: $movementType,
@@ -455,32 +637,62 @@ class BalanceAdjustmentRequestService
                     'denomination' => $denomination,
                     'quantity' => $quantity,
                     'performed_by' => (int) $adjustment->requested_by,
-                    'verified_by' => $cashier->id,
+                    'verified_by' => $verifiedBy,
                     'note' => $note,
                 ]);
         }
     }
 
-    private function guardCashier(
+    private function guardApprover(
+        User $approver,
+        BalanceAdjustmentRequest $adjustment,
+    ): void {
+        $expectedApproverId = (int) (
+            $adjustment->approver_id
+            ?? $adjustment->assigned_cashier_id
+        );
+
+        if (
+            ! $approver->is_active
+            || (int) $approver->id !== $expectedApproverId
+            || ! in_array($approver->role, ['admin', 'cashier'], true)
+        ) {
+            throw ValidationException::withMessages([
+                'request' => 'This request is assigned to another approver.',
+            ]);
+        }
+
+        if (
+            $approver->role === 'cashier'
+            && (
+                (int) $approver->branch_id !== (int) $adjustment->branch_id
+                || (int) $adjustment->assigned_cashier_id !== (int) $approver->id
+            )
+        ) {
+            throw ValidationException::withMessages([
+                'request' => 'This request belongs to another Cashier or branch.',
+            ]);
+        }
+    }
+
+    private function guardRequestingCashier(
         User $cashier,
         BalanceAdjustmentRequest $adjustment,
     ): void {
         if (
             $cashier->role !== 'cashier'
             || ! $cashier->is_active
+            || (int) $cashier->id !== (int) $adjustment->requested_by
+            || (int) $cashier->id !== (int) $adjustment->assigned_cashier_id
             || (int) $cashier->branch_id !== (int) $adjustment->branch_id
-            || (int) $adjustment->assigned_cashier_id !== (int) $cashier->id
         ) {
             throw ValidationException::withMessages([
-                'request' => 'This adjustment request belongs to another Cashier or branch.',
+                'request' => 'Only the requesting branch Cashier can confirm this cash handover.',
             ]);
         }
     }
 
-    /**
-     * @param  mixed  $raw
-     * @return array<int, int>
-     */
+    /** @return array<int, int> */
     private function normalizeDenominations(mixed $raw): array
     {
         if (! is_array($raw)) {
@@ -493,13 +705,7 @@ class BalanceAdjustmentRequestService
             $denomination = (int) $denomination;
             $quantity = (int) $quantity;
 
-            if (
-                ! in_array(
-                    $denomination,
-                    Money::supportedDenominations(),
-                    true,
-                )
-            ) {
+            if (! in_array($denomination, Money::supportedDenominations(), true)) {
                 throw ValidationException::withMessages([
                     'denominations' => "Unsupported denomination: {$denomination}",
                 ]);
@@ -521,6 +727,7 @@ class BalanceAdjustmentRequestService
             'account.company',
             'requester',
             'assignedCashier',
+            'approver',
             'confirmer',
             'rejecter',
         ]);

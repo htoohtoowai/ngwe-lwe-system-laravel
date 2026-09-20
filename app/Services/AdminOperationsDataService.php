@@ -13,6 +13,7 @@ use App\Http\Resources\TransactionResource;
 use App\Http\Resources\UserResource;
 use App\Models\Account;
 use App\Models\AgentCommissionTier;
+use App\Models\BalanceAdjustmentRequest;
 use App\Models\Branch;
 use App\Models\CashFloatAssignment;
 use App\Models\Company;
@@ -44,6 +45,32 @@ class AdminOperationsDataService
 
         $selectedBranch = $this->selectedBranch($request, $branches);
         $branchId = (int) $selectedBranch->id;
+        $adminId = (int) ($request->user()?->id ?? 0);
+        $adjustmentCounts = [
+            'deposit' => BalanceAdjustmentRequest::query()
+                ->withoutGlobalScopes()
+                ->where('branch_id', $branchId)
+                ->where('direction', BalanceAdjustmentRequest::DIRECTION_DEPOSIT)
+                ->where('status', BalanceAdjustmentRequest::STATUS_PENDING)
+                ->where('approver_id', $adminId)
+                ->count(),
+            'withdraw' => BalanceAdjustmentRequest::query()
+                ->withoutGlobalScopes()
+                ->where('branch_id', $branchId)
+                ->where('direction', BalanceAdjustmentRequest::DIRECTION_WITHDRAW)
+                ->where('status', BalanceAdjustmentRequest::STATUS_PENDING)
+                ->where('approver_id', $adminId)
+                ->count(),
+        ];
+
+        if ($request->is('admin') || $request->is('admin/overview')) {
+            return [
+                'selectedBranchId' => $branchId,
+                'selectedBranch' => (new BranchResource($selectedBranch))->resolve($request),
+                'branches' => BranchResource::collection($branches)->resolve($request),
+                'adjustmentCounts' => $adjustmentCounts,
+            ];
+        }
 
         $cashFloats = CashFloatAssignment::query()
             ->withoutGlobalScopes()
@@ -66,6 +93,7 @@ class AdminOperationsDataService
         return [
             'selectedBranchId' => $branchId,
             'selectedBranch' => (new BranchResource($selectedBranch))->resolve($request),
+            'adjustmentCounts' => $adjustmentCounts,
             'dailySummary' => $this->reports->summary(
                 (string) $request->query(
                     'report_date',
