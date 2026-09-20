@@ -15,7 +15,15 @@ type LauncherAction = {
     badge?: number;
 };
 
-const props = defineProps<Omit<CashierOperationsPageProps, 'section'>>();
+const props = defineProps<
+    Omit<CashierOperationsPageProps, 'section'> & {
+        branch: {
+            id: number;
+            code: string | null;
+            name: string;
+        };
+    }
+>();
 const { lang } = useLocale();
 
 const closeFloatCount = computed(
@@ -105,20 +113,18 @@ function money(value: string | number): string {
         :announcement="announcement"
         :notification-count="notificationCount"
     >
-        <div class="mx-auto w-full max-w-5xl pb-10">
-            <header class="px-1 pt-2 sm:px-4 sm:pt-5">
-                <p
-                    class="text-xs font-black tracking-[0.14em] text-slate uppercase"
-                >
+        <div class="mx-auto w-full max-w-5xl pb-8">
+            <header class="px-1 py-1 sm:px-4">
+                <p class="truncate text-sm font-black tracking-tight text-ink">
                     Cashier
+                    <span class="font-semibold text-slate">
+                        · {{ branch.name }}
+                    </span>
                 </p>
-                <h1 class="mt-1 text-2xl font-black tracking-tight text-ink">
-                    {{ lang === 'mm' ? 'လုပ်ငန်းရွေးချယ်ရန်' : 'Apps' }}
-                </h1>
             </header>
 
             <section
-                class="mx-auto w-full px-1 pt-5 pb-8 sm:px-4 sm:pt-7"
+                class="mx-auto w-full px-1 pt-2 pb-6 sm:px-4 sm:pt-3"
                 aria-label="Cashier apps"
             >
                 <div
@@ -148,7 +154,7 @@ function money(value: string | number): string {
                 </div>
             </section>
 
-            <section class="border-t border-line pt-6 sm:mx-4 sm:pt-7">
+            <section class="border-t border-line pt-5 sm:mx-4 sm:pt-6">
                 <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
                     <Link
                         href="/cashier/main-vault-denomination-stock"

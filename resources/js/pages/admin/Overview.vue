@@ -55,12 +55,6 @@ const props = defineProps<{
 
 const { lang } = useLocale();
 const selectedBranchId = ref(props.adminData.selectedBranchId);
-const selectedBranch = computed(
-    () =>
-        props.adminData.branches.find(
-            (branch) => branch.id === selectedBranchId.value,
-        ) ?? props.adminData.selectedBranch ?? null,
-);
 
 function branchHref(path: string): string {
     const separator = path.includes('?') ? '&' : '?';
@@ -213,28 +207,24 @@ function loadBranch(): void {
         :announcement="announcement"
         :notification-count="notificationCount"
     >
-        <div class="mx-auto w-full max-w-6xl pb-10">
+        <div class="mx-auto w-full max-w-6xl pb-8">
             <header
-                class="flex flex-col gap-4 px-1 pt-2 sm:flex-row sm:items-end sm:justify-between sm:px-4 sm:pt-5"
+                class="flex items-center justify-between gap-3 px-1 py-1 sm:px-4"
             >
-                <div>
-                    <p
-                        class="text-xs font-black tracking-[0.14em] text-slate uppercase"
-                    >
-                        Admin
-                    </p>
-                    <h1 class="mt-1 text-2xl font-black tracking-tight text-ink">
-                        {{ lang === 'mm' ? 'လုပ်ငန်းရွေးချယ်ရန်' : 'Apps' }}
-                    </h1>
-                </div>
+                <p
+                    class="shrink-0 text-sm font-black tracking-tight text-ink"
+                >
+                    Admin
+                </p>
 
-                <label class="w-full sm:w-72">
-                    <span class="bank-label">
+                <label class="min-w-0">
+                    <span class="sr-only">
                         {{ lang === 'mm' ? 'ဆိုင်ခွဲ' : 'Branch' }}
                     </span>
                     <select
                         v-model.number="selectedBranchId"
-                        class="bank-input"
+                        class="h-9 w-auto max-w-[13rem] cursor-pointer rounded-xl border border-line bg-card px-3 pr-8 text-sm font-semibold text-ink shadow-sm outline-none transition hover:border-slate/40 focus:border-slate/50 focus:ring-2 focus:ring-slate/15 focus:ring-offset-0 focus:shadow-none sm:max-w-[16rem]"
+                        style="min-height: 2.25rem; width: auto"
                         @change="loadBranch"
                     >
                         <option
@@ -242,25 +232,16 @@ function loadBranch(): void {
                             :key="branch.id"
                             :value="branch.id"
                         >
-                            {{ branch.name }} ({{ branch.code }})
+                            {{ branch.name }}
                         </option>
                     </select>
                 </label>
             </header>
 
-            <div
-                class="mt-4 rounded-2xl border border-line bg-card/70 px-4 py-3 text-sm font-semibold text-slate sm:mx-4"
-            >
-                <span class="font-black text-ink">
-                    {{ selectedBranch?.name ?? 'Branch' }}
-                </span>
-                <span v-if="selectedBranch?.code"> · {{ selectedBranch.code }}</span>
-            </div>
-
             <section
                 v-for="group in groups"
                 :key="group.titleEn"
-                class="mt-7 sm:mt-9"
+                class="mt-4 sm:mt-5"
             >
                 <h2
                     class="px-2 text-xs font-black tracking-[0.14em] text-slate uppercase sm:px-4"

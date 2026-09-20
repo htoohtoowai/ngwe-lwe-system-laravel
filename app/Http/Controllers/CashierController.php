@@ -62,6 +62,9 @@ class CashierController extends Controller
         $section ??= self::DEFAULT_SECTION;
         abort_unless(in_array($section, self::SECTIONS, true), 404);
 
+        $cashier = $request->user();
+        $cashier->loadMissing('branch');
+
         $vault = $this->vault->getVaultBalance();
         $floatRows = $this->floats->list();
         $pendingAdditionalIssueCounts = CashFloatIssue::query()
@@ -72,9 +75,14 @@ class CashierController extends Controller
             ->pluck('aggregate', 'float_id');
 
         return Inertia::render(self::PAGE_COMPONENTS[$section], [
-            'role' => $request->user()->role,
+            'role' => $cashier->role,
+            'branch' => [
+                'id' => (int) $cashier->branch_id,
+                'code' => $cashier->branch?->code,
+                'name' => $cashier->branch?->name ?? 'Branch',
+            ],
             'announcement' => 'Manage the main vault, Teller floats and end-of-day returns.',
-            'notificationCount' => $this->unreadNotificationCount((int) $request->user()->id),
+            'notificationCount' => $this->unreadNotificationCount((int) $cashier->id),
             'pendingCashIns' => $this->pendingCashIns(),
             'notes' => $this->notes(),
             'mainVault' => $this->stringify($vault),
