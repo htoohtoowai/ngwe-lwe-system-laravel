@@ -79,48 +79,92 @@ class TransactionFeeCalculatorTest extends TestCase
         $this->assertSame('500.00', $calc->resolveFees($this->account(1), 50_000, TransactionFeeCalculator::MODE_CASH_OUT)['customer_fee']);
     }
 
-    public function test_agent_commission_uses_out_or_in_value_from_same_amount_tier(): void
+    public function test_agent_commission_uses_feature_specific_out_and_in_tiers(): void
     {
-        $tier = $this->commissionTier([
+        $outTier = $this->commissionTier(AccountFeature::CashOut, [
             'commission_type' => 'FIXED',
             'out_commission_value' => 123,
+            'in_commission_value' => 0,
+        ]);
+        $inTier = $this->commissionTier(AccountFeature::CashIn, [
+            'commission_type' => 'FIXED',
+            'out_commission_value' => 0,
             'in_commission_value' => 117,
         ]);
-        $calc = new AgentCommissionCalculator($this->commissionRepo($tier), new TierValueCalculator());
+        $calc = new AgentCommissionCalculator(
+            $this->commissionRepo($outTier, $inTier),
+            new TierValueCalculator(),
+        );
         $account = $this->account(1, true, AccountType::Pay);
 
-        $out = $calc->resolveForMovement($account, 20_000, -20_000);
-        $in = $calc->resolveForMovement($account, 20_000, 20_000);
+        $out = $calc->resolveForMovement(
+            $account,
+            20_000,
+            -20_000,
+            AccountFeature::Transfer,
+        );
+        $in = $calc->resolveForMovement(
+            $account,
+            20_000,
+            20_000,
+            AccountFeature::Transfer,
+        );
 
         $this->assertSame('123.00', $out['amount']);
         $this->assertSame(AgentCommissionDirection::Out, $out['direction']);
+        $this->assertSame(AccountFeature::CashOut->value, $out['tier']?->feature);
         $this->assertSame('117.00', $in['amount']);
         $this->assertSame(AgentCommissionDirection::In, $in['direction']);
+        $this->assertSame(AccountFeature::CashIn->value, $in['tier']?->feature);
     }
 
     public function test_non_agent_and_bank_accounts_never_receive_agent_commission(): void
     {
-        $tier = $this->commissionTier([
+        $tier = $this->commissionTier(AccountFeature::CashOut, [
             'out_commission_value' => 123,
-            'in_commission_value' => 117,
+            'in_commission_value' => 0,
         ]);
         $calc = new AgentCommissionCalculator($this->commissionRepo($tier), new TierValueCalculator());
 
-        $this->assertSame('0.00', $calc->resolveForMovement($this->account(1, false, AccountType::Pay), 20_000, -20_000)['amount']);
-        $this->assertSame('0.00', $calc->resolveForMovement($this->account(1, true, AccountType::Bank), 20_000, -20_000)['amount']);
+        $this->assertSame(
+            '0.00',
+            $calc->resolveForMovement(
+                $this->account(1, false, AccountType::Pay),
+                20_000,
+                -20_000,
+                AccountFeature::Transfer,
+            )['amount'],
+        );
+        $this->assertSame(
+            '0.00',
+            $calc->resolveForMovement(
+                $this->account(1, true, AccountType::Bank),
+                20_000,
+                -20_000,
+                AccountFeature::Transfer,
+            )['amount'],
+        );
     }
 
     public function test_percentage_agent_commission_supports_four_decimal_percent_value(): void
     {
-        $tier = $this->commissionTier([
+        $tier = $this->commissionTier(AccountFeature::CashIn, [
             'company_id' => 7,
             'commission_type' => 'PERCENTAGE',
-            'out_commission_value' => 0.0001,
+            'out_commission_value' => 0,
             'in_commission_value' => 0.0001,
         ]);
         $calc = new AgentCommissionCalculator($this->commissionRepo($tier), new TierValueCalculator());
 
-        $this->assertSame('1.00', $calc->resolveForMovement($this->account(7), 1_000_000, 1_000_000)['amount']);
+        $this->assertSame(
+            '1.00',
+            $calc->resolveForMovement(
+                $this->account(7),
+                1_000_000,
+                1_000_000,
+                AccountFeature::Transfer,
+            )['amount'],
+        );
     }
 
     private function account(?int $companyId, bool $isAgent = true, AccountType $accountType = AccountType::Pay): Account
@@ -154,11 +198,14 @@ class TransactionFeeCalculatorTest extends TestCase
     }
 
     /** @param array<string, int|float|string|bool> $overrides */
-    private function commissionTier(array $overrides = []): AgentCommissionTier
-    {
+    private function commissionTier(
+        AccountFeature $feature,
+        array $overrides = [],
+    ): AgentCommissionTier {
         $tier = new AgentCommissionTier();
         $tier->forceFill(array_merge([
             'company_id' => 1,
+            'feature' => $feature->value,
             'amount_from' => 1,
             'amount_to' => 999_999_999,
             'commission_type' => 'FIXED',
@@ -197,10 +244,18 @@ class TransactionFeeCalculatorTest extends TestCase
             /** @param list<AgentCommissionTier> $tiers */
             public function __construct(private readonly array $tiers) {}
 
-            public function findForCompany(int $companyId, float|string $amount): ?AgentCommissionTier
-            {
+            public function findForCompanyFeature(
+                int $companyId,
+                AccountFeature|string $feature,
+                float|string $amount,
+            ): ?AgentCommissionTier {
+                $featureValue = $feature instanceof AccountFeature
+                    ? $feature->value
+                    : (string) $feature;
+
                 foreach ($this->tiers as $tier) {
                     if ((int) $tier->company_id === $companyId
+                        && $tier->feature === $featureValue
                         && (float) $tier->amount_from <= (float) $amount
                         && (float) $tier->amount_to >= (float) $amount) {
                         return $tier;

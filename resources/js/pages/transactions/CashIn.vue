@@ -656,7 +656,7 @@ function submit() {
                                     v-model="customerName"
                                     type="text"
                                     autocomplete="name"
-                                    placeholder=" "
+                                    :placeholder="t('transaction.enterCustomerName')"
                                     :aria-invalid="
                                         Boolean(errors.customer_name)
                                     "
@@ -680,7 +680,7 @@ function submit() {
                                     v-model="customerPhone"
                                     type="tel"
                                     autocomplete="tel"
-                                    placeholder=" "
+                                    :placeholder="t('transaction.enterCustomerPhone')"
                                     :aria-invalid="
                                         Boolean(errors.customer_phone)
                                     "

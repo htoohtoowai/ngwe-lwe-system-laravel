@@ -1440,7 +1440,7 @@ function closeVaultLogDetails(): void {
                         v-model="issueEmployeeId"
                         class="h-11 w-full rounded-xl border border-line bg-mist px-3 text-sm font-semibold outline-none focus:border-brand focus:ring-2 focus:ring-brand/20"
                     >
-                        <option :value="null">Choose a Teller</option>
+                        <option :value="null" disabled>Select teller</option>
                         <option
                             v-for="teller in tellers"
                             :key="teller.id"

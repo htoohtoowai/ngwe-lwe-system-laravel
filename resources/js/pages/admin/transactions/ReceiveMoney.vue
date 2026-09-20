@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import TransactionListPage from '@/components/admin/transactions/TransactionListPage.vue';
-defineProps<{
-    role: 'admin';
-    announcement?: string | null;
-    notificationCount?: number;
-    rows: any[];
-}>();
+import type { AdminTransactionPageProps } from '@/types/page-props';
+
+defineProps<AdminTransactionPageProps>();
 </script>
 <template>
     <TransactionListPage

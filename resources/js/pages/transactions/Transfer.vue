@@ -726,7 +726,7 @@ function submit() {
                                 type="tel"
                                 autocomplete="tel"
                                 inputmode="tel"
-                                placeholder=" "
+                                :placeholder="t('transaction.enterCustomerPhone')"
                                 class="bank-input min-h-12 bg-mist"
                             />
                         </label>
@@ -932,7 +932,7 @@ function submit() {
                         v-model="description"
                         maxlength="250"
                         autocomplete="off"
-                        :placeholder="t('transaction.transfer')"
+                        :placeholder="t('transaction.optionalNote')"
                         rows="2"
                         class="bank-input min-h-12 resize-none bg-mist pb-7"
                         aria-describedby="transfer-description-count"

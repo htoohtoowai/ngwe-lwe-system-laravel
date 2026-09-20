@@ -1,20 +1,9 @@
 <script setup lang="ts">
 import CashierOperationsPage from '@/components/cashier/operations/CashierOperationsPage.vue';
+import type { CashierOperationsPageProps } from '@/types/page-props';
 
-defineProps<{
-    role: 'cashier';
-    announcement?: string | null;
-    notificationCount?: number;
-    notes: number[];
-    mainVault: Record<string, number>;
-    availableVault: Record<string, number>;
-    vaultTotal: number;
-    vaultLogs: any[];
-    floats: any[];
-    tellers: any[];
-    transactions: any[];
-    pendingCashIns: any[];
-}>();
+defineOptions({ inheritAttrs: false });
+defineProps<Omit<CashierOperationsPageProps, 'section'>>();
 </script>
 
 <template>

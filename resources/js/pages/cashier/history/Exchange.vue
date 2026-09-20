@@ -1,2 +1,8 @@
-<script setup lang="ts">import CashierOperationsPage from '@/components/cashier/operations/CashierOperationsPage.vue'; defineOptions({ inheritAttrs: false });</script>
-<template><CashierOperationsPage v-bind="$attrs" section="teller-entry-history-exchange" /></template>
+<script setup lang="ts">
+import CashierOperationsPage from '@/components/cashier/operations/CashierOperationsPage.vue';
+import type { CashierOperationsPageProps } from '@/types/page-props';
+
+defineOptions({ inheritAttrs: false });
+defineProps<Omit<CashierOperationsPageProps, 'section'>>();
+</script>
+<template><CashierOperationsPage v-bind="$props" section="teller-entry-history-exchange" /></template>

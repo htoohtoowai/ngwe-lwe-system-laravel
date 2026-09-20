@@ -1,2 +1,7 @@
-<script setup lang="ts">import AdminOperationsPage from '@/components/admin/operations/AdminOperationsPage.vue'; defineProps(['role','mode','resourceId','announcement','notificationCount']);</script>
+<script setup lang="ts">
+import AdminOperationsPage from '@/components/admin/operations/AdminOperationsPage.vue';
+import type { AdminOperationPageProps } from '@/types/page-props';
+
+defineProps<AdminOperationPageProps>();
+</script>
 <template><AdminOperationsPage v-bind="$props" section="transactions" transaction-subsection="activity-logs" /></template>

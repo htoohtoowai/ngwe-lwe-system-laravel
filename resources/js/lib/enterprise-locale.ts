@@ -14,23 +14,23 @@ const mm: Record<string, string> = {
     'Activity Logs': 'လုပ်ဆောင်မှုမှတ်တမ်းများ',
     'Activity logs refreshed.': 'လုပ်ဆောင်မှုမှတ်တမ်းများ ပြန်တင်ပြီးပါပြီ။',
     'Additional float issued. Teller must review the note breakdown and receive it with PIN before the balance increases.':
-        'ထပ်မံငွေခွဲ ထုတ်ပေးပြီးပါပြီ။ လက်ကျန်မတိုးမီ Teller က ငွေစက္ကူစာရင်းကို စစ်ပြီး PIN ဖြင့် လက်ခံရပါမည်။',
+        'ထပ်မံငွေခွဲ ထုတ်ပေးပြီးပါပြီ။ လက်ကျန်မတိုးမီ ငွေကိုင်ဝန်ထမ်း က ငွေစက္ကူစာရင်းကို စစ်ပြီး PIN ဖြင့် လက်ခံရပါမည်။',
     'Agent commissions': 'အေးဂျင့်ကော်မရှင်များ',
-    'Backup created.': 'Backup ဖန်တီးပြီးပါပြီ။',
-    'Broadcast test sent.': 'Broadcast စမ်းသပ်ပို့ပြီးပါပြီ။',
-    'Cancelled by cashier during review.': 'Cashier စစ်ဆေးနေစဉ် ပယ်ဖျက်ထားသည်။',
+    'Backup created.': 'အရန်သိမ်းဆည်းမှု ဖန်တီးပြီးပါပြီ။',
+    'Broadcast test sent.': 'အသိပေးပို့မှု စမ်းသပ်ပို့ပြီးပါပြီ။',
+    'Cancelled by cashier during review.': 'ငွေတိုက်တာဝန်ခံ စစ်ဆေးနေစဉ် ပယ်ဖျက်ထားသည်။',
     'Cash In confirmed and posted to the main vault.':
-        'ငွေသွင်းကို အတည်ပြုပြီး Main Vault ထဲ စာရင်းသွင်းပြီးပါပြီ။',
+        'ငွေသွင်းကို အတည်ပြုပြီး အဓိကငွေသေတ္တာ ထဲ စာရင်းသွင်းပြီးပါပြီ။',
     'Cash deposited into Cashier vault.':
-        'Cashier ငွေတိုက်ထဲ ငွေသွင်းပြီးပါပြီ။',
+        'ငွေတိုက်တာဝန်ခံ ငွေတိုက်ထဲ ငွေသွင်းပြီးပါပြီ။',
     'Cash withdrawn from Cashier vault.':
-        'Cashier ငွေတိုက်မှ ငွေထုတ်ပြီးပါပြီ။',
-    'Cashier PIN updated successfully.': 'Cashier PIN ပြင်ဆင်ပြီးပါပြီ။',
+        'ငွေတိုက်တာဝန်ခံ ငွေတိုက်မှ ငွေထုတ်ပြီးပါပြီ။',
+    'Cashier PIN updated successfully.': 'ငွေတိုက်တာဝန်ခံ PIN ပြင်ဆင်ပြီးပါပြီ။',
     'Company deleted.': 'ကုမ္ပဏီ ဖျက်ပြီးပါပြီ။',
     'Company saved.': 'ကုမ္ပဏီ သိမ်းဆည်းပြီးပါပြီ။',
     'Company status updated.': 'ကုမ္ပဏီအခြေအနေ ပြင်ဆင်ပြီးပါပြီ။',
     'Create or activate the Cashier before managing the Cashier vault.':
-        'Cashier ငွေတိုက်ကို စီမံမီ Cashier အကောင့်ကို ဖန်တီးပါ သို့မဟုတ် အသုံးပြုနိုင်အောင် ဖွင့်ပါ။',
+        'ငွေတိုက်တာဝန်ခံ ငွေတိုက်ကို စီမံမီ ငွေတိုက်တာဝန်ခံ အကောင့်ကို ဖန်တီးပါ သို့မဟုတ် အသုံးပြုနိုင်အောင် ဖွင့်ပါ။',
     'Customer fee rules by provider, feature and amount range.':
         'ဝန်ဆောင်မှုပေးသူ၊ လုပ်ဆောင်ချက်နှင့် ပမာဏအပိုင်းအခြားအလိုက် ဖောက်သည်ဝန်ဆောင်ခ စည်းမျဉ်းများ။',
     'Customer fee rules by source provider, destination provider and amount range.':
@@ -43,27 +43,27 @@ const mm: Record<string, string> = {
     'Exchange rate deleted.': 'ငွေလဲနှုန်း ဖျက်ပြီးပါပြီ။',
     'Exchange rate saved.': 'ငွေလဲနှုန်း သိမ်းဆည်းပြီးပါပြီ။',
     'Issue an opening float or add more cash to an ACTIVE Teller float during the day.':
-        'နေ့စတင်ငွေခွဲ ထုတ်ပေးပါ သို့မဟုတ် တစ်နေ့အတွင်း အသုံးပြုနေသော Teller ငွေခွဲထဲ ငွေထပ်ဖြည့်ပါ။',
+        'နေ့စတင်ငွေခွဲ ထုတ်ပေးပါ သို့မဟုတ် တစ်နေ့အတွင်း အသုံးပြုနေသော ငွေကိုင်ဝန်ထမ်း ငွေခွဲထဲ ငွေထပ်ဖြည့်ပါ။',
     'Live note stock after issued Teller floats are removed.':
-        'Teller များသို့ ထုတ်ပေးထားသော ငွေခွဲများကို နုတ်ပြီးနောက် လက်ရှိငွေစက္ကူလက်ကျန်။',
+        'ငွေကိုင်ဝန်ထမ်း များသို့ ထုတ်ပေးထားသော ငွေခွဲများကို နုတ်ပြီးနောက် လက်ရှိငွေစက္ကူလက်ကျန်။',
     'New passwords do not match.': 'စကားဝှက်အသစ် နှစ်ခု မကိုက်ညီပါ။',
     'Owner deposited cash into the Cashier main vault.':
-        'Owner က Cashier Main Vault ထဲ ငွေသွင်းထားပါသည်။',
+        'ပိုင်ရှင် က ငွေတိုက်တာဝန်ခံ အဓိကငွေသေတ္တာ ထဲ ငွေသွင်းထားပါသည်။',
     'Owner withdrew cash from the Cashier main vault.':
-        'Owner က Cashier Main Vault မှ ငွေထုတ်ထားပါသည်။',
+        'ပိုင်ရှင် က ငွေတိုက်တာဝန်ခံ အဓိကငွေသေတ္တာ မှ ငွေထုတ်ထားပါသည်။',
     'PIN values do not match.': 'PIN နှစ်ခု မကိုက်ညီပါ။',
     'Password changed.': 'စကားဝှက် ပြောင်းပြီးပါပြီ။',
     'Provider customer fees': 'ဝန်ဆောင်မှုပေးသူ ဖောက်သည်ဝန်ဆောင်ခများ',
     'Read-only Teller Cash In history.':
-        'Teller ငွေသွင်းမှတ်တမ်းကို ဖတ်ရှုရန်သာ။',
+        'ငွေကိုင်ဝန်ထမ်း ငွေသွင်းမှတ်တမ်းကို ဖတ်ရှုရန်သာ။',
     'Read-only Teller Cash Out history.':
-        'Teller ငွေထုတ်မှတ်တမ်းကို ဖတ်ရှုရန်သာ။',
+        'ငွေကိုင်ဝန်ထမ်း ငွေထုတ်မှတ်တမ်းကို ဖတ်ရှုရန်သာ။',
     'Read-only Teller Exchange history.':
-        'Teller ငွေလဲမှတ်တမ်းကို ဖတ်ရှုရန်သာ။',
+        'ငွေကိုင်ဝန်ထမ်း ငွေလဲမှတ်တမ်းကို ဖတ်ရှုရန်သာ။',
     'Read-only Teller Transfer history.':
-        'Teller ငွေလွှဲမှတ်တမ်းကို ဖတ်ရှုရန်သာ။',
+        'ငွေကိုင်ဝန်ထမ်း ငွေလွှဲမှတ်တမ်းကို ဖတ်ရှုရန်သာ။',
     'Read-only Teller transaction history.':
-        'Teller ငွေလုပ်ငန်းမှတ်တမ်းကို ဖတ်ရှုရန်သာ။',
+        'ငွေကိုင်ဝန်ထမ်း ငွေလုပ်ငန်းမှတ်တမ်းကို ဖတ်ရှုရန်သာ။',
     'Report refreshed.': 'အစီရင်ခံစာ ပြန်တင်ပြီးပါပြီ။',
     Reports: 'အစီရင်ခံစာများ',
     'Request failed.': 'တောင်းဆိုမှု မအောင်မြင်ပါ။',
@@ -71,9 +71,9 @@ const mm: Record<string, string> = {
     'Select a user first.': 'အသုံးပြုသူကို အရင်ရွေးပါ။',
     'Select an account first.': 'အကောင့်ကို အရင်ရွေးပါ။',
     'Teller float issued. Teller must review the note breakdown and receive it with PIN before use.':
-        'Teller ငွေခွဲ ထုတ်ပေးပြီးပါပြီ။ အသုံးမပြုမီ Teller က ငွေစက္ကူစာရင်းကို စစ်ပြီး PIN ဖြင့် လက်ခံရပါမည်။',
+        'ငွေကိုင်ဝန်ထမ်း ငွေခွဲ ထုတ်ပေးပြီးပါပြီ။ အသုံးမပြုမီ ငွေကိုင်ဝန်ထမ်း က ငွေစက္ကူစာရင်းကို စစ်ပြီး PIN ဖြင့် လက်ခံရပါမည်။',
     'Teller float return confirmed and added back to the main vault.':
-        'Teller ပြန်အပ်ငွေကို အတည်ပြုပြီး Main Vault ထဲ ပြန်ထည့်ပြီးပါပြီ။',
+        'ငွေကိုင်ဝန်ထမ်း ပြန်အပ်ငွေကို အတည်ပြုပြီး အဓိကငွေသေတ္တာ ထဲ ပြန်ထည့်ပြီးပါပြီ။',
     'This tier will be permanently deleted. Existing transaction snapshots remain unchanged.':
         'ဒီအဆင့်ကို အပြီးတိုင်ဖျက်ပါမည်။ ရှိပြီးသား ငွေလုပ်ငန်း snapshot များကို မပြောင်းလဲပါ။',
     'Transactions refreshed.': 'ငွေလုပ်ငန်းစာရင်းများ ပြန်တင်ပြီးပါပြီ။',
@@ -83,50 +83,50 @@ const mm: Record<string, string> = {
     'User saved.': 'အသုံးပြုသူ သိမ်းဆည်းပြီးပါပြီ။',
     'User status updated.': 'အသုံးပြုသူအခြေအနေ ပြင်ဆင်ပြီးပါပြီ။',
     'Verify Teller float returns and add cash back to the vault.':
-        'Teller များပြန်အပ်သော ငွေခွဲကို စစ်ဆေးပြီး ငွေတိုက်ထဲ ပြန်ထည့်ပါ။',
+        'ငွေကိုင်ဝန်ထမ်း များပြန်အပ်သော ငွေခွဲကို စစ်ဆေးပြီး ငွေတိုက်ထဲ ပြန်ထည့်ပါ။',
     'will be marked inactive and removed from selection lists. Existing balances, adjustments and transactions will be kept.':
         'ကို အသုံးမပြုအဖြစ် သတ်မှတ်ပြီး ရွေးချယ်စာရင်းများမှ ဖယ်ရှားပါမည်။ ရှိပြီးသားလက်ကျန်၊ ပြင်ဆင်မှုနှင့် ငွေလုပ်ငန်းစာရင်းများကို ဆက်လက်သိမ်းထားပါမည်။',
     'will be marked inactive and removed from selection lists. Existing records will be kept.':
         'ကို အသုံးမပြုအဖြစ် သတ်မှတ်ပြီး ရွေးချယ်စာရင်းများမှ ဖယ်ရှားပါမည်။ ရှိပြီးသားမှတ်တမ်းများကို ဆက်လက်သိမ်းထားပါမည်။',
     'verify the physical notes match the Teller-entered breakdown above. If they match, confirm with your PIN.':
-        'အထက်ပါ Teller ထည့်ထားသော ငွေစက္ကူစာရင်းနှင့် လက်တွေ့ငွေစက္ကူများ ကိုက်ညီကြောင်း စစ်ပါ။ ကိုက်ညီပါက PIN ဖြင့် အတည်ပြုပါ။',
+        'အထက်ပါ ငွေကိုင်ဝန်ထမ်း ထည့်ထားသော ငွေစက္ကူစာရင်းနှင့် လက်တွေ့ငွေစက္ကူများ ကိုက်ညီကြောင်း စစ်ပါ။ ကိုက်ညီပါက PIN ဖြင့် အတည်ပြုပါ။',
     'Access denied': 'ဝင်ရောက်ခွင့် မရှိပါ။',
-    'Admin only.': 'Admin သာ လုပ်ဆောင်နိုင်ပါသည်။',
+    'Admin only.': 'စနစ်စီမံခန့်ခွဲသူ သာ လုပ်ဆောင်နိုင်ပါသည်။',
     'Admins cannot deactivate their own active session.':
-        'Admin သည် လက်ရှိအသုံးပြုနေသော မိမိအကောင့်ကို ပိတ်၍မရပါ။',
+        'စနစ်စီမံခန့်ခွဲသူ သည် လက်ရှိအသုံးပြုနေသော မိမိအကောင့်ကို ပိတ်၍မရပါ။',
     'Amount must be greater than zero.': 'ပမာဏသည် သုညထက် ကြီးရပါမည်။',
     'An active Cashier is required before the Owner can manage the Cashier vault.':
-        'Owner က Cashier ငွေတိုက်ကို စီမံရန် အသုံးပြုနေသော Cashier အကောင့်တစ်ခု လိုအပ်ပါသည်။',
+        'ပိုင်ရှင် က ငွေတိုက်တာဝန်ခံ ငွေတိုက်ကို စီမံရန် အသုံးပြုနေသော ငွေတိုက်တာဝန်ခံ အကောင့်တစ်ခု လိုအပ်ပါသည်။',
     'An active float is required before entering transactions.':
         'ငွေလုပ်ငန်းစာရင်းသွင်းမီ အသုံးပြုနေသော ငွေခွဲတစ်ခု လိုအပ်ပါသည်။',
     'Bank accounts cannot be agent accounts.':
-        'Bank အကောင့်ကို Agent အကောင့်အဖြစ် သတ်မှတ်၍မရပါ။',
+        'Bank အကောင့်ကို ကိုယ်စားလှယ် အကောင့်အဖြစ် သတ်မှတ်၍မရပါ။',
     'Bank providers do not support agent commission tiers. Choose a Pay provider.':
-        'Bank ဝန်ဆောင်မှုပေးသူတွင် Agent commission tier မသတ်မှတ်နိုင်ပါ။ Pay ဝန်ဆောင်မှုပေးသူကို ရွေးပါ။',
+        'Bank ဝန်ဆောင်မှုပေးသူတွင် ကိုယ်စားလှယ် commission tier မသတ်မှတ်နိုင်ပါ။ Pay ဝန်ဆောင်မှုပေးသူကို ရွေးပါ။',
     'Cash In cancelled.': 'ငွေသွင်းစာရင်း ပယ်ဖျက်ပြီးပါပြီ။',
     'Cash In confirmed.': 'ငွေသွင်းစာရင်း အတည်ပြုပြီးပါပြီ။',
     'Cash Out account-paid fees are credited to the selected account only.':
-        'Cash Out အကောင့်ဖြင့်ပေးသော ဝန်ဆောင်ခကို ရွေးထားသောအကောင့်ထဲသာ ထည့်ပါမည်။',
+        'ငွေထုတ် အကောင့်ဖြင့်ပေးသော ဝန်ဆောင်ခကို ရွေးထားသောအကောင့်ထဲသာ ထည့်ပါမည်။',
     'Company already exists.': 'ဒီကုမ္ပဏီ ရှိပြီးသားဖြစ်ပါသည်။',
     'Currency must be MMK or THB.': 'ငွေကြေးသည် MMK သို့မဟုတ် THB ဖြစ်ရပါမည်။',
     'Current password is incorrect.': 'လက်ရှိစကားဝှက် မမှန်ကန်ပါ။',
     'Debit amount must be greater than zero.':
         'နုတ်မည့်ပမာဏသည် သုညထက် ကြီးရပါမည်။',
     'Denomination breakdown is required for Admin Cash Out from the main vault.':
-        'Main Vault မှ Admin Cash Out လုပ်ရန် ငွေစက္ကူအသေးစိတ် လိုအပ်ပါသည်။',
+        'အဓိကငွေသေတ္တာ မှ စနစ်စီမံခန့်ခွဲသူ ငွေထုတ် လုပ်ရန် ငွေစက္ကူအသေးစိတ် လိုအပ်ပါသည်။',
     'Denomination breakdown is required for Cash In received cash.':
-        'Cash In လက်ခံရငွေအတွက် ငွေစက္ကူအသေးစိတ် လိုအပ်ပါသည်။',
+        'ငွေသွင်း လက်ခံရငွေအတွက် ငွေစက္ကူအသေးစိတ် လိုအပ်ပါသည်။',
     'Denomination breakdown is required for Teller Cash In cashier handoff.':
-        'Teller Cash In ကို Cashier ထံ အပ်ရန် ငွေစက္ကူအသေးစိတ် လိုအပ်ပါသည်။',
+        'ငွေကိုင်ဝန်ထမ်း ငွေသွင်း ကို ငွေတိုက်တာဝန်ခံ ထံ အပ်ရန် ငွေစက္ကူအသေးစိတ် လိုအပ်ပါသည်။',
     'Denomination quantities do not match.': 'ငွေစက္ကူအရေအတွက်များ မကိုက်ညီပါ။',
     'Denomination quantity cannot be negative.':
         'ငွေစက္ကူအရေအတွက်သည် အနုတ်မဖြစ်ရပါ။',
     'Exchange payment method must be cash or account.':
         'ငွေလဲပေးချေနည်းသည် ငွေသား သို့မဟုတ် အကောင့် ဖြစ်ရပါမည်။',
     'Fee account must be empty when the fee is paid in cash.':
-        'ဝန်ဆောင်ခကို ငွေသားပေးသောအခါ Fee account မရွေးရပါ။',
+        'ဝန်ဆောင်ခကို ငွေသားပေးသောအခါ ဝန်ဆောင်ခ account မရွေးရပါ။',
     'Fee denomination breakdown is required when Cash Out fee is received in cash.':
-        'Cash Out ဝန်ဆောင်ခကို ငွေသားလက်ခံပါက ငွေစက္ကူအသေးစိတ် လိုအပ်ပါသည်။',
+        'ငွေထုတ် ဝန်ဆောင်ခကို ငွေသားလက်ခံပါက ငွေစက္ကူအသေးစိတ် လိုအပ်ပါသည်။',
     'Fee denomination breakdown is required when Transfer fee is received in cash.':
         'Transfer ဝန်ဆောင်ခကို ငွေသားလက်ခံပါက ငွေစက္ကူအသေးစိတ် လိုအပ်ပါသည်။',
     'Fee payment method must be cash or account.':
@@ -143,42 +143,42 @@ const mm: Record<string, string> = {
     'No PIN set. Please set your PIN first.':
         'PIN မသတ်မှတ်ရသေးပါ။ PIN ကို အရင်သတ်မှတ်ပါ။',
     'No active float. Receive your float from the cashier first.':
-        'အသုံးပြုနေသော ငွေခွဲမရှိပါ။ Cashier ထံမှ ငွေခွဲကို အရင်လက်ခံပါ။',
+        'အသုံးပြုနေသော ငွေခွဲမရှိပါ။ ငွေတိုက်တာဝန်ခံ ထံမှ ငွေခွဲကို အရင်လက်ခံပါ။',
     'Old password incorrect.': 'စကားဝှက်အဟောင်း မမှန်ကန်ပါ။',
     'Only Cash In transactions can be cancelled here.':
-        'ဒီနေရာတွင် Cash In စာရင်းကိုသာ ပယ်ဖျက်နိုင်ပါသည်။',
+        'ဒီနေရာတွင် ငွေသွင်း စာရင်းကိုသာ ပယ်ဖျက်နိုင်ပါသည်။',
     'Only Cash In transactions can be confirmed here.':
-        'ဒီနေရာတွင် Cash In စာရင်းကိုသာ အတည်ပြုနိုင်ပါသည်။',
+        'ဒီနေရာတွင် ငွေသွင်း စာရင်းကိုသာ အတည်ပြုနိုင်ပါသည်။',
     'Only a cashier can cancel Cash In transactions.':
-        'Cash In စာရင်းကို Cashier သာ ပယ်ဖျက်နိုင်ပါသည်။',
+        'ငွေသွင်း စာရင်းကို ငွေတိုက်တာဝန်ခံ သာ ပယ်ဖျက်နိုင်ပါသည်။',
     'Only a cashier can confirm Cash In transactions.':
-        'Cash In စာရင်းကို Cashier သာ အတည်ပြုနိုင်ပါသည်။',
+        'ငွေသွင်း စာရင်းကို ငွေတိုက်တာဝန်ခံ သာ အတည်ပြုနိုင်ပါသည်။',
     'Only one Cashier account is allowed. Update the existing Cashier instead of creating or assigning another one.':
-        'Cashier အကောင့်တစ်ခုသာ ခွင့်ပြုထားပါသည်။ နောက်တစ်ခုဖန်တီးမည့်အစား ရှိပြီးသား Cashier ကို ပြင်ဆင်ပါ။',
+        'ငွေတိုက်တာဝန်ခံ အကောင့်တစ်ခုသာ ခွင့်ပြုထားပါသည်။ နောက်တစ်ခုဖန်တီးမည့်အစား ရှိပြီးသား ငွေတိုက်တာဝန်ခံ ကို ပြင်ဆင်ပါ။',
     'Only pending Cash In notifications can be marked as read.':
-        'စောင့်ဆိုင်းနေသော Cash In အသိပေးချက်များကိုသာ ဖတ်ပြီးအဖြစ် သတ်မှတ်နိုင်ပါသည်။',
+        'စောင့်ဆိုင်းနေသော ငွေသွင်း အသိပေးချက်များကိုသာ ဖတ်ပြီးအဖြစ် သတ်မှတ်နိုင်ပါသည်။',
     'PIN is required.': 'PIN လိုအပ်ပါသည်။',
     'PIN must be 4-8 digits.': 'PIN သည် ဂဏန်း ၄ မှ ၈ လုံး ဖြစ်ရပါမည်။',
     'PIN must be 4–8 digits.': 'PIN သည် ဂဏန်း ၄ မှ ၈ လုံး ဖြစ်ရပါမည်။',
     'Receive or reject all pending additional float issues before returning this float.':
         'ဒီငွေခွဲကို ပြန်မအပ်မီ စောင့်ဆိုင်းနေသော ထပ်မံငွေခွဲအားလုံးကို လက်ခံ သို့မဟုတ် ပယ်ချပါ။',
     'Selected fee account is not active or is not marked as a fee account.':
-        'ရွေးထားသော Fee account သည် အသုံးမပြုနိုင်ပါ သို့မဟုတ် Fee account အဖြစ် မသတ်မှတ်ထားပါ။',
+        'ရွေးထားသော ဝန်ဆောင်ခ account သည် အသုံးမပြုနိုင်ပါ သို့မဟုတ် ဝန်ဆောင်ခ account အဖြစ် မသတ်မှတ်ထားပါ။',
     'Source account and fee account must be different.':
-        'မူလအကောင့်နှင့် Fee account မတူရပါ။',
+        'မူလအကောင့်နှင့် ဝန်ဆောင်ခ account မတူရပါ။',
     'Source and target accounts must be different.':
         'မူလအကောင့်နှင့် သွားမည့်အကောင့် မတူရပါ။',
     'This provider already has an account with the same identifier.':
         'ဒီဝန်ဆောင်မှုပေးသူတွင် အလားတူအကောင့်နံပါတ် ရှိပြီးသားဖြစ်ပါသည်။',
     'This provider already has an active agent commission tier overlapping the amount range.':
-        'ဒီဝန်ဆောင်မှုပေးသူတွင် ပမာဏအပိုင်းအခြား ထပ်နေသော အသုံးပြုနေသည့် Agent commission tier ရှိပြီးသားဖြစ်ပါသည်။',
+        'ဒီဝန်ဆောင်မှုပေးသူတွင် ပမာဏအပိုင်းအခြား ထပ်နေသော အသုံးပြုနေသည့် ကိုယ်စားလှယ် commission tier ရှိပြီးသားဖြစ်ပါသည်။',
     'This provider and feature already has an active customer fee tier overlapping the amount range.':
-        'ဒီဝန်ဆောင်မှုပေးသူနှင့် လုပ်ဆောင်ချက်တွင် ပမာဏအပိုင်းအခြား ထပ်နေသော Customer fee tier ရှိပြီးသားဖြစ်ပါသည်။',
+        'ဒီဝန်ဆောင်မှုပေးသူနှင့် လုပ်ဆောင်ချက်တွင် ပမာဏအပိုင်းအခြား ထပ်နေသော ဖောက်သည် fee tier ရှိပြီးသားဖြစ်ပါသည်။',
     'This provider route already has an active transfer fee tier overlapping the amount range.':
         'ဒီဝန်ဆောင်မှုလမ်းကြောင်းတွင် ပမာဏအပိုင်းအခြား ထပ်နေသော Transfer fee tier ရှိပြီးသားဖြစ်ပါသည်။',
     'Total amount does not match.': 'စုစုပေါင်းပမာဏ မကိုက်ညီပါ။',
     'Transfer account-paid fees are credited to the system receive account.':
-        'Transfer အကောင့်ဖြင့်ပေးသော ဝန်ဆောင်ခကို System လက်ခံအကောင့်ထဲ ထည့်ပါမည်။',
+        'Transfer အကောင့်ဖြင့်ပေးသော ဝန်ဆောင်ခကို စနစ် လက်ခံအကောင့်ထဲ ထည့်ပါမည်။',
     'Unable to adjust an inactive account.':
         'အသုံးမပြုသောအကောင့်၏ လက်ကျန်ကို ပြင်ဆင်၍မရပါ။',
     'Unsupported denomination:': 'မပံ့ပိုးသော ငွေစက္ကူအမျိုးအစား:',
@@ -200,12 +200,15 @@ const mm: Record<string, string> = {
     'Add tier': 'အဆင့်အသစ်ထည့်မည်',
     'Additional fee': 'အပိုဝန်ဆောင်ခ',
     Admin: 'စနစ်စီမံခန့်ခွဲသူ',
-    Agent: 'အေးဂျင့်',
-    'Agent Account': 'အေးဂျင့်အကောင့်',
-    'Agent Commissions': 'အေးဂျင့်ကော်မရှင်များ',
-    'Agent account': 'အေးဂျင့်အကောင့်',
-    'Agent commission': 'အေးဂျင့်ကော်မရှင်',
-    'Agent commission entries': 'အေးဂျင့်ကော်မရှင်စာရင်းများ',
+    Agent: 'ကိုယ်စားလှယ်',
+    'Agent Account': 'ကိုယ်စားလှယ်အကောင့်',
+    'Agent Commissions': 'ကိုယ်စားလှယ်ကော်မရှင်များ',
+    'Commission For': 'ကော်မရှင်အမျိုးအစား',
+    'Money In': 'ငွေဝင်',
+    'Money Out': 'ငွေထွက်',
+    'Agent account': 'ကိုယ်စားလှယ်အကောင့်',
+    'Agent commission': 'ကိုယ်စားလှယ်ကော်မရှင်',
+    'Agent commission entries': 'ကိုယ်စားလှယ်ကော်မရှင်စာရင်းများ',
     All: 'အားလုံး',
     'All Transactions': 'ငွေလုပ်ငန်းစာရင်းအားလုံး',
     'All directions': 'ဦးတည်ချက်အားလုံး',
@@ -222,7 +225,7 @@ const mm: Record<string, string> = {
     'Audit note': 'စာရင်းစစ်မှတ်ချက်',
     'Available counter cash': 'ကောင်တာတွင် အသုံးပြုနိုင်သောငွေ',
     'Available stock is the live main vault balance after issued Teller floats are removed. Only the Owner/Admin can deposit, withdraw, or manually adjust this vault.':
-        'အသုံးပြုနိုင်သောငွေသည် Teller များသို့ ထုတ်ပေးထားသော ငွေခွဲများကို နုတ်ပြီးနောက် လက်ရှိ Main Vault လက်ကျန်ဖြစ်ပါသည်။ ဒီငွေတိုက်ကို Owner/Admin သာ ငွေသွင်း၊ ငွေထုတ် သို့မဟုတ် လက်ကျန်ပြင်ဆင်နိုင်ပါသည်။',
+        'အသုံးပြုနိုင်သောငွေသည် ငွေကိုင်ဝန်ထမ်း များသို့ ထုတ်ပေးထားသော ငွေခွဲများကို နုတ်ပြီးနောက် လက်ရှိ အဓိကငွေသေတ္တာ လက်ကျန်ဖြစ်ပါသည်။ ဒီငွေတိုက်ကို ပိုင်ရှင်/စနစ်စီမံခန့်ခွဲသူ သာ ငွေသွင်း၊ ငွေထုတ် သို့မဟုတ် လက်ကျန်ပြင်ဆင်နိုင်ပါသည်။',
     Back: 'နောက်သို့',
     Balance: 'လက်ကျန်',
     'Balance Adjust': 'လက်ကျန်ပြင်ဆင်မှု',
@@ -251,15 +254,15 @@ const mm: Record<string, string> = {
     'Cash Out history filters': 'ငွေထုတ်မှတ်တမ်း စစ်ထုတ်ရန်',
     'Cash float notes': 'ငွေခွဲမှတ်ချက်',
     Cashier: 'ငွေတိုက်တာဝန်ခံ',
-    'Cashier Main Vault': 'Cashier အဓိကငွေတိုက်',
-    'Cashier approval PIN': 'Cashier အတည်ပြု PIN',
-    'Cashier dashboard': 'Cashier လုပ်ငန်းအနှစ်ချုပ်',
-    'Cashier handoff': 'Cashier ထံ အပ်ငွေ',
-    'Cashier profile': 'Cashier ကိုယ်ရေးအချက်အလက်',
+    'Cashier Main Vault': 'ငွေတိုက်တာဝန်ခံ အဓိကငွေတိုက်',
+    'Cashier approval PIN': 'ငွေတိုက်တာဝန်ခံ အတည်ပြု PIN',
+    'Cashier dashboard': 'ငွေတိုက်တာဝန်ခံ လုပ်ငန်းအနှစ်ချုပ်',
+    'Cashier handoff': 'ငွေတိုက်တာဝန်ခံ ထံ အပ်ငွေ',
+    'Cashier profile': 'ငွေတိုက်တာဝန်ခံ ကိုယ်ရေးအချက်အလက်',
     Category: 'အမျိုးအစား',
     'Change given': 'ပြန်အမ်းငွေ',
     'Change password': 'စကားဝှက်ပြောင်းမည်',
-    'Choose a Teller': 'Teller ရွေးပါ',
+    'Choose a Teller': 'ငွေကိုင်ဝန်ထမ်း ရွေးပါ',
     Clear: 'ရှင်းမည်',
     Close: 'ပိတ်မည်',
     'Close Day': 'နေ့စဉ်စာရင်းပိတ်မည်',
@@ -272,15 +275,15 @@ const mm: Record<string, string> = {
     'Company not found.': 'ကုမ္ပဏီ မတွေ့ပါ။',
     'Company to credit': 'ငွေဝင်မည့်ကုမ္ပဏီ',
     'Completed / other': 'ပြီးမြောက် / အခြား',
-    'Configure PAY agent earnings by account money movement. OUT / Send and IN / Receive share one calculation type for each amount range.':
-        'PAY အေးဂျင့်ရရှိမည့် ကော်မရှင်ကို အကောင့်ငွေလှုပ်ရှားမှုအလိုက် သတ်မှတ်ပါ။ ပမာဏအပိုင်းအခြားတစ်ခုစီအတွက် OUT / Send နှင့် IN / Receive သည် တွက်ချက်နည်းတစ်မျိုးတည်းကို သုံးပါသည်။',
+    'Configure agent commission by Money In, Money Out, Send Money and Receive Money.':
+        'ငွေဝင်၊ ငွေထွက်၊ ငွေပို့နှင့် ငွေလက်ခံအလိုက် ကိုယ်စားလှယ်ကော်မရှင် သတ်မှတ်ပါ။',
     'Confirm Cash In': 'ငွေသွင်းအတည်ပြုမည်',
     'Confirm PIN': 'PIN အတည်ပြုမည်',
-    'Confirm Teller return': 'Teller ပြန်အပ်ငွေ အတည်ပြုမည်',
+    'Confirm Teller return': 'ငွေကိုင်ဝန်ထမ်း ပြန်အပ်ငွေ အတည်ပြုမည်',
     'Confirm password': 'စကားဝှက်အတည်ပြု',
     'Confirm with PIN': 'PIN ဖြင့် အတည်ပြုမည်',
     'Count the physical handoff before confirming into the main vault.':
-        'Main Vault ထဲ စာရင်းမသွင်းမီ လက်တွေ့အပ်နှံထားသော ငွေကို ရေတွက်စစ်ဆေးပါ။',
+        'အဓိကငွေသေတ္တာ ထဲ စာရင်းမသွင်းမီ လက်တွေ့အပ်နှံထားသော ငွေကို ရေတွက်စစ်ဆေးပါ။',
     Create: 'အသစ်ဖန်တီးမည်',
     Created: 'ဖန်တီးချိန်',
     'Created By': 'ဖန်တီးသူ',
@@ -299,7 +302,7 @@ const mm: Record<string, string> = {
     'Delete exchange rate': 'ငွေလဲနှုန်းဖျက်မည်',
     'Delete exchange rate?': 'ငွေလဲနှုန်းကို ဖျက်မလား?',
     Denomination: 'ငွေစက္ကူအမျိုးအစား',
-    'Deposit to Cashier': 'Cashier ထံ ငွေသွင်းမည်',
+    'Deposit to Cashier': 'ငွေတိုက်တာဝန်ခံ ထံ ငွေသွင်းမည်',
     Details: 'အသေးစိတ်',
     Digital: 'ဒစ်ဂျစ်တယ်ငွေ',
     Direction: 'ဦးတည်ချက်',
@@ -341,13 +344,13 @@ const mm: Record<string, string> = {
     'Full Name': 'အမည်အပြည့်အစုံ',
     Grand: 'စုစုပေါင်း',
     'Grand Total': 'စုစုပေါင်းအားလုံး',
-    'IN / Receive': 'ဝင် / လက်ခံ',
+    'IN / Receive': 'ငွေဝင် / ငွေလက်ခံ',
     'IN earns': 'ဝင်ငွေအတွက်ရရှိမည်',
     Identifier: 'အကောင့်နံပါတ် / အမှတ်အသား',
     Inactive: 'အသုံးမပြုပါ',
     Issue: 'ထုတ်ပေးမည်',
-    'Issue / add Teller float': 'Teller ငွေခွဲ ထုတ်ပေး / ထပ်ဖြည့်',
-    'Issue Teller float': 'Teller ငွေခွဲထုတ်ပေးမည်',
+    'Issue / add Teller float': 'ငွေကိုင်ဝန်ထမ်း ငွေခွဲ ထုတ်ပေး / ထပ်ဖြည့်',
+    'Issue Teller float': 'ငွေကိုင်ဝန်ထမ်း ငွေခွဲထုတ်ပေးမည်',
     'Issue or review floats →': 'ငွေခွဲထုတ်ပေး / စစ်ဆေးရန် →',
     'Issue the opening float, or issue more cash to the same ACTIVE float during the day.':
         'နေ့စတင်ငွေခွဲ ထုတ်ပေးပါ သို့မဟုတ် တစ်နေ့အတွင်း အသုံးပြုနေသော ငွေခွဲထဲ ထပ်မံငွေထည့်ပေးပါ။',
@@ -365,9 +368,9 @@ const mm: Record<string, string> = {
     'Main vault cash': 'အဓိကငွေတိုက် ငွေသား',
     'Main vault denomination stock': 'အဓိကငွေတိုက် ငွေစက္ကူလက်ကျန်',
     'Main vault, Teller floats and pending work at a glance.':
-        'အဓိကငွေတိုက်၊ Teller ငွေခွဲနှင့် စောင့်ဆိုင်းနေသောလုပ်ငန်းများကို တစ်နေရာတည်းတွင် ကြည့်ရှုနိုင်ပါသည်။',
+        'အဓိကငွေတိုက်၊ ငွေကိုင်ဝန်ထမ်း ငွေခွဲနှင့် စောင့်ဆိုင်းနေသောလုပ်ငန်းများကို တစ်နေရာတည်းတွင် ကြည့်ရှုနိုင်ပါသည်။',
     'Manage your Cashier identity, password, and approval PIN.':
-        'Cashier ကိုယ်ရေးအချက်အလက်၊ စကားဝှက်နှင့် အတည်ပြု PIN ကို စီမံပါ။',
+        'ငွေတိုက်တာဝန်ခံ ကိုယ်ရေးအချက်အလက်၊ စကားဝှက်နှင့် အတည်ပြု PIN ကို စီမံပါ။',
     Matched: 'ကိုက်ညီသည်',
     'Money transfer operations': 'ငွေလွှဲလုပ်ငန်းစနစ်',
     Movement: 'ငွေရွှေ့ပြောင်းမှု',
@@ -378,16 +381,16 @@ const mm: Record<string, string> = {
     'New transaction': 'ငွေလုပ်ငန်းအသစ်',
     Next: 'နောက်တစ်မျက်နှာ',
     'New Teller Cash In entries waiting for cashier review.':
-        'Cashier စစ်ဆေးရန် စောင့်နေသော Teller ငွေသွင်းစာရင်းအသစ်များ။',
+        'ငွေတိုက်တာဝန်ခံ စစ်ဆေးရန် စောင့်နေသော ငွေကိုင်ဝန်ထမ်း ငွေသွင်းစာရင်းအသစ်များ။',
     'No Teller entry is waiting for Cashier action.':
-        'Cashier လုပ်ဆောင်ရန် စောင့်နေသော Teller စာရင်းမရှိပါ။',
-    'No Teller transactions yet.': 'Teller ငွေလုပ်ငန်းစာရင်း မရှိသေးပါ။',
+        'ငွေတိုက်တာဝန်ခံ လုပ်ဆောင်ရန် စောင့်နေသော ငွေကိုင်ဝန်ထမ်း စာရင်းမရှိပါ။',
+    'No Teller transactions yet.': 'ငွေကိုင်ဝန်ထမ်း ငွေလုပ်ငန်းစာရင်း မရှိသေးပါ။',
     'No account snapshot yet.': 'အကောင့်လက်ကျန်မှတ်တမ်း မရှိသေးပါ။',
     'No denomination breakdown.': 'ငွေစက္ကူအသေးစိတ် မရှိပါ။',
     'No linked cash denomination rows.':
         'ချိတ်ဆက်ထားသော ငွေစက္ကူစာရင်း မရှိပါ။',
-    'No matching Teller entry.': 'ကိုက်ညီသော Teller စာရင်း မတွေ့ပါ။',
-    'No matching Teller floats.': 'ကိုက်ညီသော Teller ငွေခွဲ မတွေ့ပါ။',
+    'No matching Teller entry.': 'ကိုက်ညီသော ငွေကိုင်ဝန်ထမ်း စာရင်း မတွေ့ပါ။',
+    'No matching Teller floats.': 'ကိုက်ညီသော ငွေကိုင်ဝန်ထမ်း ငွေခွဲ မတွေ့ပါ။',
     'No reconciliation records found.': 'စာရင်းညှိမှတ်တမ်း မတွေ့ပါ။',
     'No transactions found.': 'ငွေလုပ်ငန်းစာရင်း မတွေ့ပါ။',
     'No transactions match your search.':
@@ -397,18 +400,22 @@ const mm: Record<string, string> = {
     Note: 'မှတ်ချက်',
     'Note:': 'မှတ်ချက်:',
     Notes: 'မှတ်ချက်များ',
-    'OUT / Send': 'ထွက် / ပို့',
+    'OUT / Send': 'ငွေထွက် / ငွေပို့',
     'OUT earns': 'ထွက်ငွေအတွက်ရရှိမည်',
-    'Open Teller floats': 'ဖွင့်ထားသော Teller ငွေခွဲများ',
+    'Open Teller floats': 'ဖွင့်ထားသော ငွေကိုင်ဝန်ထမ်း ငွေခွဲများ',
     'Operating Coverage': 'လုပ်ငန်းလည်ပတ်မှုအကျယ်အဝန်း',
     Operator: 'လုပ်ဆောင်သူ',
     'Optional note': 'မှတ်ချက် (မဖြည့်လည်းရ)',
-    'Owner Console': 'Owner စီမံခန့်ခွဲရေး',
+    'Enter customer name': 'ဖောက်သည်အမည် ထည့်ပါ',
+    'Enter customer phone': 'ဖောက်သည်ဖုန်းနံပါတ် ထည့်ပါ',
+    'Enter password': 'စကားဝှက် ထည့်ပါ',
+    'Enter PIN': 'လျှို့ဝှက်နံပါတ် ထည့်ပါ',
+    'Owner Console': 'ပိုင်ရှင် စီမံခန့်ခွဲရေး',
     'Owner Console / Pricing Rules':
-        'Owner စီမံခန့်ခွဲရေး / ဝန်ဆောင်ခစည်းမျဉ်းများ',
-    'Owner managed · read only': 'Owner စီမံ · ဖတ်ရှုရန်သာ',
+        'ပိုင်ရှင် စီမံခန့်ခွဲရေး / ဝန်ဆောင်ခစည်းမျဉ်းများ',
+    'Owner managed · read only': 'ပိုင်ရှင် စီမံ · ဖတ်ရှုရန်သာ',
     'Owner-managed physical cash. Cashier can view this vault but cannot manually add, remove, or adjust cash.':
-        'Owner စီမံသည့် လက်တွေ့ငွေသားဖြစ်ပါသည်။ Cashier က လက်ကျန်ကို ကြည့်နိုင်သော်လည်း ကိုယ်တိုင် ငွေထည့်၊ ငွေထုတ် သို့မဟုတ် လက်ကျန်ပြင်ဆင်၍မရပါ။',
+        'ပိုင်ရှင် စီမံသည့် လက်တွေ့ငွေသားဖြစ်ပါသည်။ ငွေတိုက်တာဝန်ခံ က လက်ကျန်ကို ကြည့်နိုင်သော်လည်း ကိုယ်တိုင် ငွေထည့်၊ ငွေထုတ် သို့မဟုတ် လက်ကျန်ပြင်ဆင်၍မရပါ။',
     PIN: 'PIN',
     'PIN confirmation': 'PIN အတည်ပြုခြင်း',
     Pair: 'ငွေကြေးအတွဲ',
@@ -422,7 +429,9 @@ const mm: Record<string, string> = {
     Previous: 'ရှေ့တစ်မျက်နှာ',
     Profit: 'အမြတ်',
     Provider: 'ဝန်ဆောင်မှုပေးသူ',
-    'Provider / Feature': 'ဝန်ဆောင်မှုပေးသူ / လုပ်ဆောင်ချက်',
+    'Fee For': 'ဝန်ဆောင်ခအမျိုးအစား',
+    'Provider / For': 'ဝန်ဆောင်မှုပေးသူ / အမျိုးအစား',
+    'Provider / Feature': 'ဝန်ဆောင်မှုပေးသူ / အမျိုးအစား',
     'Provider Fees': 'ဝန်ဆောင်မှုပေးသူ ဝန်ဆောင်ခများ',
     Qty: 'အရေအတွက်',
     Quantity: 'အရေအတွက်',
@@ -431,7 +440,7 @@ const mm: Record<string, string> = {
     'Reason for audit log': 'စာရင်းစစ်အကြောင်းပြချက်',
     'Receive Money': 'ငွေလက်ခံ',
     'Receiver check:': 'လက်ခံသူစစ်ဆေးရန်:',
-    'Recent Teller transactions': 'လတ်တလော Teller ငွေလုပ်ငန်းများ',
+    'Recent Teller transactions': 'လတ်တလော ငွေကိုင်ဝန်ထမ်း ငွေလုပ်ငန်းများ',
     'Recent entries': 'လတ်တလောစာရင်းများ',
     Reconcile: 'စာရင်းညှိခြင်း',
     'Reconcile end-of-day return': 'နေ့ကုန်ပြန်အပ်ငွေ စာရင်းညှိမည်',
@@ -461,13 +470,13 @@ const mm: Record<string, string> = {
     'Review mode': 'စစ်ဆေးမှုအခြေအနေ',
     'Review pending Cash In': 'စောင့်ဆိုင်းနေသော ငွေသွင်း စစ်ဆေးမည်',
     'Review the Teller-entered note breakdown against the physical cash, then confirm receipt with your Cashier PIN.':
-        'Teller ထည့်ထားသော ငွေစက္ကူစာရင်းကို လက်တွေ့ငွေသားနှင့် တိုက်စစ်ပြီးနောက် Cashier PIN ဖြင့် လက်ခံကြောင်း အတည်ပြုပါ။',
+        'ငွေကိုင်ဝန်ထမ်း ထည့်ထားသော ငွေစက္ကူစာရင်းကို လက်တွေ့ငွေသားနှင့် တိုက်စစ်ပြီးနောက် ငွေတိုက်တာဝန်ခံ PIN ဖြင့် လက်ခံကြောင်း အတည်ပြုပါ။',
     Role: 'ရာထူး / အခန်းကဏ္ဍ',
     'Rounded customer fee': 'အဝိုင်းချထားသော ဖောက်သည်ဝန်ဆောင်ခ',
     Route: 'လမ်းကြောင်း',
     Rule: 'စည်းမျဉ်း',
     Search: 'ရှာဖွေမည်',
-    'Search Teller or float': 'Teller သို့မဟုတ် ငွေခွဲ ရှာပါ',
+    'Search Teller or float': 'ငွေကိုင်ဝန်ထမ်း သို့မဟုတ် ငွေခွဲ ရှာပါ',
     'Search account, provider, type, identifier':
         'အကောင့်၊ ဝန်ဆောင်မှုပေးသူ၊ အမျိုးအစား၊ နံပါတ် ရှာပါ',
     'Search company': 'ကုမ္ပဏီ ရှာပါ',
@@ -479,13 +488,23 @@ const mm: Record<string, string> = {
     'Search provider, feature, route or amount':
         'ဝန်ဆောင်မှုပေးသူ၊ လုပ်ဆောင်ချက်၊ လမ်းကြောင်း သို့မဟုတ် ပမာဏ ရှာပါ',
     'Search reference, customer or teller':
-        'ရည်ညွှန်း၊ ဖောက်သည် သို့မဟုတ် Teller ရှာပါ',
+        'ရည်ညွှန်း၊ ဖောက်သည် သို့မဟုတ် ငွေကိုင်ဝန်ထမ်း ရှာပါ',
     'Search reference, customer, status': 'ရည်ညွှန်း၊ ဖောက်သည်၊ အခြေအနေ ရှာပါ',
     'Search reference, flow, transaction, note or denomination':
         'ရည်ညွှန်း၊ ငွေစီးဆင်းမှု၊ ငွေလုပ်ငန်း၊ မှတ်ချက် သို့မဟုတ် ငွေစက္ကူ ရှာပါ',
     'Search staff, username, email or role':
         'ဝန်ထမ်း၊ အသုံးပြုသူအမည်၊ အီးမေးလ် သို့မဟုတ် ရာထူး ရှာပါ',
     'Select account': 'အကောင့်ရွေးပါ',
+    'Select provider': 'ဝန်ဆောင်မှုပေးသူ ရွေးပါ',
+    'Select source provider': 'မူလဝန်ဆောင်မှုပေးသူ ရွေးပါ',
+    'Select destination provider': 'လက်ခံဝန်ဆောင်မှုပေးသူ ရွေးပါ',
+    'Select fee category': 'ဝန်ဆောင်ခအမျိုးအစား ရွေးပါ',
+    'Select commission category': 'ကော်မရှင်အမျိုးအစား ရွေးပါ',
+    'Select category': 'အမျိုးအစား ရွေးပါ',
+    'Select account type': 'အကောင့်အမျိုးအစား ရွေးပါ',
+    'Select calculation type': 'တွက်ချက်ပုံ ရွေးပါ',
+    'Select role': 'အခန်းကဏ္ဍ ရွေးပါ',
+    'Select teller': 'ငွေကိုင်ဝန်ထမ်း ရွေးပါ',
     'Select user': 'အသုံးပြုသူရွေးပါ',
     'Selected:': 'ရွေးထားသည်:',
     'Sell Rate': 'ရောင်းဈေး',
@@ -498,18 +517,18 @@ const mm: Record<string, string> = {
     'Staff Detail': 'ဝန်ထမ်းအသေးစိတ်',
     Status: 'အခြေအနေ',
     'Status:': 'အခြေအနေ:',
-    'System payout company': 'System ငွေပို့မည့်ကုမ္ပဏီ',
+    'System payout company': 'စနစ် ငွေပို့မည့်ကုမ္ပဏီ',
     Teller: 'ငွေကိုင်ဝန်ထမ်း',
-    'Teller Cash In': 'Teller ငွေသွင်း',
-    'Teller entry history': 'Teller စာရင်းမှတ်တမ်း',
-    'Teller entry notifications': 'Teller စာရင်းအသိပေးချက်များ',
-    'Teller float issue': 'Teller ငွေခွဲထုတ်ပေးမှု',
-    'Teller handback': 'Teller ပြန်အပ်ငွေ',
-    'Teller reconciliation': 'Teller စာရင်းညှိခြင်း',
-    'Teller reported handback': 'Teller တင်ပြထားသော ပြန်အပ်ငွေ',
-    'Teller return': 'Teller ပြန်အပ်ငွေ',
+    'Teller Cash In': 'ငွေကိုင်ဝန်ထမ်း ငွေသွင်း',
+    'Teller entry history': 'ငွေကိုင်ဝန်ထမ်း စာရင်းမှတ်တမ်း',
+    'Teller entry notifications': 'ငွေကိုင်ဝန်ထမ်း စာရင်းအသိပေးချက်များ',
+    'Teller float issue': 'ငွေကိုင်ဝန်ထမ်း ငွေခွဲထုတ်ပေးမှု',
+    'Teller handback': 'ငွေကိုင်ဝန်ထမ်း ပြန်အပ်ငွေ',
+    'Teller reconciliation': 'ငွေကိုင်ဝန်ထမ်း စာရင်းညှိခြင်း',
+    'Teller reported handback': 'ငွေကိုင်ဝန်ထမ်း တင်ပြထားသော ပြန်အပ်ငွေ',
+    'Teller return': 'ငွေကိုင်ဝန်ထမ်း ပြန်အပ်ငွေ',
     'This action is recorded in both Vault Log and Activity Logs under the signed-in Owner/Admin.':
-        'ဒီလုပ်ဆောင်ချက်ကို လက်ရှိဝင်ရောက်ထားသော Owner/Admin အမည်ဖြင့် Vault Log နှင့် Activity Logs နှစ်ခုလုံးတွင် မှတ်တမ်းတင်ပါမည်။',
+        'ဒီလုပ်ဆောင်ချက်ကို လက်ရှိဝင်ရောက်ထားသော ပိုင်ရှင်/စနစ်စီမံခန့်ခွဲသူ အမည်ဖြင့် Vault Log နှင့် Activity Logs နှစ်ခုလုံးတွင် မှတ်တမ်းတင်ပါမည်။',
     'Tier detail': 'အဆင့်အသေးစိတ်',
     Time: 'အချိန်',
     To: 'သို့',
@@ -525,12 +544,15 @@ const mm: Record<string, string> = {
     'Transfer Fees': 'ငွေလွှဲဝန်ဆောင်ခများ',
     'Transfer Transactions': 'ငွေလွှဲစာရင်းများ',
     'Transfer customer fee is route-based. Agent commissions are configured separately under Agent Commissions.':
-        'ငွေလွှဲဖောက်သည်ဝန်ဆောင်ခကို လမ်းကြောင်းအလိုက် သတ်မှတ်ပါသည်။ အေးဂျင့်ကော်မရှင်ကို Agent Commissions တွင် သီးခြားသတ်မှတ်ပါ။',
+        'ငွေလွှဲဖောက်သည်ဝန်ဆောင်ခကို လမ်းကြောင်းအလိုက် သတ်မှတ်ပါသည်။ အေးဂျင့်ကော်မရှင်ကို ကိုယ်စားလှယ် Commissions တွင် သီးခြားသတ်မှတ်ပါ။',
     'Transfer fee': 'ငွေလွှဲဝန်ဆောင်ခ',
     'Transfer fees': 'ငွေလွှဲဝန်ဆောင်ခများ',
     'Transfer history': 'ငွေလွှဲမှတ်တမ်း',
     'Transfer history filters': 'ငွေလွှဲမှတ်တမ်း စစ်ထုတ်ရန်',
     Type: 'အမျိုးအစား',
+    'Calculation Type': 'တွက်ချက်ပုံ',
+    'In Commission': 'ငွေဝင်ကော်မရှင်',
+    'Out Commission': 'ငွေထွက်ကော်မရှင်',
     Updated: 'ပြင်ဆင်ချိန်',
     User: 'အသုံးပြုသူ',
     'User not found.': 'အသုံးပြုသူ မတွေ့ပါ။',
@@ -540,16 +562,16 @@ const mm: Record<string, string> = {
     'Vault Log': 'ငွေတိုက်မှတ်တမ်း',
     'Verify return': 'ပြန်အပ်ငွေ စစ်ဆေးမည်',
     'Verify the Teller handoff before posting cash to the main vault.':
-        'Main Vault ထဲ စာရင်းမသွင်းမီ Teller အပ်ငွေကို စစ်ဆေးပါ။',
+        'အဓိကငွေသေတ္တာ ထဲ စာရင်းမသွင်းမီ ငွေကိုင်ဝန်ထမ်း အပ်ငွေကို စစ်ဆေးပါ။',
     'Verify the physical notes returned by each Teller before closing the float.':
-        'ငွေခွဲစာရင်းမပိတ်မီ Teller တစ်ဦးစီ ပြန်အပ်သည့် လက်တွေ့ငွေစက္ကူများကို စစ်ဆေးပါ။',
+        'ငွေခွဲစာရင်းမပိတ်မီ ငွေကိုင်ဝန်ထမ်း တစ်ဦးစီ ပြန်အပ်သည့် လက်တွေ့ငွေစက္ကူများကို စစ်ဆေးပါ။',
     View: 'ကြည့်မည်',
     'View all →': 'အားလုံးကြည့်မည် →',
     'View cash float →': 'ငွေခွဲကြည့်မည် →',
     'View denomination stock →': 'ငွေစက္ကူလက်ကျန်ကြည့်မည် →',
     'View issued notes': 'ထုတ်ပေးထားသော ငွေစက္ကူကြည့်မည်',
-    'Waiting for Cashier confirmation': 'Cashier အတည်ပြုရန် စောင့်နေသည်',
-    'Withdraw from Cashier': 'Cashier ထံမှ ငွေထုတ်မည်',
+    'Waiting for Cashier confirmation': 'ငွေတိုက်တာဝန်ခံ အတည်ပြုရန် စောင့်နေသည်',
+    'Withdraw from Cashier': 'ငွေတိုက်တာဝန်ခံ ထံမှ ငွေထုတ်မည်',
     'You will be signed out after a successful password change.':
         'စကားဝှက်ပြောင်းပြီးလျှင် စနစ်မှ အလိုအလျောက်ထွက်ပါမည်။',
     active: 'အသုံးပြုနေသည်',
@@ -558,7 +580,7 @@ const mm: Record<string, string> = {
     completed: 'ပြီးမြောက်သည်',
     cancelled: 'ပယ်ဖျက်ထားသည်',
     closed: 'ပိတ်ထားသည်',
-    'pending cashier confirm': 'Cashier အတည်ပြုရန် စောင့်နေသည်',
+    'pending cashier confirm': 'ငွေတိုက်တာဝန်ခံ အတည်ပြုရန် စောင့်နေသည်',
     'pending reconciliation': 'စာရင်းညှိရန် စောင့်နေသည်',
     matched: 'ကိုက်ညီသည်',
     mismatch: 'မကိုက်ညီပါ',
@@ -569,18 +591,18 @@ const mm: Record<string, string> = {
     transactions: 'ငွေလုပ်ငန်းစာရင်း',
     'A denomination would go below zero. Adjust payout or change notes.':
         'ငွေစက္ကူအမျိုးအစားတစ်ခု၏ လက်ကျန် သုညအောက်ကျသွားနိုင်ပါသည်။ ပေးငွေ သို့မဟုတ် ပြန်အမ်းငွေစက္ကူကို ပြန်ညှိပါ။',
-    'Activate your teller float first.': 'Teller ငွေခွဲကို အရင်ဖွင့်ပါ။',
-    'Admin console balance adjustment.': 'Admin Console မှ လက်ကျန်ပြင်ဆင်မှု။',
-    'Agent earning rules by provider and amount range. OUT / Send and IN / Receive values share one calculation type.':
-        'ဝန်ဆောင်မှုပေးသူနှင့် ပမာဏအပိုင်းအခြားအလိုက် အေးဂျင့်ရရှိမည့် ကော်မရှင်စည်းမျဉ်းများ။ OUT / Send နှင့် IN / Receive သည် တွက်ချက်နည်းတစ်မျိုးတည်းကို အသုံးပြုပါသည်။',
-    'Cash In / Cash Out workflow': 'Cash In / Cash Out လုပ်ငန်းစဉ်',
+    'Activate your teller float first.': 'ငွေကိုင်ဝန်ထမ်း ငွေခွဲကို အရင်ဖွင့်ပါ။',
+    'Admin console balance adjustment.': 'စနစ်စီမံခန့်ခွဲမှု မှ လက်ကျန်ပြင်ဆင်မှု။',
+    'Agent commission rules by provider, commission category and amount range.':
+        'ဝန်ဆောင်မှုပေးသူ၊ ကော်မရှင်အမျိုးအစားနှင့် ပမာဏအလိုက် ကိုယ်စားလှယ်ကော်မရှင် သတ်မှတ်ချက်များ။',
+    'Cash In / Cash Out workflow': 'ငွေသွင်း / ငွေထုတ် လုပ်ငန်းစဉ်',
     'Cash In cancelled and Teller float/account state reversed.':
-        'Cash In ကို ပယ်ဖျက်ပြီး Teller ငွေခွဲနှင့် အကောင့်အခြေအနေကို မူလအတိုင်း ပြန်လည်ညှိပြီးပါပြီ။',
+        'ငွေသွင်း ကို ပယ်ဖျက်ပြီး ငွေကိုင်ဝန်ထမ်း ငွေခွဲနှင့် အကောင့်အခြေအနေကို မူလအတိုင်း ပြန်လည်ညှိပြီးပါပြီ။',
     'Cashier handoff notes are not ready.':
-        'Cashier ထံ အပ်မည့် ငွေစက္ကူစာရင်း အဆင်သင့်မဖြစ်သေးပါ။',
+        'ငွေတိုက်တာဝန်ခံ ထံ အပ်မည့် ငွေစက္ကူစာရင်း အဆင်သင့်မဖြစ်သေးပါ။',
     'Cashier review mode is read-only.':
-        'Cashier စစ်ဆေးမှုအခြေအနေတွင် ဖတ်ရှုရန်သာ ခွင့်ပြုထားပါသည်။',
-    'Change from my teller vault': 'မိမိ Teller ငွေခွဲမှ ပြန်အမ်းငွေ',
+        'ငွေတိုက်တာဝန်ခံ စစ်ဆေးမှုအခြေအနေတွင် ဖတ်ရှုရန်သာ ခွင့်ပြုထားပါသည်။',
+    'Change from my teller vault': 'မိမိ ငွေကိုင်ဝန်ထမ်း ငွေခွဲမှ ပြန်အမ်းငွေ',
     'Checking your access…': 'ဝင်ရောက်ခွင့် စစ်ဆေးနေပါသည်…',
     'Choose a Receive Money account.': 'ငွေလက်ခံမည့်အကောင့်ကို ရွေးပါ။',
     'Choose a Send Money account.': 'ငွေပို့မည့်အကောင့်ကို ရွေးပါ။',
@@ -597,11 +619,11 @@ const mm: Record<string, string> = {
     'Count at least the fee amount received from the customer.':
         'ဖောက်သည်ထံမှ လက်ခံထားသော ဝန်ဆောင်ခပမာဏ အနည်းဆုံးပြည့်မီအောင် ရေတွက်ပါ။',
     'Count the MMK paid from the teller vault.':
-        'Teller ငွေခွဲမှ ပေးမည့် MMK ငွေစက္ကူများကို ရေတွက်ပါ။',
+        'ငွေကိုင်ဝန်ထမ်း ငွေခွဲမှ ပေးမည့် MMK ငွေစက္ကူများကို ရေတွက်ပါ။',
     'Count the cash paid to the customer until it matches the amount.':
         'ဖောက်သည်ထံ ပေးမည့်ငွေကို သတ်မှတ်ပမာဏနှင့် ကိုက်ညီအောင် ရေတွက်ပါ။',
     'Count the cash you are handing back to the cashier once, then confirm with your PIN.':
-        'Cashier ထံ ပြန်အပ်မည့်ငွေကို တစ်ကြိမ်တည်း ရေတွက်ပြီး PIN ဖြင့် အတည်ပြုပါ။',
+        'ငွေတိုက်တာဝန်ခံ ထံ ပြန်အပ်မည့်ငွေကို တစ်ကြိမ်တည်း ရေတွက်ပြီး PIN ဖြင့် အတည်ပြုပါ။',
     'Count the customer cash.': 'ဖောက်သည်ပေးသော ငွေသားကို ရေတွက်ပါ။',
     'Count the exact change to return to the customer.':
         'ဖောက်သည်ထံ ပြန်အမ်းမည့်ငွေကို အတိအကျ ရေတွက်ပါ။',
@@ -610,7 +632,7 @@ const mm: Record<string, string> = {
     'Enter an amount.': 'ပမာဏထည့်ပါ။',
     'Enter customer name.': 'ဖောက်သည်အမည် ထည့်ပါ။',
     'Enter customer phone.': 'ဖောက်သည်ဖုန်းနံပါတ် ထည့်ပါ။',
-    'Enter the Cash In amount.': 'Cash In ပမာဏ ထည့်ပါ။',
+    'Enter the Cash In amount.': 'ငွေသွင်း ပမာဏ ထည့်ပါ။',
     'Enter the customer source account number.':
         'ဖောက်သည်၏ မူလအကောင့်နံပါတ် ထည့်ပါ။',
     'Enter the recipient account number.': 'လက်ခံသူအကောင့်နံပါတ် ထည့်ပါ။',
@@ -619,23 +641,23 @@ const mm: Record<string, string> = {
     'Enter your password': 'စကားဝှက် ထည့်ပါ',
     'Enter your username': 'အသုံးပြုသူအမည် ထည့်ပါ',
     'Every main vault denomination movement.':
-        'Main Vault ငွေစက္ကူရွှေ့ပြောင်းမှုအားလုံး။',
+        'အဓိကငွေသေတ္တာ ငွေစက္ကူရွှေ့ပြောင်းမှုအားလုံး။',
     'Fee Rules': 'ဝန်ဆောင်ခ စည်းမျဉ်းများ',
     'Float history': 'ငွေခွဲမှတ်တမ်း',
     'For authorised Doctor Phone staff only.':
         'ခွင့်ပြုထားသော Doctor Phone ဝန်ထမ်းများအတွက်သာ။',
     'Issue Float': 'ငွေခွဲ ထုတ်ပေးမည်',
     'Keep the main vault, teller floats, Cash In, Cash Out and reconciliation in sync.':
-        'Main Vault၊ Teller ငွေခွဲ၊ Cash In၊ Cash Out နှင့် စာရင်းညှိခြင်းတို့ကို တစ်ပြိုင်နက် ကိုက်ညီအောင် စီမံပါ။',
+        'အဓိကငွေသေတ္တာ၊ ငွေကိုင်ဝန်ထမ်း ငွေခွဲ၊ ငွေသွင်း၊ ငွေထုတ် နှင့် စာရင်းညှိခြင်းတို့ကို တစ်ပြိုင်နက် ကိုက်ညီအောင် စီမံပါ။',
     'LEGACY / UNLINKED': 'အဟောင်း / မချိတ်ဆက်ထား',
     'Local demo accounts only. Tap a role to fill the form.':
-        'Local demo အကောင့်များအတွက်သာ။ Form ဖြည့်ရန် role ကို ရွေးပါ။',
+        'Local demo အကောင့်များအတွက်သာ။ ဖောင် ဖြည့်ရန် အခန်းကဏ္ဍ ကို ရွေးပါ။',
     'MISSING CASH LOG': 'ငွေသားမှတ်တမ်း မရှိပါ',
-    'Main vault control': 'Main Vault ထိန်းချုပ်မှု',
+    'Main vault control': 'အဓိကငွေသေတ္တာ ထိန်းချုပ်မှု',
     'Master Data': 'အခြေခံဒေတာ',
     'My Float': 'ကိုယ်ပိုင်ငွေခွဲ',
     'N/A (VERIFY)': 'မသက်ဆိုင်ပါ (စစ်ဆေးရန်)',
-    'Ngwe Lwe System': 'Ngwe Lwe System',
+    'Ngwe Lwe System': 'Ngwe Lwe စနစ်',
     'One clear view for every counter':
         'ကောင်တာတိုင်းအတွက် ရှင်းလင်းသော အနှစ်ချုပ်မြင်ကွင်း',
     'Pending receipt': 'လက်ခံရန် စောင့်ဆိုင်းနေသည်',
@@ -648,7 +670,7 @@ const mm: Record<string, string> = {
     'Return Cash': 'ငွေပြန်အပ်မည်',
     'Return cash': 'ငွေပြန်အပ်မည်',
     'Review cashier-entered notes, then receive or reject with your PIN.':
-        'Cashier ထည့်ထားသော ငွေစက္ကူစာရင်းကို စစ်ပြီး PIN ဖြင့် လက်ခံ သို့မဟုတ် ပယ်ချပါ။',
+        'ငွေတိုက်တာဝန်ခံ ထည့်ထားသော ငွေစက္ကူစာရင်းကို စစ်ပြီး PIN ဖြင့် လက်ခံ သို့မဟုတ် ပယ်ချပါ။',
     'Review your float sessions and additional issues.':
         'မိမိ၏ ငွေခွဲ session များနှင့် ထပ်မံထုတ်ပေးမှုများကို စစ်ဆေးပါ။',
     'Secure connection': 'လုံခြုံသော ချိတ်ဆက်မှု',
@@ -659,15 +681,15 @@ const mm: Record<string, string> = {
         'ယနေ့ ငွေလှုပ်ရှားမှုများကို စနစ်တကျ စီမံရန် ဝင်ရောက်ပါ။',
     'Staff & Access': 'ဝန်ထမ်းနှင့် ဝင်ရောက်ခွင့်',
     'Staff account': 'ဝန်ထမ်းအကောင့်',
-    'Teller History': 'Teller မှတ်တမ်း',
-    'Teller float tracking': 'Teller ငွေခွဲ စောင့်ကြည့်မှု',
+    'Teller History': 'ငွေကိုင်ဝန်ထမ်း မှတ်တမ်း',
+    'Teller float tracking': 'ငွေကိုင်ဝန်ထမ်း ငွေခွဲ စောင့်ကြည့်မှု',
     'Vault Stock': 'ငွေတိုက်လက်ကျန်',
     'We could not sign you in. Check your username and password.':
         'စနစ်ထဲ ဝင်ရောက်၍ မရပါ။ အသုံးပြုသူအမည်နှင့် စကားဝှက်ကို စစ်ဆေးပါ။',
     'Welcome back': 'ပြန်လည်ကြိုဆိုပါသည်',
-    'With cashier': 'Cashier ထံတွင်',
+    'With cashier': 'ငွေတိုက်တာဝန်ခံ ထံတွင်',
     'Your PIN rejects this incoming float and returns it to the main vault.':
-        'သင့် PIN ဖြင့် ဝင်လာသောငွေခွဲကို ပယ်ချပြီး Main Vault သို့ ပြန်ပို့ပါမည်။',
+        'သင့် PIN ဖြင့် ဝင်လာသောငွေခွဲကို ပယ်ချပြီး အဓိကငွေသေတ္တာ သို့ ပြန်ပို့ပါမည်။',
     'Your session expired. Please sign in again.':
         'Session သက်တမ်းကုန်သွားပါပြီ။ ပြန်လည်ဝင်ရောက်ပါ။',
     'Your session is protected by Laravel session authentication.':
@@ -676,19 +698,21 @@ const mm: Record<string, string> = {
         'မိမိကောင်တာလက်ကျန်နှင့် နေ့စဉ်လုပ်ငန်းများကို တစ်နေရာတည်းတွင် ကြည့်ရှုနိုင်ပါသည်။',
     'exchange rate will be permanently deleted.':
         'ငွေလဲနှုန်းကို အပြီးတိုင် ဖျက်ပါမည်။',
-    'owner deposit to cashier vault': 'Owner မှ Cashier Vault သို့ ငွေသွင်းမှု',
+    'owner deposit to cashier vault': 'ပိုင်ရှင် မှ ငွေတိုက်တာဝန်ခံ Vault သို့ ငွေသွင်းမှု',
     'owner withdrawal from cashier vault':
-        'Owner မှ Cashier Vault မှ ငွေထုတ်မှု',
+        'ပိုင်ရှင် မှ ငွေတိုက်တာဝန်ခံ Vault မှ ငွေထုတ်မှု',
     notes: 'ငွေစက္ကူ',
     Showing: 'ပြသနေသည်',
     to: 'မှ',
     of: 'စုစုပေါင်း',
     is: 'သည်',
     'issue(s) already waiting for Teller receipt.':
-        'Teller လက်ခံရန် စောင့်နေသော ထုတ်ပေးမှု ရှိပြီးသားဖြစ်ပါသည်။',
-    '· Owner authorization': '· Owner အတည်ပြုမှု',
+        'ငွေကိုင်ဝန်ထမ်း လက်ခံရန် စောင့်နေသော ထုတ်ပေးမှု ရှိပြီးသားဖြစ်ပါသည်။',
+    '· Owner authorization': '· ပိုင်ရှင် အတည်ပြုမှု',
     '· this creates another pending issue.':
         '· ထပ်မံလက်ခံရန် စောင့်ဆိုင်းစာရင်းတစ်ခု ဖန်တီးပါမည်။',
+    'Search provider, type, route or amount':
+        'ဝန်ဆောင်မှုပေးသူ၊ အမျိုးအစား၊ လမ်းကြောင်း သို့မဟုတ် ပမာဏဖြင့် ရှာပါ',
 };
 
 function normalize(value: string): string {

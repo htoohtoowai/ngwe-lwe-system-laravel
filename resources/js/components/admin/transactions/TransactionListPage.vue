@@ -3,18 +3,7 @@ import { Link, router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import BankLayout from '@/layouts/BankLayout.vue';
 import { transactionTone } from '@/lib/transaction-tone';
-
-type Transaction = {
-    id: number;
-    transaction_type: string;
-    customer_name: string | null;
-    customer_phone?: string | null;
-    amount: string | number;
-    customer_fee: string | number | null;
-    status: string;
-    created_at?: string | null;
-    created_by?: number | null;
-};
+import type { AdminTransactionRow } from '@/types/page-props';
 
 const props = defineProps<{
     role: 'admin';
@@ -22,7 +11,7 @@ const props = defineProps<{
     transactionType?: '' | 'cash_in' | 'cash_out' | 'transfer' | 'exchange' | 'send_money' | 'receive_money';
     announcement?: string | null;
     notificationCount?: number;
-    rows: Transaction[];
+    rows: AdminTransactionRow[];
 }>();
 
 const rows = computed(() => props.rows ?? []);

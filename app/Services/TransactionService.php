@@ -647,7 +647,7 @@ class TransactionService
                 'additional_fee_amount' => Money::normalize(0),
                 'balance_change' => $balanceChange,
                 'currency' => 'MMK',
-                'fee_payment_method' => null,
+                'fee_payment_method' => 'cash',
                 'fee_mode' => null,
                 'note' => $data['note'] ?? null,
                 'created_by' => $creator->id,
@@ -1668,7 +1668,7 @@ class TransactionService
 
         if ($accountType !== AccountType::Pay || ! $account->is_agent) {
             throw new InvalidArgumentException(
-                "{$operation} requires an account with account_type=PAY and is_agent=true."
+                "{$operation} requires a PAY Agent account."
             );
         }
 

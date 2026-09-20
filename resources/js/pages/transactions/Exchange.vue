@@ -875,7 +875,7 @@ function submit() {
                             v-model="customerName"
                             type="text"
                             autocomplete="name"
-                            placeholder=" "
+                            :placeholder="t('transaction.enterCustomerName')"
                             class="bank-input min-h-12 border border-line bg-mist px-3 py-2 transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                         />
                     </div>
@@ -892,7 +892,7 @@ function submit() {
                             type="tel"
                             inputmode="tel"
                             autocomplete="tel"
-                            placeholder=" "
+                            :placeholder="t('transaction.enterCustomerPhone')"
                             class="bank-input min-h-12 border border-line bg-mist px-3 py-2 transition focus:border-brand focus:ring-2 focus:ring-brand/20"
                         />
                     </div>
@@ -907,7 +907,7 @@ function submit() {
                                 maxlength="250"
                                 rows="2"
                                 autocomplete="off"
-                                :placeholder="t('transaction.exchange')"
+                                :placeholder="t('transaction.optionalNote')"
                                 class="bank-input min-h-12 resize-none border border-line bg-mist px-3 py-2 pr-14"
                                 aria-describedby="exchange-description-count"
                             />

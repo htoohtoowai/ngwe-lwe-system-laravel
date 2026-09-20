@@ -340,13 +340,13 @@ watch([adminListSearch, adminListFilter, adminListPageSize, activeTab], () => {
 
 const companyForm = ref({
     name: '',
-    category: 'Pay',
+    category: '',
     is_active: true,
 });
 const accountForm = ref({
     company_id: null as number | null,
     account_name: '',
-    account_type: 'PAY' as 'PAY' | 'BANK',
+    account_type: '' as '' | 'PAY' | 'BANK',
     account_identifier: '',
     balance: 0,
     features: ['cash_in'] as string[],
@@ -389,7 +389,7 @@ const userForm = ref({
     username: '',
     email: '',
     full_name: '',
-    role: 'teller',
+    role: '',
     password: 'password123',
     pin: '',
     is_active: true,
@@ -824,16 +824,15 @@ function shouldShowDetail(section: AdminTab): boolean {
 }
 
 function resetCompanyForm(): void {
-    companyForm.value = { name: '', category: 'Pay', is_active: true };
+    companyForm.value = { name: '', category: '', is_active: true };
     resetCompanyLogoInput();
 }
 
 function resetAccountForm(): void {
-    const initialCompany = activeCompanies.value[0] ?? null;
     accountForm.value = {
-        company_id: initialCompany?.id ?? null,
+        company_id: null,
         account_name: '',
-        account_type: initialCompany?.category === 'Bank' ? 'BANK' : 'PAY',
+        account_type: '',
         account_identifier: '',
         balance: 0,
         features: ['cash_in'],
@@ -848,7 +847,7 @@ function resetUserForm(): void {
         username: '',
         email: '',
         full_name: '',
-        role: 'teller',
+        role: '',
         password: 'password123',
         pin: '',
         is_active: true,
@@ -1837,7 +1836,9 @@ async function sendBroadcastTest(): Promise<void> {
                             <select
                                 v-model="companyForm.category"
                                 class="bank-input"
+                                required
                             >
+                                <option value="" disabled>Select category</option>
                                 <option>Pay</option>
                                 <option>Bank</option>
                                 <option>Both</option>
@@ -2404,6 +2405,7 @@ async function sendBroadcastTest(): Promise<void> {
                                 class="bank-input"
                                 required
                             >
+                                <option :value="null" disabled>Select provider</option>
                                 <option
                                     v-for="company in activeCompanies"
                                     :key="company.id"
@@ -2428,6 +2430,7 @@ async function sendBroadcastTest(): Promise<void> {
                                 class="bank-input"
                                 required
                             >
+                                <option value="" disabled>Select account type</option>
                                 <option
                                     value="PAY"
                                     :disabled="
@@ -2962,7 +2965,8 @@ async function sendBroadcastTest(): Promise<void> {
                         </label>
                         <label>
                             <span class="bank-label">Role</span>
-                            <select v-model="userForm.role" class="bank-input">
+                            <select v-model="userForm.role" class="bank-input" required>
+                                <option value="" disabled>Select role</option>
                                 <option value="teller">Teller</option>
                                 <option
                                     value="cashier"
